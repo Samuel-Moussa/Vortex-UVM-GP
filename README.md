@@ -139,23 +139,6 @@ Once the 32-bit environment is stable, it will be extended to support the 64-bit
 3.  **Update Reference Model:** Configure Spike to run as a 64-bit golden model.
 4.  **Extend Functional Coverage:** Add coverage points for 64-bit operations and the D-extension instructions.
 
-## Advanced Verification: HW/SW Co-Simulation
-
-In addition to UVM-based verification, this project may also leverage a full Hardware/Software Co-Simulation methodology, as detailed in resources like the([https://www.reds.com.es/blog/zynq-7000-hw-sw-co-simulation-qemu-questasim/](https://www.google.com/search?q=https://www.reds.com.es/blog/zynq-7000-hw-sw-co-simulation-qemu-questasim/)). This approach enables end-to-end system-level testing by running the full software stack on an emulated host while simulating the RTL in a cycle-accurate simulator.
-
-### Methodology: QEMU + QuestaSim
-
-  * **QEMU (Host System Emulation):** The QEMU emulator will be used to model a complete host system, such as a Xilinx Zynq-7000 SoC with its ARM-based Processing System (PS). QEMU runs the entire software stack, including a full Linux OS, the Vortex kernel driver, and user-space applications like OpenCL programs.
-  * **QuestaSim (RTL Simulation):** QuestaSim runs the cycle-accurate simulation of the Vortex GPGPU RTL. In the context of a Zynq-based system, this represents the accelerator implemented in the Programmable Logic (PL).
-  * **DPI-C Bridge:** A high-performance communication bridge connects QEMU and QuestaSim. This bridge, typically implemented using SystemVerilog DPI-C, allows the software running in QEMU to send commands and data (e.g., MMIO writes, DMA transfers) to the RTL design and receive responses back.
-
-### Benefits for Vortex Verification
-
-This co-simulation flow is invaluable for finding deep system-level integration bugs that are difficult to expose with UVM alone. It allows for the verification of:
-
-  * **Full Software Stack:** End-to-end testing of the entire software chain, from user application to kernel driver.
-  * **Driver/Hardware Interaction:** Debugging complex interactions, race conditions, and synchronization issues between the driver and the RTL.
-  * **Performance Analysis:** Identifying system-level performance bottlenecks by running realistic, long-duration software workloads.
 
 <!-- end list -->
 
