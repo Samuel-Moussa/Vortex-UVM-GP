@@ -1,4 +1,4 @@
-# UVM Verification Environment for the Vortex RISC-V Processor
+# UVM Verification Environment for the Vortex RISC-V based GPGPU
 
 This repository contains an industrial-grade UVM (Universal Verification Methodology) environment for the functional verification of the Vortex RISC-V processor. The environment is built upon the OpenHW Group's [core-v-verif](https://github.com/openhwgroup/core-v-verif) framework and is configured to use Questasim as the primary simulator.
 
