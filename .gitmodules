@@ -1,0 +1,6 @@
+[submodule "core-v-verif"]
+	path = core-v-verif
+	url = https://github.com/openhwgroup/core-v-verif.git
+[submodule "Vortex"]
+	path = Vortex
+	url = https://github.com/vortexgpgpu/vortex.git
