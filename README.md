@@ -2,7 +2,12 @@
 
 This repository contains an industrial-grade UVM (Universal Verification Methodology) environment for the functional verification of the Vortex RISC-V processor. The environment is built upon the OpenHW Group's [core-v-verif](https://github.com/openhwgroup/core-v-verif) framework and is configured to use Questasim as the primary simulator.
 
-The primary goal of this project is to create a robust, reusable, and scalable testbench to thoroughly verify the Vortex processor's compliance with the RISC-V ISA specification, including its `RV32IMAF` and `RV64IMAFD` variants.
+## Purpose:
+Extend the CV32E40P UVM verification environment from core-v-verif to support the Vortex GPGPU processor family (primary goal: RV32IMAF and later RV64IMAFD), using Questasim for simulation and the CORE-V-VERIF framework as a template.
+
+## Description:
+This repository houses a verification workspace centered on adapting OpenHW’s core-v-verif CV32E40P UVM environment to the Vortex GPGPU processor. The intent is to reuse stable, production-ready verification assets (agents, monitors, scoreboards, step-and-compare harness, build infrastructure) while engineering a Vortex-specific DUT wrapper, RVVI/RVFI tracing integration, and GPGPU-focused verification features (concurrency stress tests, memory-model corner cases, and FP D-extension validation). The workflow emphasizes a phased approach: first bring up a working RV32IMAF UVM baseline by leveraging CV32E40P templates, then extend and parameterize the environment for RV64IMAFD and GPGPU semantics.
+
 
 ## Key Features
 
