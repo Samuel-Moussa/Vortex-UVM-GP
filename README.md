@@ -14,16 +14,29 @@ The primary goal of this project is to create a robust, reusable, and scalable t
 ## Directory Structure
 
 The repository is organized to separate the core design, the verification framework, and the project-specific verification IP.
-Vortex\_UVM\_GP/
-├──.git/                \# Git repository data
-├── core-v-verif/        \# CORE-V-VERIF framework (Git Submodule)
-├── Vortex/              \# Vortex Processor RTL (The DUT - Git Submodule)
-├── env/                 \# Vortex-specific UVM environment, testbenches, and sequences
-├── tools/               \# Project-specific scripts and tool configurations
-├── docs/                \# Project documentation and verification plans
-├── results/             \# Default output directory for logs, waveforms, and reports
-├──.gitmodules          \# Defines the Git submodules (core-v-verif, Vortex)
-└──.gitignore           \# Specifies files for Git to ignore
+Vortex_UVM_GP/
+├── core-v-verif/
+│   ├── cv32e40p/
+│   │   ├── tb/
+│   │   │   └── uvmt/
+│   │   │       ├── uvmt_cv32e40p.flist
+│   │   │       ├── uvmt_cv32e40p_tb.sv
+│   │   │       ├── uvmt_cv32e40p_dut_wrap.sv
+│   │   │       ├── uvmt_cv32e40p_iss_wrap.sv
+│   │   │       └── uvmt_cv32e40p_step_compare.sv
+│   │   ├── sim/
+│   │   │   └── uvmt/
+│   │   │       └── vsim_results/
+│   │   └── tests/
+│   │       └── programs/
+│   │           └── custom/hello-world/hello-world.elf
+│   └── mk/
+├── core-v-verif.bak/
+├── docs/
+├── env/
+├── results/
+├── tools/
+└── Vortex/
 
 ````
 
