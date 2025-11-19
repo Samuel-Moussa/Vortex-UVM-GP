@@ -1,6 +1,5 @@
-# Vortex GPGPU UVM Verification Environment - Final Deliverables
+# Vortex GPGPU UVM Verification Environment - Draft
 
-**Author**: Manus AI  
 **Date**: November 19, 2025  
 **Project**: Complete UVM Verification Environment for Vortex GPGPU
 
