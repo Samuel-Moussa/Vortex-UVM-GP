@@ -1,0 +1,236 @@
+# Vortex RTL Compilation File List
+# Compilation order is critical - base packages first, then interfaces, then implementations
+
+# ============================================================================
+# 1. CONFIGURATION AND DEFINE FILES
+# ============================================================================
++incdir+$VORTEX_HOME/hw/rtl
++incdir+$VORTEX_HOME/hw/dpi
++define+EXT_F_ENABLE
+
+$VORTEX_HOME/hw/rtl/VX_gpu_pkg.sv
+$VORTEX_HOME/hw/rtl/VX_config.vh
+$VORTEX_HOME/hw/rtl/VX_define.vh
+$VORTEX_HOME/hw/rtl/VX_platform.vh
+$VORTEX_HOME/hw/rtl/VX_types.vh
+$VORTEX_HOME/hw/rtl/VX_scope.vh
+
+# ============================================================================
+# 2. DPI FILES
+# ============================================================================
+$VORTEX_HOME/hw/dpi/float_dpi.vh
+$VORTEX_HOME/hw/dpi/util_dpi.vh
+
+# ============================================================================
+# 3. PACKAGES (Must come before any modules that use them)
+# ============================================================================
+$VORTEX_HOME/hw/rtl/VX_trace_pkg.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_define.vh
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_define.vh
+
+# ============================================================================
+# 4. INTERFACE DEFINITIONS
+# ============================================================================
+$VORTEX_HOME/hw/rtl/interfaces/VX_branch_ctl_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_commit_csr_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_commit_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_commit_sched_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_dcr_bus_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_decode_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_decode_sched_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_dispatch_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_execute_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_fetch_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_ibuffer_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_issue_sched_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_operands_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_result_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_sched_csr_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_schedule_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_scoreboard_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_warp_ctl_if.sv
+$VORTEX_HOME/hw/rtl/interfaces/VX_writeback_if.sv
+$VORTEX_HOME/hw/rtl/mem/VX_gbar_bus_if.sv
+$VORTEX_HOME/hw/rtl/mem/VX_lsu_mem_if.sv
+$VORTEX_HOME/hw/rtl/mem/VX_mem_bus_if.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_csr_if.sv
+
+# ============================================================================
+# 5. LIBRARY MODULES (Fundamental building blocks)
+# ============================================================================
+$VORTEX_HOME/hw/rtl/libs/VX_allocator.sv
+$VORTEX_HOME/hw/rtl/libs/VX_async_ram_patch.sv
+$VORTEX_HOME/hw/rtl/libs/VX_avs_adapter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_axi_adapter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_axi_write_ack.sv
+$VORTEX_HOME/hw/rtl/libs/VX_bits_concat.sv
+$VORTEX_HOME/hw/rtl/libs/VX_bits_insert.sv
+$VORTEX_HOME/hw/rtl/libs/VX_bits_remove.sv
+$VORTEX_HOME/hw/rtl/libs/VX_bypass_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_cyclic_arbiter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_demux.sv
+$VORTEX_HOME/hw/rtl/libs/VX_divider.sv
+$VORTEX_HOME/hw/rtl/libs/VX_dp_ram.sv
+$VORTEX_HOME/hw/rtl/libs/VX_edge_trigger.sv
+$VORTEX_HOME/hw/rtl/libs/VX_elastic_adapter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_elastic_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_fifo_queue.sv
+$VORTEX_HOME/hw/rtl/libs/VX_find_first.sv
+$VORTEX_HOME/hw/rtl/libs/VX_generic_arbiter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_index_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_index_queue.sv
+$VORTEX_HOME/hw/rtl/libs/VX_lzc.sv
+$VORTEX_HOME/hw/rtl/libs/VX_matrix_arbiter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_mem_bank_adapter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_mem_coalescer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_mem_data_adapter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_mem_scheduler.sv
+$VORTEX_HOME/hw/rtl/libs/VX_multiplier.sv
+$VORTEX_HOME/hw/rtl/libs/VX_mux.sv
+$VORTEX_HOME/hw/rtl/libs/VX_nz_iterator.sv
+$VORTEX_HOME/hw/rtl/libs/VX_onehot_encoder.sv
+$VORTEX_HOME/hw/rtl/libs/VX_onehot_mux.sv
+$VORTEX_HOME/hw/rtl/libs/VX_onehot_shift.sv
+$VORTEX_HOME/hw/rtl/libs/VX_pe_serializer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_pending_size.sv
+$VORTEX_HOME/hw/rtl/libs/VX_pipe_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_pipe_register.sv
+$VORTEX_HOME/hw/rtl/libs/VX_placeholder.sv
+$VORTEX_HOME/hw/rtl/libs/VX_popcount.sv
+$VORTEX_HOME/hw/rtl/libs/VX_priority_arbiter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_priority_encoder.sv
+$VORTEX_HOME/hw/rtl/libs/VX_reduce_tree.sv
+$VORTEX_HOME/hw/rtl/libs/VX_reset_relay.sv
+$VORTEX_HOME/hw/rtl/libs/VX_rr_arbiter.sv
+$VORTEX_HOME/hw/rtl/libs/VX_scan.sv
+$VORTEX_HOME/hw/rtl/libs/VX_scope_switch.sv
+$VORTEX_HOME/hw/rtl/libs/VX_scope_tap.sv
+$VORTEX_HOME/hw/rtl/libs/VX_serial_div.sv
+$VORTEX_HOME/hw/rtl/libs/VX_serial_mul.sv
+$VORTEX_HOME/hw/rtl/libs/VX_shift_register.sv
+$VORTEX_HOME/hw/rtl/libs/VX_skid_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_sp_ram.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_arb.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_omega.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_pack.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_switch.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_unpack.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_xbar.sv
+$VORTEX_HOME/hw/rtl/libs/VX_stream_xpoint.sv
+$VORTEX_HOME/hw/rtl/libs/VX_ticket_lock.sv
+$VORTEX_HOME/hw/rtl/libs/VX_toggle_buffer.sv
+$VORTEX_HOME/hw/rtl/libs/VX_transpose.sv
+
+# ============================================================================
+# 6. FPU MODULES
+# ============================================================================
+$VORTEX_HOME/hw/rtl/tcu/bhf/HardFloat_consts.vi
+$VORTEX_HOME/hw/rtl/tcu/bhf/HardFloat_localFuncs.vi
+$VORTEX_HOME/hw/rtl/tcu/bhf/bsg_counting_leading_zeros.sv
+$VORTEX_HOME/hw/rtl/tcu/bhf/VX_tcu_bhf_bf16mul.sv
+$VORTEX_HOME/hw/rtl/tcu/bhf/VX_tcu_bhf_fadd.sv
+$VORTEX_HOME/hw/rtl/tcu/bhf/VX_tcu_bhf_fmul.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fp_classifier.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fp_rounding.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_cvt.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_div.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_dpi.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_dsp.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_fma.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_fpnew.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_ncp.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_sqrt.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fcvt_unit.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fncp_unit.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_unit.sv
+
+# ============================================================================
+# 7. TCU MODULES
+# ============================================================================
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_bhf.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_dpi.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_dsp.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_int.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fp.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_int.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_top.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_unit.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_uops.sv
+
+# ============================================================================
+# 8. CACHE MODULES
+# ============================================================================
+$VORTEX_HOME/hw/rtl/cache/VX_cache_flush.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_init.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_repl.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_tags.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_data.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_mshr.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_bank.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_bypass.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_cluster.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_wrap.sv
+$VORTEX_HOME/hw/rtl/cache/VX_cache_top.sv
+
+# ============================================================================
+# 9. MEMORY MODULES
+# ============================================================================
+$VORTEX_HOME/hw/rtl/mem/VX_gbar_arb.sv
+$VORTEX_HOME/hw/rtl/mem/VX_gbar_unit.sv
+$VORTEX_HOME/hw/rtl/mem/VX_local_mem.sv
+$VORTEX_HOME/hw/rtl/mem/VX_lmem_switch.sv
+$VORTEX_HOME/hw/rtl/mem/VX_local_mem_top.sv
+$VORTEX_HOME/hw/rtl/mem/VX_lsu_adapter.sv
+$VORTEX_HOME/hw/rtl/mem/VX_lsu_mem_arb.sv
+$VORTEX_HOME/hw/rtl/mem/VX_mem_arb.sv
+$VORTEX_HOME/hw/rtl/mem/VX_mem_switch.sv
+
+# ============================================================================
+# 10. CORE PIPELINE MODULES (Order matters!)
+# ============================================================================
+$VORTEX_HOME/hw/rtl/core/VX_uuid_gen.sv
+$VORTEX_HOME/hw/rtl/core/VX_ipdom_stack.sv
+$VORTEX_HOME/hw/rtl/core/VX_uop_sequencer.sv
+$VORTEX_HOME/hw/rtl/core/VX_ibuffer.sv
+$VORTEX_HOME/hw/rtl/core/VX_fetch.sv
+$VORTEX_HOME/hw/rtl/core/VX_decode.sv
+$VORTEX_HOME/hw/rtl/core/VX_operands.sv
+$VORTEX_HOME/hw/rtl/core/VX_scoreboard.sv
+$VORTEX_HOME/hw/rtl/core/VX_schedule.sv
+$VORTEX_HOME/hw/rtl/core/VX_issue_slice.sv
+$VORTEX_HOME/hw/rtl/core/VX_issue_top.sv
+$VORTEX_HOME/hw/rtl/core/VX_issue.sv
+$VORTEX_HOME/hw/rtl/core/VX_alu_int.sv
+$VORTEX_HOME/hw/rtl/core/VX_alu_muldiv.sv
+$VORTEX_HOME/hw/rtl/core/VX_alu_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_lsu_slice.sv
+$VORTEX_HOME/hw/rtl/core/VX_lsu_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_gather_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_mem_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_mem_unit_top.sv
+$VORTEX_HOME/hw/rtl/core/VX_sfu_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_opc_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_wctl_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_split_join.sv
+$VORTEX_HOME/hw/rtl/core/VX_dispatch_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_dispatch.sv
+$VORTEX_HOME/hw/rtl/core/VX_execute.sv
+$VORTEX_HOME/hw/rtl/core/VX_commit.sv
+$VORTEX_HOME/hw/rtl/core/VX_dcr_data.sv
+#$VORTEX_HOME/hw/rtl/core/VX_csr_data.sv
+#$VORTEX_HOME/hw/rtl/core/VX_csr_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_pe_switch.sv
+$VORTEX_HOME/hw/rtl/core/VX_core.sv
+$VORTEX_HOME/hw/rtl/core/VX_core_top.sv
+
+# ============================================================================
+# 11. TOP LEVEL MODULES
+# ============================================================================
+$VORTEX_HOME/hw/rtl/VX_socket.sv
+$VORTEX_HOME/hw/rtl/VX_cluster.sv
+$VORTEX_HOME/hw/rtl/Vortex.sv
+$VORTEX_HOME/hw/rtl/Vortex_axi.sv
