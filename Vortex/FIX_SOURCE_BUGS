@@ -1,47 +1,96 @@
-***in Vortex/hw/rtl/fpu/VX_fpu_pkg.sv
-There is a missing import we must add:
-`include "VX_gpu_pkg.sv"
-===========================================================================
-***in Vortex/hw/rtl/tcu/VX_tcu_top.sv
 
-There is a syntax error:
-error:
-    // VX_execute_if #(                         
-    //     .data_t (tcu_exe_t)
-    // ) VX_execute_if();
+🐞 Bug Report: Compilation Errors in Vortex RTL (FPU & TCU Modules)
 
-should be:
-    VX_execute_if #(
-        .data_t (tcu_exe_t)
-    ) execute_if();
-============================================================================
-***Vortex/hw/rtl/tcu/VX_tcu_uops.sv
-There is a missing import we must add 
-`include "VX_tcu_pkg.sv"
-`include "VX_gpu_pkg.sv"
+Reported by: Samuel Moussa Willson – Minia University – GP26
+LinkedIn: Samuel Moussa Willson
 
-==========================================================================
-*** in Vortex/hw/rtl/tcu/VX_tcu_pkg.sv
+---
 
-Some parameters are used globally, but they are defined as localparam, which causes an undefined parameter issue
+## Summary
+Several compilation errors were encountered when building the Vortex RTL environment. These issues stem from missing imports, incorrect syntax, and improper parameter scoping in FPU and TCU modules. The errors prevent successful compilation of the UVM environment and must be addressed for functional simulation.
 
-error:
-    // // Register base addresses
-    // localparam TCU_RA = 0;
-    // localparam TCU_RB = (TCU_NRB == 4) ? 28 : 10;
-    // localparam TCU_RC = (TCU_NRB == 4) ? 10 : 24;
+---
 
-should be:
-        // Register base addresses
-    parameter TCU_RA = 0;
-    parameter TCU_RB = (TCU_NRB == 4) ? 28 : 10;
-    parameter TCU_RC = (TCU_NRB == 4) ? 10 : 24;
-===================================================================
-**to not get compiling errors while compiling the TCU. Copy the RISC-V specialization file to the main hardfloat source directory
-USE:
-cp third_party/hardfloat/source/RISCV/HardFloat_specialize.vi third_party/hardfloat/source/
+## Issues Identified
 
+### 1. Missing Import in `VX_fpu_pkg.sv`
+- **File:** `Vortex/hw/rtl/fpu/VX_fpu_pkg.sv`  
+- **Problem:** Required package `VX_gpu_pkg.sv` was not included.  
+- **Impact:** Symbols defined in `VX_gpu_pkg.sv` are unavailable, leading to unresolved references during compilation.  
+- **Resolution:** Add the following line at the top of the file:
+  ```systemverilog
+  `include "VX_gpu_pkg.sv"
+  ```
 
+---
 
+### 2. Syntax Error in `VX_tcu_top.sv`
+- **File:** `Vortex/hw/rtl/tcu/VX_tcu_top.sv`  
+- **Problem:** Incorrect instantiation of `VX_execute_if`.  
+- **Error Code:**
+  ```systemverilog
+  // VX_execute_if #(                         
+  //     .data_t (tcu_exe_t)
+  // ) VX_execute_if();
+  ```
+- **Impact:** Causes a syntax error during compilation.  
+- **Resolution:** Correct instantiation should be:
+  ```systemverilog
+  VX_execute_if #(
+      .data_t (tcu_exe_t)
+  ) execute_if();
+  ```
 
+---
 
+### 3. Missing Imports in `VX_tcu_uops.sv`
+- **File:** `Vortex/hw/rtl/tcu/VX_tcu_uops.sv`  
+- **Problem:** Required packages not included.  
+- **Impact:** Compilation fails due to undefined symbols.  
+- **Resolution:** Add the following includes:
+  ```systemverilog
+  `include "VX_tcu_pkg.sv"
+  `include "VX_gpu_pkg.sv"
+  ```
+
+---
+
+### 4. Incorrect Parameter Scope in `VX_tcu_pkg.sv`
+- **File:** `Vortex/hw/rtl/tcu/VX_tcu_pkg.sv`  
+- **Problem:** Register base addresses defined as `localparam` instead of `parameter`.  
+- **Error Code:**
+  ```systemverilog
+  localparam TCU_RA = 0;
+  localparam TCU_RB = (TCU_NRB == 4) ? 28 : 10;
+  localparam TCU_RC = (TCU_NRB == 4) ? 10 : 24;
+  ```
+- **Impact:** Parameters are not visible globally, causing undefined parameter errors.  
+- **Resolution:** Change to:
+  ```systemverilog
+  parameter TCU_RA = 0;
+  parameter TCU_RB = (TCU_NRB == 4) ? 28 : 10;
+  parameter TCU_RC = (TCU_NRB == 4) ? 10 : 24;
+  ```
+
+---
+
+### 5. HardFloat Specialization File Placement
+- **Problem:** Compilation of TCU requires RISC-V specialization file to be in the main HardFloat source directory.  
+- **Impact:** Missing specialization file leads to build errors.  
+- **Resolution:** Copy the file as follows:
+  ```bash
+  cp third_party/hardfloat/source/RISCV/HardFloat_specialize.vi third_party/hardfloat/source/
+  ```
+
+---
+
+## Verification
+- After applying the above fixes:
+  - RTL compilation completes successfully in QuestaSim.  
+  - No unresolved references or syntax errors remain.  
+  - TCU and FPU modules integrate correctly with the rest of the Vortex environment.  
+
+---
+
+✅ **Status:** Fixed  
+📌 **Fixed by:** Samuel Moussa Willson – Minia University – GP26  
