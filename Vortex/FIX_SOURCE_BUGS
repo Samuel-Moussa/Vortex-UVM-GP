@@ -1,0 +1,21 @@
+***in Vortex/hw/rtl/fpu/VX_fpu_pkg.sv
+There is a missing import we must add:
+`include "VX_gpu_pkg.sv"
+===========================================================================
+***in Vortex/hw/rtl/tcu/VX_tcu_top.sv
+
+There is a syntax error:
+error:
+    // VX_execute_if #(                         
+    //     .data_t (tcu_exe_t)
+    // ) VX_execute_if();
+
+should be:
+    VX_execute_if #(
+        .data_t (tcu_exe_t)
+    ) execute_if();
+============================================================================
+***Vortex/hw/rtl/tcu/VX_tcu_uops.sv
+There is a missing import we must add 
+`include "VX_tcu_pkg.sv"
+`include "VX_gpu_pkg.sv"
