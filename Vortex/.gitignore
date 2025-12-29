@@ -1,0 +1,42 @@
+/.vscode
+*.cache
+*.code-workspace
+miscs/apptainer/vortex.sif
+# Ignore build and sim outputs
+build/
+logs/
+runtime/*.so*
+runtime/obj/
+runtime/*.stamp
+kernel/*.o
+kernel/*.a
+tests/**/.depend
+tests/**/trace/
+tests/**/kernel.vxbin
+tests/**/kernel.elf
+tests/**/ramulator.stats.log
+*.vlt
+*.log
+*.dump
+*.ini
+
+# Ignore editor & temp files
+*.swp
+*.tmp
+*.bak
+
+# --- Allow tracking of verification scripts inside build/ci ---
+!build/
+!build/ci/
+!build/ci/*.sh
+!build/ci/*.py
+!build/ci/*.md
+build/ci/logs/
+
+# === Vortex/UVM Build & Sim Outputs ===
+/build/
+*.bin
+*.log
+*.vcd
+*.o
+.depend
