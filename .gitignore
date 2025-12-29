@@ -1,2 +1,62 @@
-results/
-core-v-verif.bak/
+# Backups
+*_backup*/
+*.bak
+*.backup
+
+# Simulation artifacts
+work/
+*.log
+*.wlf
+transcript
+vsim.dbg
+*.vcd
+*.fsdb
+
+# QuestaSim/ModelSim
+modelsim.ini
+*.mpf
+*.mti
+*.qtl
+*.qdb
+*.qpg
+
+# Compiled objects
+*.o
+*.so
+*.a
+*.dll
+*.exe
+
+# Build directories
+build/
+obj_dir/
+
+# Backup files
+*~
+*.swp
+*.swo
+*.Zone.Identifier
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.code-workspace
+
+# Coverage files
+*.ucdb
+cov_work/
+
+# Environment files (optional - remove if you want to commit them)
+env/
+
+
+# Backup folders
+backup/
+
+# Windows Zone Identifier files
+*:Zone.Identifier
+
