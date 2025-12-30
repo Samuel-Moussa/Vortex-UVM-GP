@@ -192,7 +192,7 @@ class axi_transaction extends uvm_sequence_item;
     // Address must be aligned to transfer size
     // Prevents unaligned accesses which are protocol violations
     constraint addr_alignment_c {
-        if (size == 0) addr[0:0] == 1'b0;   // Byte access (always aligned)
+        //if (size == 0) addr[0:0] == 1'b0;   // Byte access (always aligned)
         if (size == 1) addr[0:0] == 1'b0;   // Halfword must be even address
         if (size == 2) addr[1:0] == 2'b00;  // Word must be 4-byte aligned
         if (size == 3) addr[2:0] == 3'b000; // Doubleword must be 8-byte aligned

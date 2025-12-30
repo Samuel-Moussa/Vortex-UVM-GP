@@ -503,8 +503,8 @@ module vortex_tb_top;
             .dcr_wr_data(vif.dcr_if.wr_data),
             
             // Status
-            .busy(vif.status_if.busy),
-            .ebreak(vif.status_if.ebreak_detected)
+            .busy(vif.status_if.busy)
+            //.ebreak(vif.status_if.ebreak_detected)
         );
         
         initial $display("[TB_TOP @ %0t] DUT instantiated: Vortex with AXI wrapper", $time);
@@ -537,8 +537,8 @@ module vortex_tb_top;
             .dcr_wr_data(vif.dcr_if.wr_data),
             
             // Status
-            .busy(vif.status_if.busy),
-            .ebreak(vif.status_if.ebreak_detected)
+            .busy(vif.status_if.busy)
+            //.ebreak(vif.status_if.ebreak_detected)
         );
         
         initial $display("[TB_TOP @ %0t] DUT instantiated: Vortex with custom memory interface", $time);

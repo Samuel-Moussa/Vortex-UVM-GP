@@ -13,6 +13,9 @@
 
 `include "VX_define.vh"
 
+`include "VX_tcu_pkg.sv"
+`include "VX_gpu_pkg.sv"
+
 module VX_tcu_uops import
 `ifdef EXT_TCU_ENABLE
     VX_tcu_pkg::*,
