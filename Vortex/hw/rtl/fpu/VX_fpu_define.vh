@@ -18,6 +18,10 @@
 
 `ifdef SV_DPI
 `include "float_dpi.vh"
+// //ADDED FOR QUESTASIM 21 DPI ISSUE
+// `include "VX_fpu_dpi_wrapper_pkg.sv"
+// `include "util_dpi.vh"
+
 `endif
 
 `define FPU_MERGE_FFLAGS(out, in, mask, lanes) \

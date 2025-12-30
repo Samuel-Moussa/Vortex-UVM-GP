@@ -16,10 +16,22 @@
 
 `include "VX_define.vh"
 `include "VX_gpu_pkg.sv"
+//ADDED
+`include "VX_platform.vh"
+`include "VX_trace_pkg.sv"
+
 
 package VX_tcu_pkg;
 
     import VX_gpu_pkg::*;
+
+        // ✅ ADD: Import DPI functions INSIDE package
+    `ifdef SIMULATION
+        import "DPI-C" function void dpi_trace(input int level, input string format);
+    `endif
+
+
+
 
     // Set configuration parameters
     localparam TCU_NT = `NUM_THREADS;

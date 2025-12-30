@@ -118,7 +118,7 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
             assign core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_data  = core_bus_out_if[i].rsp_data;
             assign core_bus_out_if[i].rsp_ready = core_bus_nc_switch_if[1 * NUM_REQS + i].rsp_ready;
         end else begin : g_no_cache
-            `INIT_VX_MEM_BUS_IF (core_bus_out_if[i])
+            // `INIT_VX_MEM_BUS_IF (core_bus_out_if[i])
             //if quesat optmized use this
             assign core_bus_out_if[i].req_valid = 1'b0;
             assign core_bus_out_if[i].rsp_ready = 1'b0;
@@ -245,10 +245,10 @@ module VX_cache_bypass import VX_gpu_pkg::*; #(
         if (CACHE_ENABLE) begin : g_cache
             `ASSIGN_VX_MEM_BUS_IF_EX(mem_bus_out_src_if[1 * MEM_PORTS + i], mem_bus_in_if[i], MEM_TAG_OUT_WIDTH, MEM_TAG_IN_WIDTH, UUID_WIDTH);
         end else begin : g_no_cache
-            `UNUSED_VX_MEM_BUS_IF(mem_bus_in_if[i])
+            // `UNUSED_VX_MEM_BUS_IF(mem_bus_in_if[i])
             //if quesat optmized use this
-            // assign mem_bus_in_if[i].req_ready = 1'b0;
-            // assign mem_bus_in_if[i].rsp_valid = 1'b0;
+            assign mem_bus_in_if[i].req_ready = 1'b0;
+            assign mem_bus_in_if[i].rsp_valid = 1'b0;
         end
     end
 
