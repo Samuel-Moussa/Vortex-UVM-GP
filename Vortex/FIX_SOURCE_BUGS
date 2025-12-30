@@ -1,96 +1,153 @@
+# **🐞 Bug Report: Vortex GPGPU RTL DPI Scope & Compilation Issues**
 
-🐞 Bug Report: Compilation Errors in Vortex RTL (FPU & TCU Modules)
+**Reported by:** Samuel Moussa Willson – Minia University – GP26  
+**LinkedIn:** [Samuel Moussa Willson](https://www.linkedin.com/in/samuel-moussa-willson)  
+**Date:** December 30, 2025  
+**Simulator:** QuestaSim 2021.2_1  
 
-Reported by: Samuel Moussa Willson – Minia University – GP26
-LinkedIn: Samuel Moussa Willson
+***
 
----
+## **Summary**
 
-## Summary
-Several compilation errors were encountered when building the Vortex RTL environment. These issues stem from missing imports, incorrect syntax, and improper parameter scoping in FPU and TCU modules. The errors prevent successful compilation of the UVM environment and must be addressed for functional simulation.
+Multiple compilation errors in Vortex RTL. Issues include missing package imports, syntax errors in TCU modules, incorrect parameter scoping, and **critical DPI scope violations** preventing `dpi_trace()` function access in `VX_tcu_pkg.sv`.
 
----
+***
 
-## Issues Identified
+## **Issues & Resolutions**
 
-### 1. Missing Import in `VX_fpu_pkg.sv`
-- **File:** `Vortex/hw/rtl/fpu/VX_fpu_pkg.sv`  
-- **Problem:** Required package `VX_gpu_pkg.sv` was not included.  
-- **Impact:** Symbols defined in `VX_gpu_pkg.sv` are unavailable, leading to unresolved references during compilation.  
-- **Resolution:** Add the following line at the top of the file:
-  ```systemverilog
-  `include "VX_gpu_pkg.sv"
-  ```
+### **1. ⚠️ CRITICAL: DPI Function Not Accessible in `VX_tcu_pkg.sv`**
 
----
+**File:** `Vortex/hw/rtl/tcu/VX_tcu_pkg.sv`  
+**Error:** `vlog-7027: The name ('dpi_trace') was not found in the current scope` (13 instances)
 
-### 2. Syntax Error in `VX_tcu_top.sv`
-- **File:** `Vortex/hw/rtl/tcu/VX_tcu_top.sv`  
-- **Problem:** Incorrect instantiation of `VX_execute_if`.  
-- **Error Code:**
-  ```systemverilog
-  // VX_execute_if #(                         
-  //     .data_t (tcu_exe_t)
-  // ) VX_execute_if();
-  ```
-- **Impact:** Causes a syntax error during compilation.  
-- **Resolution:** Correct instantiation should be:
-  ```systemverilog
-  VX_execute_if #(
-      .data_t (tcu_exe_t)
-  ) execute_if();
-  ```
+**Root Cause:**  
+DPI import `dpi_trace()` placed at file scope via `include "util_dpi.vh"` is not accessible inside package scope where `TRACE` macros expand.
 
----
+**Fix:**  
+Move DPI import **inside** package declaration:
 
-### 3. Missing Imports in `VX_tcu_uops.sv`
-- **File:** `Vortex/hw/rtl/tcu/VX_tcu_uops.sv`  
-- **Problem:** Required packages not included.  
-- **Impact:** Compilation fails due to undefined symbols.  
-- **Resolution:** Add the following includes:
-  ```systemverilog
-  `include "VX_tcu_pkg.sv"
-  `include "VX_gpu_pkg.sv"
-  ```
+```systemverilog
+// BEFORE (BROKEN)
+package VX_tcu_pkg;
+    task trace_fmt(...);
+        `TRACE(level, ("fp32"))  // ❌ dpi_trace() not found
+    endtask
+endpackage
 
----
+// AFTER (FIXED)
+package VX_tcu_pkg;
+    import VX_gpu_pkg::*;
+    
+    // ✅ DPI import in package scope
+    `ifdef SIMULATION
+        import "DPI-C" function void dpi_trace(input int level, input string format);
+    `endif
+    
+    task trace_fmt(...);
+        `TRACE(level, ("fp32"))  // ✅ Works!
+    endtask
+endpackage
+```
 
-### 4. Incorrect Parameter Scope in `VX_tcu_pkg.sv`
-- **File:** `Vortex/hw/rtl/tcu/VX_tcu_pkg.sv`  
-- **Problem:** Register base addresses defined as `localparam` instead of `parameter`.  
-- **Error Code:**
-  ```systemverilog
-  localparam TCU_RA = 0;
-  localparam TCU_RB = (TCU_NRB == 4) ? 28 : 10;
-  localparam TCU_RC = (TCU_NRB == 4) ? 10 : 24;
-  ```
-- **Impact:** Parameters are not visible globally, causing undefined parameter errors.  
-- **Resolution:** Change to:
-  ```systemverilog
-  parameter TCU_RA = 0;
-  parameter TCU_RB = (TCU_NRB == 4) ? 28 : 10;
-  parameter TCU_RC = (TCU_NRB == 4) ? 10 : 24;
-  ```
+**Result:** All 13 errors resolved, clean compilation achieved.
 
----
+***
 
-### 5. HardFloat Specialization File Placement
-- **Problem:** Compilation of TCU requires RISC-V specialization file to be in the main HardFloat source directory.  
-- **Impact:** Missing specialization file leads to build errors.  
-- **Resolution:** Copy the file as follows:
-  ```bash
-  cp third_party/hardfloat/source/RISCV/HardFloat_specialize.vi third_party/hardfloat/source/
-  ```
+### **2. Missing Import in `VX_fpu_pkg.sv`**
 
----
+**File:** `Vortex/hw/rtl/fpu/VX_fpu_pkg.sv`  
+**Fix:** Add at top:
+```systemverilog
+`include "VX_gpu_pkg.sv"
+```
 
-## Verification
-- After applying the above fixes:
-  - RTL compilation completes successfully in QuestaSim.  
-  - No unresolved references or syntax errors remain.  
-  - TCU and FPU modules integrate correctly with the rest of the Vortex environment.  
+***
 
----
+### **3. Syntax Error in `VX_tcu_top.sv`**
 
-✅ **Status:** Fixed  
-📌 **Fixed by:** Samuel Moussa Willson – Minia University – GP26  
+**File:** `Vortex/hw/rtl/tcu/VX_tcu_top.sv`  
+**Fix:** Correct interface instantiation:
+```systemverilog
+// BEFORE
+// VX_execute_if #(.data_t (tcu_exe_t)) VX_execute_if();
+
+// AFTER
+VX_execute_if #(.data_t (tcu_exe_t)) execute_if();
+```
+
+***
+
+### **4. Missing Imports in `VX_tcu_uops.sv`**
+
+**File:** `Vortex/hw/rtl/tcu/VX_tcu_uops.sv`  
+**Fix:** Add includes:
+```systemverilog
+`include "VX_tcu_pkg.sv"
+`include "VX_gpu_pkg.sv"
+```
+
+***
+
+### **5. Incorrect Parameter Scope in `VX_tcu_pkg.sv`**
+
+**File:** `Vortex/hw/rtl/tcu/VX_tcu_pkg.sv`  
+**Fix:** Change `localparam` → `parameter`:
+```systemverilog
+// BEFORE
+localparam TCU_RA = 0;
+localparam TCU_RB = (TCU_NRB == 4) ? 28 : 10;
+localparam TCU_RC = (TCU_NRB == 4) ? 10 : 24;
+
+// AFTER
+parameter TCU_RA = 0;
+parameter TCU_RB = (TCU_NRB == 4) ? 28 : 10;
+parameter TCU_RC = (TCU_NRB == 4) ? 10 : 24;
+```
+
+***
+
+### **6. HardFloat Specialization File Missing**
+
+**Fix:** Copy RISC-V specialization:
+```bash
+cp third_party/hardfloat/source/RISCV/HardFloat_specialize.vi \
+   third_party/hardfloat/source/
+```
+
+***
+
+## **Quick Fix Script**
+
+```bash
+#!/bin/bash
+cd ~/Vortex_UVM_GP/Vortex/hw/rtl/tcu
+
+# Fix #1: DPI scope issue
+sed -i '/`include "util_dpi.vh"/d' VX_tcu_pkg.sv
+sed -i '/import VX_gpu_pkg::\*/a\
+\
+    `ifdef SIMULATION\
+        import "DPI-C" function void dpi_trace(input int level, input string format);\
+    `endif' VX_tcu_pkg.sv
+
+# Fix #5: Parameter scope
+sed -i 's/localparam TCU_R\([ABC]\)/parameter TCU_R\1/g' VX_tcu_pkg.sv
+
+echo "✅ Fixes applied"
+```
+
+***
+
+## **Verification**
+
+```bash
+vlog -sv +define+SIMULATION +incdir+$VORTEX_HOME/hw/dpi -f flists/vortex_rtl.flist
+# ✅ Errors: 0, Warnings: 38, Modules: 619
+```
+
+**Status:** ✅ **FIXED**  
+**Fixed by:** Samuel Moussa Willson – Minia University – GP26
+
+***
+
+**Key Takeaway:** SystemVerilog DPI imports must reside in the **same scope** where functions are called. File-scope imports don't propagate into packages.
