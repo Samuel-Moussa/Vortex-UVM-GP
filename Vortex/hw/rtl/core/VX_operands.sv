@@ -28,7 +28,7 @@ module VX_operands import VX_gpu_pkg::*; #(
     VX_scoreboard_if.slave  scoreboard_if,
     VX_operands_if.master   operands_if
 );
-    `UNUSED_SPARAM (ISSUE_ID)
+    `UNUSED_SPARAM (ISSUE_ID) //if questa optmize comment this
 
     localparam OUT_DATAW = $bits(operands_t);
 

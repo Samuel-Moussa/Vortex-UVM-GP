@@ -18,15 +18,13 @@
 #include <mutex>
 #include <iostream>
 #include <rvfloats.h>
-#include <util.h>
-//#include "util.h"
+#include "util.h"
+//#include <util.h>
 #include "svdpi.h"
-//#include "rvfloats.h"
-
+#include "rvfloats.h"
+#include "vec_ops.h" // if exists
+#include "softfloat_ext.h"
 #include "verilated_vpi.h"
-
-#include "svdpi.h"
-
 #include "VX_config.h"
 
 using namespace vortex;
