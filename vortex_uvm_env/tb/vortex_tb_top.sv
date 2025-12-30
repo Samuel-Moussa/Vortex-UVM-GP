@@ -517,19 +517,33 @@ module vortex_tb_top;
             .clk(clk),
             .reset(!reset_n),
             
-            // Custom Memory Interface
-            .mem_req_valid(vif.mem_if.req_valid),
+        //     // Custom Memory Interface
+        //     .mem_req_valid(vif.mem_if.req_valid),
+        //     .mem_req_ready(vif.mem_if.req_ready),
+        //     .mem_req_rw(vif.mem_if.req_rw),
+        //     .mem_req_addr(vif.mem_if.req_addr),
+        //     .mem_req_data(vif.mem_if.req_data),
+        //     .mem_req_byteen(vif.mem_if.req_byteen),
+        //     .mem_req_tag(vif.mem_if.req_tag),
+            
+        //     .mem_rsp_valid(vif.mem_if.rsp_valid),
+        //     .mem_rsp_ready(vif.mem_if.rsp_ready),
+        //     .mem_rsp_data(vif.mem_if.rsp_data),
+        //     .mem_rsp_tag(vif.mem_if.rsp_tag),
+        
+            // Custom Memory Interface - FIXED: Connect as arrays with [0:0]
+            .mem_req_valid({vif.mem_if.req_valid}),
             .mem_req_ready(vif.mem_if.req_ready),
-            .mem_req_rw(vif.mem_if.req_rw),
-            .mem_req_addr(vif.mem_if.req_addr),
-            .mem_req_data(vif.mem_if.req_data),
-            .mem_req_byteen(vif.mem_if.req_byteen),
-            .mem_req_tag(vif.mem_if.req_tag),
+            .mem_req_rw({vif.mem_if.req_rw}),
+            .mem_req_addr({vif.mem_if.req_addr}),
+            .mem_req_data({vif.mem_if.req_data}),
+            .mem_req_byteen({vif.mem_if.req_byteen}),
+            .mem_req_tag({vif.mem_if.req_tag}),
             
             .mem_rsp_valid(vif.mem_if.rsp_valid),
-            .mem_rsp_ready(vif.mem_if.rsp_ready),
+            .mem_rsp_ready({vif.mem_if.rsp_ready}),
             .mem_rsp_data(vif.mem_if.rsp_data),
-            .mem_rsp_tag(vif.mem_if.rsp_tag),
+            .mem_rsp_tag(vif.mem_if.rsp_tag),        
             
             // DCR Interface
             .dcr_wr_valid(vif.dcr_if.wr_valid),

@@ -32,15 +32,8 @@ $VORTEX_HOME/hw/rtl/VX_scope.vh
 # Main GPU package
 $VORTEX_HOME/hw/rtl/VX_gpu_pkg.sv
 
-# Subsystem packages
-$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
-$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
-
-# ============================================================================
-# 2. DPI FILES
-# ============================================================================
-$VORTEX_HOME/hw/dpi/float_dpi.vh
-$VORTEX_HOME/hw/dpi/util_dpi.vh
+# #CREATED AND ADDED TO SOLVE QUESTASIM 21 DPI ISSUE
+# $VORTEX_HOME/hw/rtl/fpu/VX_fpu_dpi_wrapper_pkg.sv
 
 # ============================================================================
 # 3. PACKAGES
@@ -48,6 +41,23 @@ $VORTEX_HOME/hw/dpi/util_dpi.vh
 $VORTEX_HOME/hw/rtl/VX_trace_pkg.sv
 $VORTEX_HOME/hw/rtl/cache/VX_cache_define.vh
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_define.vh
+
+
+# ============================================================================
+# 2. DPI FILES
+# ============================================================================
+$VORTEX_HOME/hw/dpi/float_dpi.vh
+$VORTEX_HOME/hw/dpi/util_dpi.vh
+
+
+
+# Subsystem packages
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
+
+
+
+
 
 # ============================================================================
 # 4. INTERFACE DEFINITIONS
