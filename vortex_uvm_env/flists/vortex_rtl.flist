@@ -6,14 +6,35 @@
 # ============================================================================
 +incdir+$VORTEX_HOME/hw/rtl
 +incdir+$VORTEX_HOME/hw/dpi
-+define+EXT_F_ENABLE
++incdir+$VORTEX_HOME/hw/rtl/fpu
++incdir+$VORTEX_HOME/hw/rtl/tcu
++incdir+$VORTEX_HOME/hw/rtl/cache
++incdir+$VORTEX_HOME/hw/rtl/mem
++incdir+$VORTEX_HOME/hw/rtl/core
++incdir+$VORTEX_HOME/hw/rtl/libs
++incdir+$VORTEX_HOME/hw/rtl/interfaces
++incdir+$VORTEX_HOME/third_party/hardfloat/source
++incdir+$VORTEX_HOME/hw/rtl/tcu/bhf
 
-$VORTEX_HOME/hw/rtl/VX_gpu_pkg.sv
++define+SIMULATION
++define+EXT_F_ENABLE=1
++define+EXT_D_ENABLE=1
++define+EXT_M_ENABLE=1
++define+EXT_TCU_ENABLE=1
+
+# Configuration headers
 $VORTEX_HOME/hw/rtl/VX_config.vh
 $VORTEX_HOME/hw/rtl/VX_define.vh
 $VORTEX_HOME/hw/rtl/VX_platform.vh
 $VORTEX_HOME/hw/rtl/VX_types.vh
 $VORTEX_HOME/hw/rtl/VX_scope.vh
+
+# Main GPU package
+$VORTEX_HOME/hw/rtl/VX_gpu_pkg.sv
+
+# Subsystem packages
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
 
 # ============================================================================
 # 2. DPI FILES
@@ -22,11 +43,9 @@ $VORTEX_HOME/hw/dpi/float_dpi.vh
 $VORTEX_HOME/hw/dpi/util_dpi.vh
 
 # ============================================================================
-# 3. PACKAGES (Must come before any modules that use them)
+# 3. PACKAGES
 # ============================================================================
 $VORTEX_HOME/hw/rtl/VX_trace_pkg.sv
-$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
-$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
 $VORTEX_HOME/hw/rtl/cache/VX_cache_define.vh
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_define.vh
 
@@ -58,7 +77,7 @@ $VORTEX_HOME/hw/rtl/mem/VX_mem_bus_if.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_csr_if.sv
 
 # ============================================================================
-# 5. LIBRARY MODULES (Fundamental building blocks)
+# 5. LIBRARY MODULES
 # ============================================================================
 $VORTEX_HOME/hw/rtl/libs/VX_allocator.sv
 $VORTEX_HOME/hw/rtl/libs/VX_async_ram_patch.sv
@@ -125,10 +144,26 @@ $VORTEX_HOME/hw/rtl/libs/VX_toggle_buffer.sv
 $VORTEX_HOME/hw/rtl/libs/VX_transpose.sv
 
 # ============================================================================
-# 6. FPU MODULES
+# 6. HARDFLOAT LIBRARY (Berkeley FPU - MUST come before Vortex FPU)
 # ============================================================================
-$VORTEX_HOME/hw/rtl/tcu/bhf/HardFloat_consts.vi
-$VORTEX_HOME/hw/rtl/tcu/bhf/HardFloat_localFuncs.vi
+$VORTEX_HOME/third_party/hardfloat/source/HardFloat_primitives.v
+$VORTEX_HOME/third_party/hardfloat/source/HardFloat_rawFN.v
+$VORTEX_HOME/third_party/hardfloat/source/addRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/mulRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/mulAddRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/divSqrtRecFN_small.v
+$VORTEX_HOME/third_party/hardfloat/source/compareRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/recFNToFN.v
+$VORTEX_HOME/third_party/hardfloat/source/fNToRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/iNToRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/recFNToIN.v
+$VORTEX_HOME/third_party/hardfloat/source/isSigNaNRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/recFNToRecFN.v
+$VORTEX_HOME/third_party/hardfloat/source/bsg_hardfloat_pkg.sv
+
+# ============================================================================
+# 7. TCU & FPU MODULES
+# ============================================================================
 $VORTEX_HOME/hw/rtl/tcu/bhf/bsg_counting_leading_zeros.sv
 $VORTEX_HOME/hw/rtl/tcu/bhf/VX_tcu_bhf_bf16mul.sv
 $VORTEX_HOME/hw/rtl/tcu/bhf/VX_tcu_bhf_fadd.sv
@@ -137,22 +172,16 @@ $VORTEX_HOME/hw/rtl/fpu/VX_fp_classifier.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fp_rounding.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_cvt.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_div.sv
-$VORTEX_HOME/hw/rtl/fpu/VX_fpu_dpi.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_dsp.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_fma.sv
-$VORTEX_HOME/hw/rtl/fpu/VX_fpu_fpnew.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_ncp.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_sqrt.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fcvt_unit.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fncp_unit.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_unit.sv
 
-# ============================================================================
-# 7. TCU MODULES
-# ============================================================================
+# TCU modules
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_bhf.sv
-$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_dpi.sv
-$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_dsp.sv
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_int.sv
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_fp.sv
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_int.sv
@@ -190,7 +219,7 @@ $VORTEX_HOME/hw/rtl/mem/VX_mem_arb.sv
 $VORTEX_HOME/hw/rtl/mem/VX_mem_switch.sv
 
 # ============================================================================
-# 10. CORE PIPELINE MODULES (Order matters!)
+# 10. CORE PIPELINE MODULES
 # ============================================================================
 $VORTEX_HOME/hw/rtl/core/VX_uuid_gen.sv
 $VORTEX_HOME/hw/rtl/core/VX_ipdom_stack.sv
@@ -221,8 +250,8 @@ $VORTEX_HOME/hw/rtl/core/VX_dispatch.sv
 $VORTEX_HOME/hw/rtl/core/VX_execute.sv
 $VORTEX_HOME/hw/rtl/core/VX_commit.sv
 $VORTEX_HOME/hw/rtl/core/VX_dcr_data.sv
-#$VORTEX_HOME/hw/rtl/core/VX_csr_data.sv
-#$VORTEX_HOME/hw/rtl/core/VX_csr_unit.sv
+$VORTEX_HOME/hw/rtl/core/VX_csr_data.sv
+$VORTEX_HOME/hw/rtl/core/VX_csr_unit.sv
 $VORTEX_HOME/hw/rtl/core/VX_pe_switch.sv
 $VORTEX_HOME/hw/rtl/core/VX_core.sv
 $VORTEX_HOME/hw/rtl/core/VX_core_top.sv
