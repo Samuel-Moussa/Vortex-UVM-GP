@@ -1,0 +1,63 @@
+m255
+K4
+z2
+!s11f vlog 2021.2_1 2021.05, May 15 2021
+13
+!s112 1.1
+!i10d 8192
+!i10e 25
+!i10f 100
+cModel Technology
+Z0 d/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/verification/sim/questa
+Xfloat_dpi_vh_unit
+Z1 DXx6 sv_std 3 std 0 22 9oUSJO;AeEaW`l:M@^WG92
+Z2 !s110 1763329706
+VZ2V02H[7Eh44lVVGm3B;B0
+r1
+!s85 0
+!i10b 1
+!s100 mORCMM]^l2kG==c;BUL0M2
+IZ2V02H[7Eh44lVVGm3B;B0
+!i103 1
+S1
+R0
+Z3 w1761156279
+8/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/float_dpi.vh
+F/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/float_dpi.vh
+!i122 6
+L0 17 0
+Z4 OL;L;2021.2_1;73
+31
+Z5 !s108 1763329706.000000
+!s107 /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/float_dpi.vh|/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/util_dpi.vh|
+Z6 !s90 -sv|-timescale=1ns/1ps|+define+SIMULATION|+define+XLEN_32|+define+EXT_TEX_DISABLE|+define+EXT_RASTER_DISABLE|+define+EXT_ROP_DISABLE|+define+EXT_IOMMU_DISABLE|+define+EXT_F_DISABLE|-suppress|2583|-suppress|13314|-suppress|2730|-suppress|7061|-suppress|8386|-suppress|8387|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/libs|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/interfaces|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/mem|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/cache|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/fpu|+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi|+define+NUM_CORES=2|+define+NUM_WARPS=4|+define+NUM_THREADS=4|-dpiheader|/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/verification/sim/questa/work/dpi_types.h|-work|vortex_lib|/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/util_dpi.vh|/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/float_dpi.vh|
+!i113 0
+Z7 o-suppress 2583 -suppress 13314 -suppress 2730 -suppress 7061 -suppress 8386 -suppress 8387 -sv -timescale=1ns/1ps -work vortex_lib -L mtiAvm -L mtiRnm -L mtiOvm -L mtiUvm -L mtiUPF -L infact
+Z8 !s92 -suppress 2583 -suppress 13314 -suppress 2730 -suppress 7061 -suppress 8386 -suppress 8387 -sv -timescale=1ns/1ps +define+SIMULATION +define+XLEN_32 +define+EXT_TEX_DISABLE +define+EXT_RASTER_DISABLE +define+EXT_ROP_DISABLE +define+EXT_IOMMU_DISABLE +define+EXT_F_DISABLE +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/libs +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/interfaces +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/mem +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/cache +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/fpu +incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi +define+NUM_CORES=2 +define+NUM_WARPS=4 +define+NUM_THREADS=4 -work vortex_lib -L mtiAvm -L mtiRnm -L mtiOvm -L mtiUvm -L mtiUPF -L infact
+Z9 tCvgOpt 0
+Xutil_dpi_vh_unit
+R1
+R2
+VL9KYO^_A=EdTc61:8<zA>1
+r1
+!s85 0
+!i10b 1
+!s100 =lbl8K[^Lm`_8D4JfVP8a1
+IL9KYO^_A=EdTc61:8<zA>1
+!i103 1
+S1
+R0
+R3
+8/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/util_dpi.vh
+F/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/util_dpi.vh
+!i122 6
+L0 23 0
+R4
+31
+R5
+Z10 !s107 /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/float_dpi.vh|/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/util_dpi.vh|
+R6
+!i113 0
+R7
+R8
+R9

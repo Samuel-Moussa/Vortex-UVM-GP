@@ -1,0 +1,39 @@
+
+# =============================================================
+# Git LFS Tracking Configuration for Vortex-UVM-GP
+# =============================================================
+
+# --- Large Binary Data ---
+*.mtx        filter=lfs diff=lfs merge=lfs -text
+*.dump       filter=lfs diff=lfs merge=lfs -text
+*.bin        filter=lfs diff=lfs merge=lfs -text
+*.vcd        filter=lfs diff=lfs merge=lfs -text
+*.elf        filter=lfs diff=lfs merge=lfs -text
+*.vxbin      filter=lfs diff=lfs merge=lfs -text
+*.log        filter=lfs diff=lfs merge=lfs -text
+*.data       filter=lfs diff=lfs merge=lfs -text
+
+# --- Compiled Objects & Libraries ---
+*.a          filter=lfs diff=lfs merge=lfs -text
+*.so         filter=lfs diff=lfs merge=lfs -text
+*.o          filter=lfs diff=lfs merge=lfs -text
+
+# --- FPGA / Hardware Artifacts ---
+*.bit        filter=lfs diff=lfs merge=lfs -text
+*.tcl        filter=lfs diff=lfs merge=lfs -text
+*.xdc        filter=lfs diff=lfs merge=lfs -text
+
+# --- Simulation Traces ---
+*.vlt        filter=lfs diff=lfs merge=lfs -text
+*.dmp        filter=lfs diff=lfs merge=lfs -text
+*.trace      filter=lfs diff=lfs merge=lfs -text
+
+# --- Optional Logs & Dumps for UVM/CI ---
+logs/**      filter=lfs diff=lfs merge=lfs -text
+
+# =============================================================
+# Notes:
+# - This ensures that all heavy simulation data and binary blobs
+#   are handled through Git LFS, keeping the repo lightweight.
+# - You can add more patterns as needed for future extensions.
+# =============================================================
