@@ -250,7 +250,7 @@ rand int unsigned       axi_ready_delay_max;
 
 // Clock frequency (for performance calculations)
 rand int unsigned       CLK_FREQ_MHZ;          // Clock frequency in MHz
-rand int            CLK_PERIOD_NS;         // Clock period in nanoseconds
+rand real            CLK_PERIOD_NS;         // Clock period in nanoseconds
 
 // Timing parameters
 rand int unsigned       max_latency_cycles;    // Maximum expected latency
@@ -453,7 +453,7 @@ constraint clock_config_c {
         status_agent_enable == 1;
         
         // AXI agent optional (use custom memory by default)
-        soft axi_agent_enable == 0;
+        soft axi_agent_enable == 1;
         
         // Agent activity modes
         mem_agent_is_active == 1;
@@ -778,16 +778,16 @@ status_sample_interval = 100;
         
         // Agent configuration
         mem_agent_enable = 1;
-        axi_agent_enable = 0;
+        axi_agent_enable = 1;
         dcr_agent_enable = 1;
         host_agent_enable = 1;
         status_agent_enable = 1;
         
         mem_agent_is_active = 1;
-        axi_agent_is_active = 0;
+        axi_agent_is_active = 1;
         dcr_agent_is_active = 1;
         host_agent_is_active = 1;
-        status_agent_is_active = 0;
+        status_agent_is_active = 1;
         
         // // Golden model
         // simx_enable = 1;
