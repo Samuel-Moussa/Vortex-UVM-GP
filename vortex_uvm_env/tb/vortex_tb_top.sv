@@ -55,13 +55,14 @@
 module vortex_tb_top;
 
     import uvm_pkg::*;
+    import vortex_test_pkg::*;
 
     //==========================================================================
     // PARAMETERS
     //==========================================================================
     
     parameter CLK_PERIOD = 10;          // 100 MHz clock (10ns period)
-    parameter RESET_CYCLES = 20;        // Reset duration in clock cycles
+    parameter RESET_CYCLES = 50;        // Reset duration in clock cycles
     parameter TIMEOUT_CYCLES = 1000000; // Default simulation timeout
     
     // Memory configuration parameters
@@ -187,6 +188,90 @@ module vortex_tb_top;
         end
     end
 
+      //==========================================================================
+  // Memory Response Driver Process
+  // Uses clocking block for proper synchronization
+  // Responds to memory requests from DUT
+  //==========================================================================
+  initial begin
+    // Initialize response signals
+    vif.mem_if.mem_responder_cb.req_ready <= 1'b0;
+    vif.mem_if.mem_responder_cb.rsp_valid <= 1'b0;
+    vif.mem_if.mem_responder_cb.rsp_data  <= '0;
+    vif.mem_if.mem_responder_cb.rsp_tag   <= '0;
+    
+    // Wait for reset release
+    wait(reset_n == 1'b1);
+    @(posedge clk);
+    
+    $display("[TB_TOP @ %0t] Starting memory responder (using clocking block)", $time);
+    
+    forever begin
+      @(vif.mem_if.mem_responder_cb);
+      
+      // Check if DUT has a valid memory request
+      if (vif.mem_if.mem_responder_cb.req_valid) begin
+        
+        // // Process the request based on read/write
+        // if (vif.mem_if.mem_responder_cb.req_rw) begin
+        //   // Write request
+        //   memory.write_byte(
+        //     vif.mem_if.mem_responder_cb.req_addr,
+        //     vif.mem_if.mem_responder_cb.req_data,
+        //     vif.mem_if.mem_responder_cb.req_byteen
+        //   );
+        //   $display("[TB_TOP @ %0t] MEM WRITE: addr=0x%08h data=0x%08h byteen=0x%01h tag=0x%01h", 
+        //            $time,
+        //            vif.mem_if.mem_responder_cb.req_addr,
+        //            vif.mem_if.mem_responder_cb.req_data,
+        //            vif.mem_if.mem_responder_cb.req_byteen,
+        //            vif.mem_if.mem_responder_cb.req_tag);
+                // Process the request based on read/write
+        if (vif.mem_if.mem_responder_cb.req_rw) begin
+          // Write request - handle byte enables properly
+          automatic bit [31:0] addr   = vif.mem_if.mem_responder_cb.req_addr;
+          automatic bit [63:0] data   = vif.mem_if.mem_responder_cb.req_data;
+          automatic bit [7:0]  byteen = vif.mem_if.mem_responder_cb.req_byteen;
+          
+          // Write individual bytes based on byte enable
+          for (int i = 0; i < 8; i++) begin
+            if (byteen[i]) begin
+              memory.write_byte(addr + i, data[i*8 +: 8]);
+            end
+          end
+          
+          $display("[TB_TOP @ %0t] MEM WRITE: addr=0x%08h data=0x%016h byteen=0x%02h tag=0x%02h",
+                   $time, addr, data, byteen,
+                   vif.mem_if.mem_responder_cb.req_tag);
+
+        end else begin
+          // Read request
+          $display("[TB_TOP @ %0t] MEM READ:  addr=0x%08h tag=0x%01h", 
+                   $time,
+                   vif.mem_if.mem_responder_cb.req_addr,
+                   vif.mem_if.mem_responder_cb.req_tag);
+        end
+        
+        // Drive response signals via clocking block (1 cycle later due to NBA)
+        vif.mem_if.mem_responder_cb.req_ready <= 1'b1;
+        vif.mem_if.mem_responder_cb.rsp_valid <= 1'b1;
+        vif.mem_if.mem_responder_cb.rsp_data  <= memory.read_word(vif.mem_if.mem_responder_cb.req_addr);
+        vif.mem_if.mem_responder_cb.rsp_tag   <= vif.mem_if.mem_responder_cb.req_tag;
+        
+        $display("[TB_TOP @ %0t] MEM RESP:  data=0x%08h tag=0x%01h", 
+                 $time,
+                 memory.read_word(vif.mem_if.mem_responder_cb.req_addr),
+                 vif.mem_if.mem_responder_cb.req_tag);
+        
+      end else begin
+        // No request - keep ready asserted, deassert response valid
+        vif.mem_if.mem_responder_cb.req_ready <= 1'b1;  // Always ready
+        vif.mem_if.mem_responder_cb.rsp_valid <= 1'b0;
+      end
+    end
+  end
+
+
     //==========================================================================
     // WAVEFORM DUMPING (Cross-Simulator Support)
     //==========================================================================
@@ -218,86 +303,86 @@ module vortex_tb_top;
     // MEMORY RESPONDER - CUSTOM MEMORY INTERFACE
     //==========================================================================
     
-    `ifndef USE_AXI_WRAPPER
-        // Read response tracking
-        typedef struct {
-            bit [63:0] data;
-            bit [7:0]  tag;
-        } read_resp_t;
+    // `ifndef USE_AXI_WRAPPER
+    //     // Read response tracking
+    //     typedef struct {
+    //         bit [63:0] data;
+    //         bit [7:0]  tag;
+    //     } read_resp_t;
         
-        read_resp_t read_resp_queue[$];
+    //     read_resp_t read_resp_queue[$];
         
-        // Request handling
-        always_ff @(posedge clk) begin
-            if (!reset_n) begin
-                vif.mem_if.req_ready <= 1'b0;
-            end else begin
-                // Always ready to accept requests
-                vif.mem_if.req_ready <= 1'b1;
+    //     // Request handling
+    //     always_ff @(posedge clk) begin
+    //         if (!reset_n) begin
+    //             vif.mem_if.req_ready <= 1'b0;
+    //         end else begin
+    //             // Always ready to accept requests
+    //             vif.mem_if.req_ready <= 1'b1;
                 
-                // Handle memory requests
-                if (vif.mem_if.req_valid && vif.mem_if.req_ready) begin
-                    automatic bit [63:0] addr = vif.mem_if.req_addr;
-                    automatic bit [63:0] data;
-                    automatic bit [7:0] tag = vif.mem_if.req_tag;
-                    automatic bit rw = vif.mem_if.req_rw; // 1=write, 0=read
-                    automatic read_resp_t resp;
+    //             // Handle memory requests
+    //             if (vif.mem_if.req_valid && vif.mem_if.req_ready) begin
+    //                 automatic bit [63:0] addr = vif.mem_if.req_addr;
+    //                 automatic bit [63:0] data;
+    //                 automatic bit [7:0] tag = vif.mem_if.req_tag;
+    //                 automatic bit rw = vif.mem_if.req_rw; // 1=write, 0=read
+    //                 automatic read_resp_t resp;
                     
-                    if (rw) begin
-                        //------------------------------------------------------
-                        // WRITE operation
-                        //------------------------------------------------------
-                        data = vif.mem_if.req_data;
+    //                 if (rw) begin
+    //                     //------------------------------------------------------
+    //                     // WRITE operation
+    //                     //------------------------------------------------------
+    //                     data = vif.mem_if.req_data;
                         
-                        // Apply byte enable mask
-                        for (int i = 0; i < 8; i++) begin
-                            if (vif.mem_if.req_byteen[i]) begin
-                                memory.write_byte(addr + i, data[(i*8)+:8]);
-                            end
-                        end
+    //                     // Apply byte enable mask
+    //                     for (int i = 0; i < 8; i++) begin
+    //                         if (vif.mem_if.req_byteen[i]) begin
+    //                             memory.write_byte(addr + i, data[(i*8)+:8]);
+    //                         end
+    //                     end
                         
-                        $display("[MEM_RESP @ %0t] WR addr=0x%08h data=0x%016h mask=0x%02h", 
-                                 $time, addr, data, vif.mem_if.req_byteen);
+    //                     $display("[MEM_RESP @ %0t] WR addr=0x%08h data=0x%016h mask=0x%02h", 
+    //                              $time, addr, data, vif.mem_if.req_byteen);
                         
-                    end else begin
-                        //------------------------------------------------------
-                        // READ operation - queue response for next cycle
-                        //------------------------------------------------------
-                        automatic read_resp_t resp;
-                        data = memory.read_dword(addr);
-                        resp.data = data;
-                        resp.tag = tag;
-                        read_resp_queue.push_back(resp);
+    //                 end else begin
+    //                     //------------------------------------------------------
+    //                     // READ operation - queue response for next cycle
+    //                     //------------------------------------------------------
+    //                     automatic read_resp_t resp;
+    //                     data = memory.read_dword(addr);
+    //                     resp.data = data;
+    //                     resp.tag = tag;
+    //                     read_resp_queue.push_back(resp);
                         
-                        $display("[MEM_RESP @ %0t] RD addr=0x%08h data=0x%016h tag=0x%02h (queued)", 
-                                 $time, addr, data, tag);
-                    end
-                end
-            end
-        end
+    //                     $display("[MEM_RESP @ %0t] RD addr=0x%08h data=0x%016h tag=0x%02h (queued)", 
+    //                              $time, addr, data, tag);
+    //                 end
+    //             end
+    //         end
+    //     end
         
-        // Response generation
-        always_ff @(posedge clk) begin
-            if (!reset_n) begin
-                vif.mem_if.rsp_valid <= 1'b0;
-                vif.mem_if.rsp_data <= '0;
-                vif.mem_if.rsp_tag <= '0;
-            end else begin
-                // If we have a pending read response and it was accepted
-                if (vif.mem_if.rsp_valid && vif.mem_if.rsp_ready) begin
-                    vif.mem_if.rsp_valid <= 1'b0;
-                end
+    //     // Response generation
+    //     always_ff @(posedge clk) begin
+    //         if (!reset_n) begin
+    //             vif.mem_if.rsp_valid <= 1'b0;
+    //             vif.mem_if.rsp_data <= '0;
+    //             vif.mem_if.rsp_tag <= '0;
+    //         end else begin
+    //             // If we have a pending read response and it was accepted
+    //             if (vif.mem_if.rsp_valid && vif.mem_if.rsp_ready) begin
+    //                 vif.mem_if.rsp_valid <= 1'b0;
+    //             end
                 
-                // Generate new response if queue is not empty and previous was accepted
-                if (read_resp_queue.size() > 0 && (!vif.mem_if.rsp_valid || vif.mem_if.rsp_ready)) begin
-                    automatic read_resp_t resp = read_resp_queue.pop_front();
-                    vif.mem_if.rsp_valid <= 1'b1;
-                    vif.mem_if.rsp_data <= resp.data;
-                    vif.mem_if.rsp_tag <= resp.tag;
-                end
-            end
-        end
-    `endif
+    //             // Generate new response if queue is not empty and previous was accepted
+    //             if (read_resp_queue.size() > 0 && (!vif.mem_if.rsp_valid || vif.mem_if.rsp_ready)) begin
+    //                 automatic read_resp_t resp = read_resp_queue.pop_front();
+    //                 vif.mem_if.rsp_valid <= 1'b1;
+    //                 vif.mem_if.rsp_data <= resp.data;
+    //                 vif.mem_if.rsp_tag <= resp.tag;
+    //             end
+    //         end
+    //     end
+    // `endif
 
     //==========================================================================
     // MEMORY RESPONDER - AXI INTERFACE
@@ -533,17 +618,17 @@ module vortex_tb_top;
         
             // Custom Memory Interface - FIXED: Connect as arrays with [0:0]
             .mem_req_valid({vif.mem_if.req_valid}),
-            .mem_req_ready(vif.mem_if.req_ready),
+            .mem_req_ready({vif.mem_if.req_ready}),
             .mem_req_rw({vif.mem_if.req_rw}),
             .mem_req_addr({vif.mem_if.req_addr}),
             .mem_req_data({vif.mem_if.req_data}),
             .mem_req_byteen({vif.mem_if.req_byteen}),
             .mem_req_tag({vif.mem_if.req_tag}),
             
-            .mem_rsp_valid(vif.mem_if.rsp_valid),
+            .mem_rsp_valid({vif.mem_if.rsp_valid}),
             .mem_rsp_ready({vif.mem_if.rsp_ready}),
-            .mem_rsp_data(vif.mem_if.rsp_data),
-            .mem_rsp_tag(vif.mem_if.rsp_tag),        
+            .mem_rsp_data({vif.mem_if.rsp_data}),
+            .mem_rsp_tag({vif.mem_if.rsp_tag}),        
             
             // DCR Interface
             .dcr_wr_valid(vif.dcr_if.wr_valid),

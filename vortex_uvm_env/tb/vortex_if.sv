@@ -98,24 +98,24 @@ interface vortex_if (
     // CONVENIENCE TASKS (Global Operations)
     //==========================================================================
     
-    // Initialize all interfaces to safe defaults
-    task automatic init_all_interfaces();
-        // AXI defaults
-        axi_if.awvalid = 1'b0;
-        axi_if.wvalid  = 1'b0;
-        axi_if.bready  = 1'b1;
-        axi_if.arvalid = 1'b0;
-        axi_if.rready  = 1'b1;
+    // // Initialize all interfaces to safe defaults
+    // task automatic init_all_interfaces();
+    //     // AXI defaults
+    //     axi_if.awvalid = 1'b0;
+    //     axi_if.wvalid  = 1'b0;
+    //     axi_if.bready  = 1'b1;
+    //     axi_if.arvalid = 1'b0;
+    //     axi_if.rready  = 1'b1;
         
-        // Memory interface defaults
-        mem_if.req_valid = 1'b0;
-        mem_if.rsp_ready = 1'b1;
+    //     // Memory interface defaults
+    //     mem_if.req_valid = 1'b0;
+    //     mem_if.rsp_ready = 1'b1;
         
-        // DCR defaults
-        dcr_if.wr_valid = 1'b0;
+    //     // DCR defaults
+    //     dcr_if.wr_valid = 1'b0;
         
-        $display("[VORTEX_IF @ %0t] All interfaces initialized", $time);
-    endtask
+    //     $display("[VORTEX_IF @ %0t] All interfaces initialized", $time);
+    // endtask
     
     // Wait for reset completion
     task automatic wait_reset_done();
@@ -174,86 +174,86 @@ interface vortex_if (
      endtask
 
 
-    // //==========================================================================
-    // // SYSTEM-LEVEL ASSERTIONS
-    // //==========================================================================
+    //==========================================================================
+    // SYSTEM-LEVEL ASSERTIONS
+    //==========================================================================
     
-    // // When busy, at least one sub-interface should be active
-    // property system_activity_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     status_if.busy |-> (
-    //         mem_if.req_valid || mem_if.rsp_valid ||
-    //         axi_if.awvalid || axi_if.wvalid || axi_if.arvalid ||
-    //         axi_if.rvalid || axi_if.bvalid
-    //     );
-    // endproperty
+    // When busy, at least one sub-interface should be active
+    property system_activity_p;
+        @(posedge clk) disable iff (!reset_n)
+        status_if.busy |-> (
+            mem_if.req_valid || mem_if.rsp_valid ||
+            axi_if.awvalid || axi_if.wvalid || axi_if.arvalid ||
+            axi_if.rvalid || axi_if.bvalid
+        );
+    endproperty
     
-    // // DCR writes should only happen when system is idle or during config phase
-    // property dcr_write_timing_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     dcr_if.wr_valid |-> !status_if.busy;
-    // endproperty
+    // DCR writes should only happen when system is idle or during config phase
+    property dcr_write_timing_p;
+        @(posedge clk) disable iff (!reset_n)
+        dcr_if.wr_valid |-> !status_if.busy;
+    endproperty
     
-    // // Reset behavior: all valid signals should be low after reset
-    // property reset_clears_valids_p;
-    //     @(posedge clk)
-    //     $fell(reset_n) |=> ##[1:10] (
-    //         !axi_if.awvalid && !axi_if.wvalid && !axi_if.arvalid &&
-    //         !mem_if.req_valid && !dcr_if.wr_valid
-    //     );
-    // endproperty
+    // Reset behavior: all valid signals should be low after reset
+    property reset_clears_valids_p;
+        @(posedge clk)
+        $fell(reset_n) |=> ##[1:10] (
+            !axi_if.awvalid && !axi_if.wvalid && !axi_if.arvalid &&
+            !mem_if.req_valid && !dcr_if.wr_valid
+        );
+    endproperty
     
-    // assert_system_activity: assert property (system_activity_p)
-    //     else $warning("[VORTEX_IF] System busy but no interface activity!");
+    assert_system_activity: assert property (system_activity_p)
+        else $warning("[VORTEX_IF] System busy but no interface activity!");
     
-    // assert_dcr_write_timing: assert property (dcr_write_timing_p)
-    //     else $warning("[VORTEX_IF] DCR write during kernel execution!");
+    assert_dcr_write_timing: assert property (dcr_write_timing_p)
+        else $warning("[VORTEX_IF] DCR write during kernel execution!");
     
-    // assert_reset_clears_valids: assert property (reset_clears_valids_p)
-    //     else $error("[VORTEX_IF] Valid signals not cleared after reset!");
+    assert_reset_clears_valids: assert property (reset_clears_valids_p)
+        else $error("[VORTEX_IF] Valid signals not cleared after reset!");
 
-    // //==========================================================================
-    // // SYSTEM-LEVEL COVERAGE
-    // //==========================================================================
+    //==========================================================================
+    // SYSTEM-LEVEL COVERAGE
+    //==========================================================================
     
-    // covergroup system_cg @(posedge clk);
-    //     option.per_instance = 1;
-    //     option.name = "vortex_system_coverage";
+    covergroup system_cg @(posedge clk);
+        option.per_instance = 1;
+        option.name = "vortex_system_coverage";
         
-    //     // System states
-    //     system_state_cp: coverpoint {status_if.busy, status_if.idle} {
-    //         bins idle           = {2'b01};
-    //         bins busy           = {2'b10};
-    //         bins idle_to_busy   = (2'b01 => 2'b10);
-    //         bins busy_to_idle   = (2'b10 => 2'b01);
-    //     }
+        // System states
+        system_state_cp: coverpoint {status_if.busy, status_if.idle} {
+            bins idle           = {2'b01};
+            bins busy           = {2'b10};
+            bins idle_to_busy   = (2'b01 => 2'b10);
+            bins busy_to_idle   = (2'b10 => 2'b01);
+        }
         
-    //     // Interface usage patterns
-    //     axi_usage_cp: coverpoint {axi_if.awvalid, axi_if.arvalid} {
-    //         bins no_access      = {2'b00};
-    //         bins write_only     = {2'b10};
-    //         bins read_only      = {2'b01};
-    //         bins simultaneous   = {2'b11};
-    //     }
+        // Interface usage patterns
+        axi_usage_cp: coverpoint {axi_if.awvalid, axi_if.arvalid} {
+            bins no_access      = {2'b00};
+            bins write_only     = {2'b10};
+            bins read_only      = {2'b01};
+            bins simultaneous   = {2'b11};
+        }
         
-    //     mem_usage_cp: coverpoint {mem_if.req_valid, mem_if.req_rw} {
-    //         bins idle           = {2'b00};
-    //         bins read           = {2'b10};
-    //         bins write          = {2'b11};
-    //     }
+        mem_usage_cp: coverpoint {mem_if.req_valid, mem_if.req_rw} {
+            bins idle           = {2'b00};
+            bins read           = {2'b10};
+            bins write          = {2'b11};
+        }
         
-    //     dcr_activity_cp: coverpoint dcr_if.wr_valid {
-    //         bins inactive       = {0};
-    //         bins active         = {1};
-    //     }
+        dcr_activity_cp: coverpoint dcr_if.wr_valid {
+            bins inactive       = {0};
+            bins active         = {1};
+        }
         
-    //     // Cross coverage: system state with interface usage
-    //     system_axi_cross: cross system_state_cp, axi_usage_cp;
-    //     system_mem_cross: cross system_state_cp, mem_usage_cp;
+        // Cross coverage: system state with interface usage
+        system_axi_cross: cross system_state_cp, axi_usage_cp;
+        system_mem_cross: cross system_state_cp, mem_usage_cp;
         
-    // endgroup
+    endgroup
     
-    // system_cg sys_cov = new();
+    system_cg sys_cov = new();
 
     //==========================================================================
     // DEBUG: Interface Status Display
