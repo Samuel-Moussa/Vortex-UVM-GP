@@ -208,90 +208,109 @@ interface vortex_status_if (
         end
     end
 
-    // //==========================================================================
-    // // COVERAGE
-    // //==========================================================================
-    
-    // covergroup status_cg @(posedge clk);
-    //     option.per_instance = 1;
-        
-    //     // Busy state coverage
-    //     busy_cp: coverpoint busy {
-    //         bins idle = {0};
-    //         bins busy = {1};
-    //         bins idle_to_busy = (0 => 1);
-    //         bins busy_to_idle = (1 => 0);
-    //     }
-        
-    //     // Completion coverage
-    //     ebreak_cp: coverpoint ebreak_detected {
-    //         bins no_ebreak = {0};
-    //         bins ebreak    = {1};
-    //     }
-        
-    //     // Stall types coverage
-    //     stall_type_cp: coverpoint {fetch_stall, decode_stall, issue_stall, 
-    //                                 execute_stall, commit_stall, memory_stall} {
-    //         bins no_stall       = {6'b000000};
-    //         bins fetch_only     = {6'b100000};
-    //         bins decode_only    = {6'b010000};
-    //         bins issue_only     = {6'b001000};
-    //         bins execute_only   = {6'b000100};
-    //         bins commit_only    = {6'b000010};
-    //         bins memory_only    = {6'b000001};
-    //         bins multiple_stalls = {[6'b000011:6'b111111]};
-    //     }
-        
-    //     // Active warp count
-    //     active_warp_count_cp: coverpoint count_active_warps() {
-    //         bins none   = {0};
-    //         bins one    = {1};
-    //         bins few    = {[2:4]};
-    //         bins many   = {[5:16]};
-    //         bins all    = {[17:32]};
-    //     }
-        
-    //     // IPC ranges
-    //     ipc_cp: coverpoint ipc {
-    //         bins very_low  = {[0.0:0.25]};
-    //         bins low       = {[0.25:0.5]};
-    //         bins medium    = {[0.5:0.75]};
-    //         bins high      = {[0.75:1.0]};
-    //         bins very_high = {[1.0:$]};
-    //     }
-        
-    //     // Cross coverage
-    //     busy_stall_cross: cross busy_cp, stall_type_cp;
-    // endgroup
-    
-    // status_cg status_cov = new();
+//==========================================================================
+// COVERAGE
+//==========================================================================
 
-    // //==========================================================================
-    // // PERFORMANCE ASSERTIONS
-    // //==========================================================================
+// Integer versions of real metrics for coverage (scaled by 100)
+int ipc_scaled;
+int cache_miss_rate_pct;
+
+always_comb begin
+    ipc_scaled = int'(ipc * 100.0);  // IPC 0.75 becomes 75
+    cache_miss_rate_pct = int'(cache_miss_rate * 100.0);  // 0.25 becomes 25
+end
+
+covergroup status_cg @(posedge clk);
+    option.per_instance = 1;
     
-    // // Performance counter monotonicity
-    // property cycle_count_monotonic_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     busy |-> ##1 (cycle_count > $past(cycle_count));
-    // endproperty
+    // Busy state coverage
+    busy_cp: coverpoint busy {
+        bins idle = {0};
+        bins busy = {1};
+        bins idle_to_busy = (0 => 1);
+        bins busy_to_idle = (1 => 0);
+    }
     
-    // property instr_count_monotonic_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (busy && !is_stalled()) |-> ##[1:10] (instr_count >= $past(instr_count));
-    // endproperty
+    // Completion coverage
+    ebreak_cp: coverpoint ebreak_detected {
+        bins no_ebreak = {0};
+        bins ebreak    = {1};
+    }
     
-    // assert_cycle_count_monotonic: assert property (cycle_count_monotonic_p)
-    //     else $warning("[STATUS_IF] Cycle count did not increase!");
+    // Stall types coverage
+    stall_type_cp: coverpoint {fetch_stall, decode_stall, issue_stall, 
+                                execute_stall, commit_stall, memory_stall} {
+        bins no_stall       = {6'b000000};
+        bins fetch_only     = {6'b100000};
+        bins decode_only    = {6'b010000};
+        bins issue_only     = {6'b001000};
+        bins execute_only   = {6'b000100};
+        bins commit_only    = {6'b000010};
+        bins memory_only    = {6'b000001};
+        bins multiple_stalls = {[6'b000011:6'b111111]};
+    }
     
-    // // Busy must be high when there are active warps
-    // property busy_when_active_warps_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (active_warps != 0) |-> busy;
-    // endproperty
+    // Active warp count
+    active_warp_count_cp: coverpoint count_active_warps() {
+        bins none   = {0};
+        bins one    = {1};
+        bins few    = {[2:4]};
+        bins many   = {[5:16]};
+        bins all    = {[17:32]};
+    }
     
-    // assert_busy_when_active: assert property (busy_when_active_warps_p)
-    //     else $error("[STATUS_IF] Core idle but warps are active!");
+    // IPC coverage using scaled integer (0-200 = IPC 0.00-2.00)
+    ipc_cp: coverpoint ipc_scaled {
+        bins very_low  = {[0:25]};      // IPC 0.00-0.25
+        bins low       = {[26:50]};     // IPC 0.26-0.50
+        bins mid       = {[51:75]};     // IPC 0.51-0.75
+        bins high      = {[76:100]};    // IPC 0.76-1.00
+        bins very_high = {[101:200]};   // IPC 1.01-2.00
+    }
+    
+    // Cache miss rate coverage (0-100%)
+    cache_miss_rate_cp: coverpoint cache_miss_rate_pct {
+        bins excellent = {[0:5]};       // 0-5%
+        bins good      = {[6:10]};      // 6-10%
+        bins moderate  = {[11:25]};     // 11-25%
+        bins poor      = {[26:50]};     // 26-50%
+        bins critical  = {[51:100]};    // 51-100%
+    }
+    
+    // Cross coverage
+    busy_stall_cross: cross busy_cp, stall_type_cp;
+endgroup
+
+status_cg status_cov = new();
+
+
+    //==========================================================================
+    // PERFORMANCE ASSERTIONS
+    //==========================================================================
+    
+    // Performance counter monotonicity
+    property cycle_count_monotonic_p;
+        @(posedge clk) disable iff (!reset_n)
+        busy |-> ##1 (cycle_count > $past(cycle_count));
+    endproperty
+    
+    property instr_count_monotonic_p;
+        @(posedge clk) disable iff (!reset_n)
+        (busy && !is_stalled()) |-> ##[1:10] (instr_count >= $past(instr_count));
+    endproperty
+    
+    assert_cycle_count_monotonic: assert property (cycle_count_monotonic_p)
+        else $warning("[STATUS_IF] Cycle count did not increase!");
+    
+    // Busy must be high when there are active warps
+    property busy_when_active_warps_p;
+        @(posedge clk) disable iff (!reset_n)
+        (active_warps != 0) |-> busy;
+    endproperty
+    
+    assert_busy_when_active: assert property (busy_when_active_warps_p)
+        else $error("[STATUS_IF] Core idle but warps are active!");
 
     //==========================================================================
     // INITIAL VALUES

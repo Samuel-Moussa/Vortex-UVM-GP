@@ -34,7 +34,7 @@ import uvm_pkg::*;
 
 // Memory interface parameters (matching VX_define.vh)
 parameter VX_MEM_ADDR_WIDTH   = 32;
-parameter VX_MEM_DATA_WIDTH   = 64;
+parameter VX_MEM_DATA_WIDTH   = 512; //it was 64 
 parameter VX_MEM_TAG_WIDTH    = 8;
 parameter VX_MEM_BYTEEN_WIDTH = VX_MEM_DATA_WIDTH/8;
 
@@ -456,7 +456,7 @@ constraint clock_config_c {
         soft axi_agent_enable == 1;
         
         // Agent activity modes
-        mem_agent_is_active == 1;
+        mem_agent_is_active == 0;
         dcr_agent_is_active == 1;
         host_agent_is_active == 1;
         status_agent_is_active == 0; // Always passive
@@ -783,7 +783,7 @@ status_sample_interval = 100;
         host_agent_enable = 1;
         status_agent_enable = 1;
         
-        mem_agent_is_active = 1;
+        mem_agent_is_active = 0;
         axi_agent_is_active = 1;
         dcr_agent_is_active = 1;
         host_agent_is_active = 1;

@@ -98,29 +98,50 @@ interface vortex_mem_if (
         input   rsp_ready;
     endclocking
 
-    //==========================================================================
-    // CLOCKING BLOCK: MONITOR (For Passive Observation)
-    //==========================================================================
-    clocking monitor_cb @(posedge clk);
-        default input #1step;
-        
-        // Monitor all signals (input only)
-        input req_valid;
-        input req_ready;
-        input req_rw;
-        input req_addr;
-        input req_data;
-        input req_byteen;
-        input req_tag;
-        input rsp_valid;
-        input rsp_ready;
-        input rsp_data;
-        input rsp_tag;
-    endclocking
+    
+    
+//==========================================================================
+// CLOCKING BLOCK: MONITOR (for UVM Monitor - observe all signals)
+//==========================================================================
+clocking monitor_cb @(posedge clk);
+    input req_valid;
+    input req_ready;
+    input req_rw;
+    input req_addr;
+    input req_data;
+    input req_byteen;
+    input req_tag;
+    
+    input rsp_valid;
+    input rsp_ready;
+    input rsp_data;
+    input rsp_tag;
+endclocking
 
-    //==========================================================================
-    // MODPORTS
-    //==========================================================================
+//==========================================================================
+// CLOCKING BLOCK: MEM_RESPONDER (for Memory Model - ONLY response signals)
+//==========================================================================
+clocking mem_responder_cb @(posedge clk);
+    // Input: Observe requests from DUT (read-only, no driving)
+    input  req_valid;
+    input  req_rw;
+    input  req_addr;
+    input  req_data;
+    input  req_byteen;
+    input  req_tag;
+    input  rsp_ready;
+    
+    // Output: Drive ONLY response signals (DUT doesn't drive these)
+    output req_ready;
+    output rsp_valid;
+    output rsp_data;
+    output rsp_tag;
+endclocking
+
+
+    // //==========================================================================
+    // // MODPORTS
+    // //==========================================================================
     
     // For UVM driver (uses master_cb)
     modport master_driver (
@@ -143,20 +164,51 @@ interface vortex_mem_if (
         input reset_n
     );
     
-    // For DUT connection (direct signal access)
-    modport dut_master (
-        output req_valid, req_rw, req_addr, req_data, req_byteen, req_tag,
-        input  req_ready,
-        input  rsp_valid, rsp_data, rsp_tag,
-        output rsp_ready
-    );
+    // For testbench memory responder (uses mem_responder_cb)
+
+    modport mem_responder (
+    input clk,
+    input reset_n,
+    clocking mem_responder_cb
+);
+
     
-    modport dut_slave (
-        input  req_valid, req_rw, req_addr, req_data, req_byteen, req_tag,
-        output req_ready,
-        output rsp_valid, rsp_data, rsp_tag,
-        input  rsp_ready
-    );
+    // // For DUT connection (direct signal access)
+    // modport dut_master (
+    //     output req_valid, req_rw, req_addr, req_data, req_byteen, req_tag,
+    //     input  req_ready,
+    //     input  rsp_valid, rsp_data, rsp_tag,
+    //     output rsp_ready
+    // );
+    
+    // modport dut_slave (
+    //     input  req_valid, req_rw, req_addr, req_data, req_byteen, req_tag,
+    //     output req_ready,
+    //     output rsp_valid, rsp_data, rsp_tag,
+    //     input  rsp_ready
+    // );
+
+
+
+// //==========================================================================
+// // MODPORTS
+// //==========================================================================
+// modport monitor (
+//     input clk,
+//     input reset_n,
+//     input req_valid, req_ready, req_rw, req_addr, req_data, req_byteen, req_tag,
+//     input rsp_valid, rsp_ready, rsp_data, rsp_tag,
+//     clocking monitor_cb
+// );
+
+
+// // Deprecated - for backward compatibility
+// modport master_cb (
+//     input clk,
+//     input reset_n,
+//     clocking monitor_cb  // Driver sees everything as input when passive
+// );
+
 
     //==========================================================================
     // HELPER FUNCTIONS
@@ -203,113 +255,113 @@ interface vortex_mem_if (
         while (!rsp_fire());
     endtask
 
-    // //==========================================================================
-    // // PROTOCOL ASSERTIONS
-    // //==========================================================================
+    //==========================================================================
+    // PROTOCOL ASSERTIONS
+    //==========================================================================
     
-    // // Request valid must remain stable until ready
-    // property req_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (req_valid && !req_ready) |=> req_valid;
-    // endproperty
+    // Request valid must remain stable until ready
+    property req_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (req_valid && !req_ready) |=> req_valid;
+    endproperty
     
-    // // Request address must remain stable until handshake
-    // property req_addr_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (req_valid && !req_ready) |=> $stable(req_addr);
-    // endproperty
+    // Request address must remain stable until handshake
+    property req_addr_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (req_valid && !req_ready) |=> $stable(req_addr);
+    endproperty
     
-    // // Request data must remain stable until handshake
-    // property req_data_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (req_valid && req_rw && !req_ready) |=> $stable(req_data);
-    // endproperty
+    // Request data must remain stable until handshake
+    property req_data_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (req_valid && req_rw && !req_ready) |=> $stable(req_data);
+    endproperty
     
-    // // Response valid must remain stable until ready
-    // property rsp_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (rsp_valid && !rsp_ready) |=> rsp_valid;
-    // endproperty
+    // Response valid must remain stable until ready
+    property rsp_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (rsp_valid && !rsp_ready) |=> rsp_valid;
+    endproperty
     
-    // // Response data must remain stable until handshake
-    // property rsp_data_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (rsp_valid && !rsp_ready) |=> $stable(rsp_data);
-    // endproperty
+    // Response data must remain stable until handshake
+    property rsp_data_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (rsp_valid && !rsp_ready) |=> $stable(rsp_data);
+    endproperty
     
-    // // Assertions
-    // assert_req_valid_stable: assert property (req_valid_stable_p)
-    //     else $error("[VORTEX_MEM_IF] req_valid dropped before req_ready!");
+    // Assertions
+    assert_req_valid_stable: assert property (req_valid_stable_p)
+        else $error("[VORTEX_MEM_IF] req_valid dropped before req_ready!");
     
-    // assert_req_addr_stable: assert property (req_addr_stable_p)
-    //     else $error("[VORTEX_MEM_IF] req_addr changed before handshake!");
+    assert_req_addr_stable: assert property (req_addr_stable_p)
+        else $error("[VORTEX_MEM_IF] req_addr changed before handshake!");
     
-    // assert_req_data_stable: assert property (req_data_stable_p)
-    //     else $error("[VORTEX_MEM_IF] req_data changed before handshake!");
+    assert_req_data_stable: assert property (req_data_stable_p)
+        else $error("[VORTEX_MEM_IF] req_data changed before handshake!");
     
-    // assert_rsp_valid_stable: assert property (rsp_valid_stable_p)
-    //     else $error("[VORTEX_MEM_IF] rsp_valid dropped before rsp_ready!");
+    assert_rsp_valid_stable: assert property (rsp_valid_stable_p)
+        else $error("[VORTEX_MEM_IF] rsp_valid dropped before rsp_ready!");
     
-    // assert_rsp_data_stable: assert property (rsp_data_stable_p)
-    //     else $error("[VORTEX_MEM_IF] rsp_data changed before handshake!");
+    assert_rsp_data_stable: assert property (rsp_data_stable_p)
+        else $error("[VORTEX_MEM_IF] rsp_data changed before handshake!");
 
-    // //==========================================================================
-    // // COVERAGE
-    // //==========================================================================
+    //==========================================================================
+    // COVERAGE
+    //==========================================================================
     
-    // covergroup mem_protocol_cg @(posedge clk);
-    //     option.per_instance = 1;
+    covergroup mem_protocol_cg @(posedge clk);
+        option.per_instance = 1;
         
-    //     // Request types
-    //     req_type_cp: coverpoint {req_valid, req_rw} {
-    //         bins read  = {2'b10};
-    //         bins write = {2'b11};
-    //         bins idle  = {2'b00};
-    //     }
+        // Request types
+        req_type_cp: coverpoint {req_valid, req_rw} {
+            bins read  = {2'b10};
+            bins write = {2'b11};
+            bins idle  = {2'b00};
+        }
         
-    //     // Handshake scenarios
-    //     req_handshake_cp: coverpoint {req_valid, req_ready} {
-    //         bins accepted       = {2'b11};
-    //         bins waiting        = {2'b10};
-    //         bins idle           = {2'b00};
-    //         bins ready_no_valid = {2'b01};
-    //     }
+        // Handshake scenarios
+        req_handshake_cp: coverpoint {req_valid, req_ready} {
+            bins accepted       = {2'b11};
+            bins waiting        = {2'b10};
+            bins idle           = {2'b00};
+            bins ready_no_valid = {2'b01};
+        }
         
-    //     rsp_handshake_cp: coverpoint {rsp_valid, rsp_ready} {
-    //         bins accepted       = {2'b11};
-    //         bins waiting        = {2'b10};
-    //         bins idle           = {2'b00};
-    //         bins ready_no_valid = {2'b01};
-    //     }
+        rsp_handshake_cp: coverpoint {rsp_valid, rsp_ready} {
+            bins accepted       = {2'b11};
+            bins waiting        = {2'b10};
+            bins idle           = {2'b00};
+            bins ready_no_valid = {2'b01};
+        }
         
-    //     // Byte enable patterns
-    //     byteen_cp: coverpoint req_byteen {
-    //         bins all_bytes   = {4'b1111};
-    //         bins lower_half  = {4'b0011};
-    //         bins upper_half  = {4'b1100};
-    //         bins single_byte[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
-    //         bins other[] = default;
-    //     }
+        // Byte enable patterns
+        byteen_cp: coverpoint req_byteen {
+            bins all_bytes   = {4'b1111};
+            bins lower_half  = {4'b0011};
+            bins upper_half  = {4'b1100};
+            bins single_byte[] = {4'b0001, 4'b0010, 4'b0100, 4'b1000};
+            bins other[] = default;
+        }
         
-    //     // Cross coverage: Request type with handshake
-    //     req_cross: cross req_type_cp, req_handshake_cp;
-    // endgroup
+        // Cross coverage: Request type with handshake
+        req_cross: cross req_type_cp, req_handshake_cp;
+    endgroup
     
-    // mem_protocol_cg mem_cov = new();
+    mem_protocol_cg mem_cov = new();
 
     //==========================================================================
     // INITIAL SIGNAL VALUES
     //==========================================================================
     
-    initial begin
-        req_valid  = 1'b0;
-        req_rw     = 1'b0;
-        req_addr   = '0;
-        req_data   = '0;
-        req_byteen = '0;
-        req_tag    = '0;
-        rsp_ready  = 1'b1; // Default: always ready to accept responses
-    end
+    // initial begin
+    //     req_valid  = 1'b0;
+    //     req_rw     = 1'b0;
+    //     req_addr   = '0;
+    //     req_data   = '0;
+    //     req_byteen = '0;
+    //     req_tag    = '0;
+    //     rsp_ready  = 1'b1; // Default: always ready to accept responses
+    // end
 
 endinterface : vortex_mem_if
 

@@ -33,11 +33,17 @@ $VORTEX_HOME/hw/rtl/VX_scope.vh
 $VORTEX_HOME/hw/rtl/VX_gpu_pkg.sv
 
 # #CREATED AND ADDED TO SOLVE QUESTASIM 21 DPI ISSUE
-# $VORTEX_HOME/hw/rtl/fpu/VX_fpu_dpi_wrapper_pkg.sv
+#$VORTEX_HOME/hw/rtl/fpu/VX_fpu_dpi_wrapper_pkg.sv
 
 # ============================================================================
 # 3. PACKAGES
 # ============================================================================
+
+# Subsystem packages
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
+
+
 $VORTEX_HOME/hw/rtl/VX_trace_pkg.sv
 $VORTEX_HOME/hw/rtl/cache/VX_cache_define.vh
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_define.vh
@@ -51,9 +57,9 @@ $VORTEX_HOME/hw/dpi/util_dpi.vh
 
 
 
-# Subsystem packages
-$VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
-$VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
+# # Subsystem packages
+# $VORTEX_HOME/hw/rtl/tcu/VX_tcu_pkg.sv
+# $VORTEX_HOME/hw/rtl/fpu/VX_fpu_pkg.sv
 
 
 
@@ -182,7 +188,9 @@ $VORTEX_HOME/hw/rtl/fpu/VX_fp_classifier.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fp_rounding.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_cvt.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_div.sv
-$VORTEX_HOME/hw/rtl/fpu/VX_fpu_dsp.sv
+
+#$VORTEX_HOME/hw/rtl/fpu/VX_fpu_dsp.sv
+
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_fma.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_ncp.sv
 $VORTEX_HOME/hw/rtl/fpu/VX_fpu_sqrt.sv
@@ -192,6 +200,7 @@ $VORTEX_HOME/hw/rtl/fpu/VX_fpu_unit.sv
 
 # TCU modules
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_bhf.sv
+$VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_dsp.sv
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_fedp_int.sv
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_fp.sv
 $VORTEX_HOME/hw/rtl/tcu/VX_tcu_int.sv
@@ -273,3 +282,6 @@ $VORTEX_HOME/hw/rtl/VX_socket.sv
 $VORTEX_HOME/hw/rtl/VX_cluster.sv
 $VORTEX_HOME/hw/rtl/Vortex.sv
 $VORTEX_HOME/hw/rtl/Vortex_axi.sv
+
+# CVA6 FPnew FPU
+-f cvfpu.flist
