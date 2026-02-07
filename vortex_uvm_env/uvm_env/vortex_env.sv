@@ -366,8 +366,19 @@ class vortex_env extends uvm_env;
     // Create agents based on configuration
     if (cfg.mem_agent_enable) begin
       m_mem_agent = mem_agent::type_id::create("m_mem_agent", this);
-      `uvm_info("VORTEX_ENV", "Memory agent created", UVM_MEDIUM)
+      
+      // Configure agent as PASSIVE (monitor only - no driver/sequencer)
+      m_mem_agent.is_active = UVM_PASSIVE;
+      
+      `uvm_info("VORTEX_ENV", "Memory agent created (PASSIVE mode - monitor only)", UVM_MEDIUM)
     end
+    
+    //// Create agents based on configuration
+    // if (cfg.mem_agent_enable) begin
+    //   m_mem_agent = mem_agent::type_id::create("m_mem_agent", this);
+    //   `uvm_info("VORTEX_ENV", "Memory agent created", UVM_MEDIUM)
+    // end
+
 
     if (cfg.axi_agent_enable) begin
       m_axi_agent = axi_agent::type_id::create("m_axi_agent", this);
@@ -418,10 +429,16 @@ class vortex_env extends uvm_env;
     super.connect_phase(phase);
 
 
-    // Connect agent sequencers to virtual sequencer
-    if (m_mem_agent != null && m_mem_agent.m_sequencer != null) begin
+    // // Connect agent sequencers to virtual sequencer
+    // if (m_mem_agent != null && m_mem_agent.m_sequencer != null) begin
+    //   m_virtual_sequencer.m_mem_sequencer = m_mem_agent.m_sequencer;
+    // end
+    
+    // Connect agent sequencers to virtual sequencer (only if ACTIVE)
+    if (m_mem_agent != null && m_mem_agent.get_is_active() == UVM_ACTIVE && m_mem_agent.m_sequencer != null) begin
       m_virtual_sequencer.m_mem_sequencer = m_mem_agent.m_sequencer;
     end
+
 
     if (m_axi_agent != null && m_axi_agent.m_sequencer != null) begin
       m_virtual_sequencer.m_axi_sequencer = m_axi_agent.m_sequencer;

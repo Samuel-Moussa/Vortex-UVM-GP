@@ -258,171 +258,171 @@ interface vortex_axi_if #(
         endcase
     endfunction
 
-    // //==========================================================================
-    // // PROTOCOL ASSERTIONS
-    // //==========================================================================
+    //==========================================================================
+    // PROTOCOL ASSERTIONS
+    //==========================================================================
     
-    // // AW Channel: AWVALID must remain stable until AWREADY
-    // property aw_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (awvalid && !awready) |=> awvalid;
-    // endproperty
+    // AW Channel: AWVALID must remain stable until AWREADY
+    property aw_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (awvalid && !awready) |=> awvalid;
+    endproperty
     
-    // property aw_addr_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (awvalid && !awready) |=> $stable(awaddr);
-    // endproperty
+    property aw_addr_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (awvalid && !awready) |=> $stable(awaddr);
+    endproperty
     
-    // // W Channel: WVALID must remain stable until WREADY
-    // property w_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (wvalid && !wready) |=> wvalid;
-    // endproperty
+    // W Channel: WVALID must remain stable until WREADY
+    property w_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (wvalid && !wready) |=> wvalid;
+    endproperty
     
-    // property w_data_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (wvalid && !wready) |=> $stable(wdata);
-    // endproperty
+    property w_data_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (wvalid && !wready) |=> $stable(wdata);
+    endproperty
     
-    // // B Channel: BVALID must remain stable until BREADY
-    // property b_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (bvalid && !bready) |=> bvalid;
-    // endproperty
+    // B Channel: BVALID must remain stable until BREADY
+    property b_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (bvalid && !bready) |=> bvalid;
+    endproperty
     
-    // // AR Channel: ARVALID must remain stable until ARREADY
-    // property ar_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (arvalid && !arready) |=> arvalid;
-    // endproperty
+    // AR Channel: ARVALID must remain stable until ARREADY
+    property ar_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (arvalid && !arready) |=> arvalid;
+    endproperty
     
-    // property ar_addr_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (arvalid && !arready) |=> $stable(araddr);
-    // endproperty
+    property ar_addr_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (arvalid && !arready) |=> $stable(araddr);
+    endproperty
     
-    // // R Channel: RVALID must remain stable until RREADY
-    // property r_valid_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (rvalid && !rready) |=> rvalid;
-    // endproperty
+    // R Channel: RVALID must remain stable until RREADY
+    property r_valid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (rvalid && !rready) |=> rvalid;
+    endproperty
     
-    // property r_data_stable_p;
-    //     @(posedge clk) disable iff (!reset_n)
-    //     (rvalid && !rready) |=> $stable(rdata);
-    // endproperty
+    property r_data_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (rvalid && !rready) |=> $stable(rdata);
+    endproperty
     
-    // // Assertions
-    // assert_aw_valid_stable: assert property (aw_valid_stable_p)
-    //     else $error("[VORTEX_AXI_IF] AWVALID dropped before AWREADY!");
+    // Assertions
+    assert_aw_valid_stable: assert property (aw_valid_stable_p)
+        else $error("[VORTEX_AXI_IF] AWVALID dropped before AWREADY!");
     
-    // assert_aw_addr_stable: assert property (aw_addr_stable_p)
-    //     else $error("[VORTEX_AXI_IF] AWADDR changed before handshake!");
+    assert_aw_addr_stable: assert property (aw_addr_stable_p)
+        else $error("[VORTEX_AXI_IF] AWADDR changed before handshake!");
     
-    // assert_w_valid_stable: assert property (w_valid_stable_p)
-    //     else $error("[VORTEX_AXI_IF] WVALID dropped before WREADY!");
+    assert_w_valid_stable: assert property (w_valid_stable_p)
+        else $error("[VORTEX_AXI_IF] WVALID dropped before WREADY!");
     
-    // assert_w_data_stable: assert property (w_data_stable_p)
-    //     else $error("[VORTEX_AXI_IF] WDATA changed before handshake!");
+    assert_w_data_stable: assert property (w_data_stable_p)
+        else $error("[VORTEX_AXI_IF] WDATA changed before handshake!");
     
-    // assert_b_valid_stable: assert property (b_valid_stable_p)
-    //     else $error("[VORTEX_AXI_IF] BVALID dropped before BREADY!");
+    assert_b_valid_stable: assert property (b_valid_stable_p)
+        else $error("[VORTEX_AXI_IF] BVALID dropped before BREADY!");
     
-    // assert_ar_valid_stable: assert property (ar_valid_stable_p)
-    //     else $error("[VORTEX_AXI_IF] ARVALID dropped before ARREADY!");
+    assert_ar_valid_stable: assert property (ar_valid_stable_p)
+        else $error("[VORTEX_AXI_IF] ARVALID dropped before ARREADY!");
     
-    // assert_ar_addr_stable: assert property (ar_addr_stable_p)
-    //     else $error("[VORTEX_AXI_IF] ARADDR changed before handshake!");
+    assert_ar_addr_stable: assert property (ar_addr_stable_p)
+        else $error("[VORTEX_AXI_IF] ARADDR changed before handshake!");
     
-    // assert_r_valid_stable: assert property (r_valid_stable_p)
-    //     else $error("[VORTEX_AXI_IF] RVALID dropped before RREADY!");
+    assert_r_valid_stable: assert property (r_valid_stable_p)
+        else $error("[VORTEX_AXI_IF] RVALID dropped before RREADY!");
     
-    // assert_r_data_stable: assert property (r_data_stable_p)
-    //     else $error("[VORTEX_AXI_IF] RDATA changed before handshake!");
+    assert_r_data_stable: assert property (r_data_stable_p)
+        else $error("[VORTEX_AXI_IF] RDATA changed before handshake!");
 
-    // //==========================================================================
-    // // COVERAGE
-    // //==========================================================================
+    //==========================================================================
+    // COVERAGE
+    //==========================================================================
     
-    // covergroup axi_protocol_cg @(posedge clk);
-    //     option.per_instance = 1;
+    covergroup axi_protocol_cg @(posedge clk);
+        option.per_instance = 1;
         
-    //     // Burst types
-    //     awburst_cp: coverpoint awburst {
-    //         bins fixed = {2'b00};
-    //         bins incr  = {2'b01};
-    //         bins wrap  = {2'b10};
-    //     }
+        // Burst types
+        awburst_cp: coverpoint awburst {
+            bins fixed = {2'b00};
+            bins incr  = {2'b01};
+            bins wrap  = {2'b10};
+        }
         
-    //     arburst_cp: coverpoint arburst {
-    //         bins fixed = {2'b00};
-    //         bins incr  = {2'b01};
-    //         bins wrap  = {2'b10};
-    //     }
+        arburst_cp: coverpoint arburst {
+            bins fixed = {2'b00};
+            bins incr  = {2'b01};
+            bins wrap  = {2'b10};
+        }
         
-    //     // Burst lengths
-    //     awlen_cp: coverpoint awlen {
-    //         bins single = {0};
-    //         bins short_burst = {[1:7]};
-    //         bins long_burst  = {[8:255]};
-    //     }
+        // Burst lengths
+        awlen_cp: coverpoint awlen {
+            bins single = {0};
+            bins short_burst = {[1:7]};
+            bins long_burst  = {[8:255]};
+        }
         
-    //     // Transfer sizes
-    //     awsize_cp: coverpoint awsize {
-    //         bins byte  = {3'b000};
-    //         bins hword = {3'b001};
-    //         bins word  = {3'b010};
-    //         bins dword = {3'b011};
-    //     }
+        // Transfer sizes
+        awsize_cp: coverpoint awsize {
+            bins bytee  = {3'b000};
+            bins hword = {3'b001};
+            bins word  = {3'b010};
+            bins dword = {3'b011};
+        }
         
-    //     // Response types
-    //     bresp_cp: coverpoint bresp {
-    //         bins okay   = {2'b00};
-    //         bins exokay = {2'b01};
-    //         bins slverr = {2'b10};
-    //         bins decerr = {2'b11};
-    //     }
+        // Response types
+        bresp_cp: coverpoint bresp {
+            bins okay   = {2'b00};
+            bins exokay = {2'b01};
+            bins slverr = {2'b10};
+            bins decerr = {2'b11};
+        }
         
-    //     rresp_cp: coverpoint rresp {
-    //         bins okay   = {2'b00};
-    //         bins exokay = {2'b01};
-    //         bins slverr = {2'b10};
-    //         bins decerr = {2'b11};
-    //     }
+        rresp_cp: coverpoint rresp {
+            bins okay   = {2'b00};
+            bins exokay = {2'b01};
+            bins slverr = {2'b10};
+            bins decerr = {2'b11};
+        }
         
-    //     // Cross coverage
-    //     write_burst_cross: cross awburst_cp, awlen_cp, awsize_cp;
-    //     read_burst_cross:  cross arburst_cp, awlen_cp, awsize_cp;
-    // endgroup
+        // Cross coverage
+        write_burst_cross: cross awburst_cp, awlen_cp, awsize_cp;
+        read_burst_cross:  cross arburst_cp, awlen_cp, awsize_cp;
+    endgroup
     
-    // axi_protocol_cg axi_cov = new();
+    axi_protocol_cg axi_cov = new();
 
     //==========================================================================
     // INITIAL SIGNAL VALUES
     //==========================================================================
     
-    initial begin
-        // Master outputs
-        awvalid = 1'b0;
-        wvalid  = 1'b0;
-        bready  = 1'b1;
-        arvalid = 1'b0;
-        rready  = 1'b1;
+    // initial begin
+    //     // Master outputs
+    //     awvalid = 1'b0;
+    //     wvalid  = 1'b0;
+    //     bready  = 1'b1;
+    //     arvalid = 1'b0;
+    //     rready  = 1'b1;
         
-        // Initialize address/data to zero
-        awid = '0;
-        awaddr = '0;
-        awlen = '0;
-        awsize = '0;
-        awburst = 2'b01; // INCR
-        wdata = '0;
-        wstrb = '0;
-        arid = '0;
-        araddr = '0;
-        arlen = '0;
-        arsize = '0;
-        arburst = 2'b01; // INCR
-    end
+    //     // Initialize address/data to zero
+    //     awid = '0;
+    //     awaddr = '0;
+    //     awlen = '0;
+    //     awsize = '0;
+    //     awburst = 2'b01; // INCR
+    //     wdata = '0;
+    //     wstrb = '0;
+    //     arid = '0;
+    //     araddr = '0;
+    //     arlen = '0;
+    //     arsize = '0;
+    //     arburst = 2'b01; // INCR
+    // end
 
 endinterface : vortex_axi_if
 
