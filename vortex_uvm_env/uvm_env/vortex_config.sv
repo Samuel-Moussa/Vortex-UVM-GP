@@ -822,18 +822,29 @@ status_sample_interval = 100;
         int tmp;
         string str_tmp;
         
+        // // Architecture configuration
+        // if ($value$plusargs("CLUSTERS=%d", tmp) || $value$plusargs("clusters=%d", tmp))
+        //     num_clusters = tmp;
+        
+        // if ($value$plusargs("CORES=%d", tmp) || $value$plusargs("cores=%d", tmp))
+        //     num_cores = tmp;
+        
+        // if ($value$plusargs("WARPS=%d", tmp) || $value$plusargs("warps=%d", tmp))
+        //     num_warps = tmp;
+        
+        // if ($value$plusargs("THREADS=%d", tmp) || $value$plusargs("threads=%d", tmp))
+        //     num_threads = tmp;
+
         // Architecture configuration
-        if ($value$plusargs("CLUSTERS=%d", tmp) || $value$plusargs("clusters=%d", tmp))
-            num_clusters = tmp;
-        
-        if ($value$plusargs("CORES=%d", tmp) || $value$plusargs("cores=%d", tmp))
-            num_cores = tmp;
-        
-        if ($value$plusargs("WARPS=%d", tmp) || $value$plusargs("warps=%d", tmp))
-            num_warps = tmp;
-        
-        if ($value$plusargs("THREADS=%d", tmp) || $value$plusargs("threads=%d", tmp))
-            num_threads = tmp;
+if ($value$plusargs("NUM_CLUSTERS=%d", tmp) || $value$plusargs("CLUSTERS=%d", tmp) || $value$plusargs("clusters=%d", tmp))
+    num_clusters = tmp;
+if ($value$plusargs("NUM_CORES=%d", tmp) || $value$plusargs("CORES=%d", tmp) || $value$plusargs("cores=%d", tmp))
+    num_cores = tmp;
+if ($value$plusargs("NUM_WARPS=%d", tmp) || $value$plusargs("WARPS=%d", tmp) || $value$plusargs("warps=%d", tmp))
+    num_warps = tmp;
+if ($value$plusargs("NUM_THREADS=%d", tmp) || $value$plusargs("THREADS=%d", tmp) || $value$plusargs("threads=%d", tmp))
+    num_threads = tmp;
+
         
         // Cache enables
         if ($test$plusargs("L2CACHE") || $test$plusargs("l2cache"))

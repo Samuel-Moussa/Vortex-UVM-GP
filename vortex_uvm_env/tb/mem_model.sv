@@ -8,12 +8,21 @@
 `ifndef MEM_MODEL_SV
 `define MEM_MODEL_SV
 
-class mem_model;
+// ✅ ADD: Import UVM
+import uvm_pkg::*;
+`include "uvm_macros.svh"
+
+// ✅ CHANGE: Extend from uvm_object instead of plain class
+class mem_model extends uvm_object;
+  
+  // ✅ ADD: UVM registration macro
+  `uvm_object_utils(mem_model)
 
   // --------------------------------------------------------------------------
   // Storage: byte-addressable sparse memory (associative array)
   // --------------------------------------------------------------------------
-  bit [7:0] memory [bit [63:0]];  // maps address -> byte
+  bit [7:0] memory [bit [63:0]];
+
 
   // --------------------------------------------------------------------------
   // Statistics
@@ -22,12 +31,17 @@ class mem_model;
   int unsigned num_writes;
   longint unsigned total_bytes_written;
 
+
   // --------------------------------------------------------------------------
   // Constructor / Reset
   // --------------------------------------------------------------------------
-  function new();
+  
+  // ✅ CHANGE: UVM constructor signature
+  function new(string name = "mem_model");
+    super.new(name);
     reset();
   endfunction
+
 
   function void reset();
     memory.delete();
