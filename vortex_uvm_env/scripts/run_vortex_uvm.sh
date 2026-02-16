@@ -373,6 +373,12 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     
     # Compile options
     COMPILE_OPTS="+define+$FPU_TYPE +define+$TCU_TYPE"
+
+# Add config as compile-time defines too
+COMPILE_OPTS="$COMPILE_OPTS +define+NUM_CORES=$NUM_CORES"
+COMPILE_OPTS="$COMPILE_OPTS +define+NUM_WARPS=$NUM_WARPS"
+COMPILE_OPTS="$COMPILE_OPTS +define+NUM_THREADS=$NUM_THREADS"
+
     
     # Add memory interface define
     if [[ "$MEMORY_INTERFACE" == "axi" ]]; then
