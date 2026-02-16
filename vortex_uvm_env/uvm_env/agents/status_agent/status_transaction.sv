@@ -126,22 +126,37 @@ class status_transaction extends uvm_sequence_item;
         calculate_metrics();
     endfunction
     
-    //==========================================================================
-    // Calculate Derived Performance Metrics
-    //==========================================================================
-    function void calculate_metrics();
-        // Calculate Instructions Per Cycle (IPC)
-        if (cycle_count > 0)
-            ipc = real'(instr_count) / real'(cycle_count);
-        else
-            ipc = 0.0;
+    // //==========================================================================
+    // // Calculate Derived Performance Metrics
+    // //==========================================================================
+    // function void calculate_metrics();
+    //     // Calculate Instructions Per Cycle (IPC)
+    //     if (cycle_count > 0)
+    //         ipc = real'(instr_count) / real'(cycle_count);
+    //     else
+    //         ipc = 0.0;
         
-        // Calculate Cache Miss Rate (as percentage)
-        if ((load_count + store_count) > 0)
-            cache_miss_rate = (real'(cache_miss_count) / real'(load_count + store_count)) * 100.0;
-        else
-            cache_miss_rate = 0.0;
-    endfunction
+    //     // Calculate Cache Miss Rate (as percentage)
+    //     if ((load_count + store_count) > 0)
+    //         cache_miss_rate = (real'(cache_miss_count) / real'(load_count + store_count)) * 100.0;
+    //     else
+    //         cache_miss_rate = 0.0;
+    // endfunction
+
+    //==========================================================================
+// Calculate Derived Performance Metrics
+//==========================================================================
+function void calculate_metrics();
+    // Calculate Instructions Per Cycle (IPC)
+    if (cycle_count > 0)
+        ipc = real'(instr_count) / real'(cycle_count);
+    else
+        ipc = 0.0;
+    
+    // Cache miss rate - DISABLED (load_count, store_count, cache_miss_count not available)
+    cache_miss_rate = 0.0;
+endfunction
+
     
     //==========================================================================
     // Helper Methods - Status Queries
@@ -234,10 +249,10 @@ class status_transaction extends uvm_sequence_item;
             s = {s, $sformatf("\n│ Active Threads: %0d", count_active_threads())};
         end
         
-        if (cache_miss_count > 0) begin
-            s = {s, $sformatf("\n│ Cache Misses: %0d (%.2f%%)", 
-                cache_miss_count, cache_miss_rate)};
-        end
+        // if (cache_miss_count > 0) begin
+        //     s = {s, $sformatf("\n│ Cache Misses: %0d (%.2f%%)", 
+        //         cache_miss_count, cache_miss_rate)};
+        // end
         
         s = {s, "\n└──────────────────────────────────"};
         

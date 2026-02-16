@@ -62,6 +62,12 @@ class vortex_base_test extends uvm_test;
         cfg.set_defaults_from_vx_config();
         cfg.apply_plusargs();
         
+        `uvm_info(get_type_name(),
+  $sformatf("DEBUG cfg after plusargs: cores=%0d warps=%0d threads=%0d str=%s",
+            cfg.num_cores, cfg.num_warps, cfg.num_threads, cfg.get_config_string()),
+  UVM_LOW)
+
+        
         // Allow test customization
         customize_config();
         
