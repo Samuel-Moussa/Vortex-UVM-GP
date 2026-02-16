@@ -156,57 +156,92 @@ class status_monitor extends uvm_monitor;
     // Monitor Status
     // Periodically sample status interface and broadcast transactions
     //==========================================================================
-    virtual task monitor_status();
-        status_transaction trans;
+    // virtual task monitor_status();
+    //     status_transaction trans;
         
-        forever begin
-            @(vif.monitor_cb);
+    //     forever begin
+    //         @(vif.monitor_cb);
             
-            // Sample at configured interval
-            sample_counter++;
-            if (sample_counter >= sample_interval) begin
-                sample_counter = 0;
+    //         // Sample at configured interval
+    //         sample_counter++;
+    //         if (sample_counter >= sample_interval) begin
+    //             sample_counter = 0;
                 
-                // Create new status snapshot
-                trans = status_transaction::type_id::create("trans");
+    //             // Create new status snapshot
+    //             trans = status_transaction::type_id::create("trans");
                 
-                // Capture all status fields from clocking block
-                trans.busy             = vif.monitor_cb.busy;
-                trans.ebreak_detected  = vif.monitor_cb.ebreak_detected;
-                trans.idle             = !vif.monitor_cb.busy;
-                trans.pc               = vif.monitor_cb.pc;
-                trans.next_pc          = vif.monitor_cb.next_pc;
-                trans.pc_valid         = vif.monitor_cb.pc_valid;
-                trans.fetch_stall      = vif.monitor_cb.fetch_stall;
-                trans.decode_stall     = vif.monitor_cb.decode_stall;
-                trans.issue_stall      = vif.monitor_cb.issue_stall;
-                trans.execute_stall    = vif.monitor_cb.execute_stall;
-                trans.commit_stall     = vif.monitor_cb.commit_stall;
-                trans.memory_stall     = vif.monitor_cb.memory_stall;
-                trans.active_warps     = vif.monitor_cb.active_warps;
-                trans.active_threads   = vif.monitor_cb.active_threads;
-                trans.warp_id          = vif.monitor_cb.warp_id;
-                trans.thread_id        = vif.monitor_cb.thread_id;
-                trans.cycle_count      = vif.monitor_cb.cycle_count;
-                trans.instr_count      = vif.monitor_cb.instr_count;
-                trans.load_count       = vif.monitor_cb.load_count;
-                trans.store_count      = vif.monitor_cb.store_count;
-                trans.branch_count     = vif.monitor_cb.branch_count;
-                trans.cache_miss_count = vif.monitor_cb.cache_miss_count;
-                trans.sample_time      = $time;
+    //             // Capture all status fields from clocking block
+    //             trans.busy             = vif.monitor_cb.busy;
+    //             trans.ebreak_detected  = vif.monitor_cb.ebreak_detected;
+    //             trans.idle             = !vif.monitor_cb.busy;
+    //             trans.pc               = vif.monitor_cb.pc;
+    //             trans.next_pc          = vif.monitor_cb.next_pc;
+    //             trans.pc_valid         = vif.monitor_cb.pc_valid;
+    //             trans.fetch_stall      = vif.monitor_cb.fetch_stall;
+    //             trans.decode_stall     = vif.monitor_cb.decode_stall;
+    //             trans.issue_stall      = vif.monitor_cb.issue_stall;
+    //             trans.execute_stall    = vif.monitor_cb.execute_stall;
+    //             trans.commit_stall     = vif.monitor_cb.commit_stall;
+    //             trans.memory_stall     = vif.monitor_cb.memory_stall;
+    //             trans.active_warps     = vif.monitor_cb.active_warps;
+    //             trans.active_threads   = vif.monitor_cb.active_threads;
+    //             trans.warp_id          = vif.monitor_cb.warp_id;
+    //             trans.thread_id        = vif.monitor_cb.thread_id;
+    //             trans.cycle_count      = vif.monitor_cb.cycle_count;
+    //             trans.instr_count      = vif.monitor_cb.instr_count;
+    //             trans.load_count       = vif.monitor_cb.load_count;
+    //             trans.store_count      = vif.monitor_cb.store_count;
+    //             trans.branch_count     = vif.monitor_cb.branch_count;
+    //             trans.cache_miss_count = vif.monitor_cb.cache_miss_count;
+    //             trans.sample_time      = $time;
                 
-                // Calculate derived metrics
-                trans.calculate_metrics();
+    //             // Calculate derived metrics
+    //             trans.calculate_metrics();
                 
-                // Update stall counter
-                if (trans.is_stalled()) 
-                    num_stall_cycles++;
+    //             // Update stall counter
+    //             if (trans.is_stalled()) 
+    //                 num_stall_cycles++;
                 
-                // Broadcast to scoreboard
-                ap.write(trans);
-            end
+    //             // Broadcast to scoreboard
+    //             ap.write(trans);
+    //         end
+    //     end
+    // endtask
+
+
+    virtual task monitor_status();
+    status_transaction trans;
+    
+    forever begin
+        @(vif.monitor_cb);
+        
+        // Sample at configured interval
+        sample_counter++;
+        if (sample_counter >= sample_interval) begin
+            sample_counter = 0;
+            
+            // Create new status snapshot
+            trans = status_transaction::type_id::create("trans");
+            
+            // Sample ONLY available signals from interface
+            trans.busy = vif.monitor_cb.busy;
+            trans.ebreak_detected = vif.monitor_cb.ebreak_detected;
+            trans.idle = !vif.monitor_cb.busy;
+            trans.cycle_count = vif.monitor_cb.cycle_count;
+            trans.instr_count = vif.monitor_cb.instr_count;
+            trans.pc = vif.monitor_cb.pc;  // TB-tracked
+            
+            trans.sample_time = $time;
+            
+            // Calculate derived metrics
+            trans.calculate_metrics();
+            
+            // Broadcast to scoreboard
+            ap.write(trans);
         end
-    endtask
+    end
+endtask
+
     
     //==========================================================================
     // Detect State Transitions
@@ -266,17 +301,24 @@ class status_monitor extends uvm_monitor;
                     $sformatf("  Total Cycles:   %0d\n", total_execution_cycles),
                     $sformatf("  Total Instrs:   %0d\n", total_instructions),
                     $sformatf("  Final IPC:      %.3f\n", final_ipc),
-                    $sformatf("  Cache Misses:   %0d\n", vif.monitor_cb.cache_miss_count),
+                    //$sformatf("  Cache Misses:   %0d\n", vif.monitor_cb.cache_miss_count),
                     "========================================"
                 }, UVM_LOW)
             end
             
-            // PC change detection (for debugging)
-            if (vif.monitor_cb.pc_valid && vif.monitor_cb.pc != prev_pc) begin
-                `uvm_info("STATUS_MON", $sformatf(
-                    "PC: 0x%08h → 0x%08h",
-                    prev_pc, vif.monitor_cb.pc), UVM_DEBUG)
-            end
+            // // PC change detection (for debugging)
+            // if (vif.monitor_cb.pc_valid && vif.monitor_cb.pc != prev_pc) begin
+            //     `uvm_info("STATUS_MON", $sformatf(
+            //         "PC: 0x%08h → 0x%08h",
+            //         prev_pc, vif.monitor_cb.pc), UVM_DEBUG)
+            // end
+            // PC change detection (for debugging) - pc_valid not available
+if (vif.monitor_cb.pc != prev_pc && vif.monitor_cb.pc != 0) begin
+    `uvm_info("STATUS_MON", $sformatf(
+        "PC: 0x%08h → 0x%08h",
+        prev_pc, vif.monitor_cb.pc), UVM_DEBUG)
+end
+
             
             // Update previous values
             prev_busy   = vif.monitor_cb.busy;
@@ -285,47 +327,93 @@ class status_monitor extends uvm_monitor;
         end
     endtask
     
-    //==========================================================================
-    // Track Performance
-    // Monitor IPC and detect stalls in real-time
-    //==========================================================================
-    virtual task track_performance();
-        real current_ipc;
+    // //==========================================================================
+    // // Track Performance
+    // // Monitor IPC and detect stalls in real-time
+    // //==========================================================================
+    // virtual task track_performance();
+    //     real current_ipc;
         
-        forever begin
-            @(vif.monitor_cb);
+    //     forever begin
+    //         @(vif.monitor_cb);
             
-            // Calculate current IPC (CORRECTED: calculate instead of reading from interface)
-            if (vif.monitor_cb.cycle_count > 0) begin
-                current_ipc = real'(vif.monitor_cb.instr_count) / real'(vif.monitor_cb.cycle_count);
-            end else begin
-                current_ipc = 0.0;
-            end
+    //         // Calculate current IPC (CORRECTED: calculate instead of reading from interface)
+    //         if (vif.monitor_cb.cycle_count > 0) begin
+    //             current_ipc = real'(vif.monitor_cb.instr_count) / real'(vif.monitor_cb.cycle_count);
+    //         end else begin
+    //             current_ipc = 0.0;
+    //         end
             
-            // Update peak IPC
-            if (current_ipc > peak_ipc) 
-                peak_ipc = current_ipc;
+    //         // Update peak IPC
+    //         if (current_ipc > peak_ipc) 
+    //             peak_ipc = current_ipc;
             
-            // Detect any stall condition
-            if (vif.monitor_cb.busy &&
-                (vif.monitor_cb.fetch_stall   || vif.monitor_cb.decode_stall  ||
-                 vif.monitor_cb.issue_stall   || vif.monitor_cb.execute_stall ||
-                 vif.monitor_cb.commit_stall  || vif.monitor_cb.memory_stall)) begin
-                -> stall_detected;
-            end
+    //         // Detect any stall condition
+    //         if (vif.monitor_cb.busy &&
+    //             (vif.monitor_cb.fetch_stall   || vif.monitor_cb.decode_stall  ||
+    //              vif.monitor_cb.issue_stall   || vif.monitor_cb.execute_stall ||
+    //              vif.monitor_cb.commit_stall  || vif.monitor_cb.memory_stall)) begin
+    //             -> stall_detected;
+    //         end
             
-            // Periodic performance reporting (every 10000 cycles)
-            if (vif.monitor_cb.busy && (vif.monitor_cb.cycle_count % 10000 == 0)) begin
-                `uvm_info("STATUS_MON", $sformatf(
-                    "Performance @ cycle %0d: instrs=%0d, IPC=%.3f, stalls=%0d, cache_misses=%0d",
-                    vif.monitor_cb.cycle_count, 
-                    vif.monitor_cb.instr_count,
-                    current_ipc, 
-                    num_stall_cycles, 
-                    vif.monitor_cb.cache_miss_count), UVM_DEBUG)
-            end
+    //         // // Periodic performance reporting (every 10000 cycles)
+    //         // if (vif.monitor_cb.busy && (vif.monitor_cb.cycle_count % 10000 == 0)) begin
+    //         //     `uvm_info("STATUS_MON", $sformatf(
+    //         //         "Performance @ cycle %0d: instrs=%0d, IPC=%.3f, stalls=%0d, cache_misses=%0d",
+    //         //         vif.monitor_cb.cycle_count, 
+    //         //         vif.monitor_cb.instr_count,
+    //         //         current_ipc, 
+    //         //         num_stall_cycles, 
+    //         //         vif.monitor_cb.cache_miss_count), UVM_DEBUG)
+    //         // end
+    //                     // Periodic performance reporting (every 10000 cycles)
+    //         if (vif.monitor_cb.busy && (vif.monitor_cb.cycle_count % 10000 == 0)) begin
+    //             `uvm_info("STATUS_MON", $sformatf(
+    //                 "Performance @ cycle %0d: instrs=%0d, IPC=%.3f, stalls=%0d",
+    //                 vif.monitor_cb.cycle_count, 
+    //                 vif.monitor_cb.instr_count,
+    //                 current_ipc, 
+    //                 num_stall_cycles), UVM_DEBUG)
+    //         end
+    //     end
+    // endtask
+
+
+    //==========================================================================
+// Track Performance
+// Monitor IPC in real-time
+// Note: Stall signals not available from Vortex DUT
+//==========================================================================
+virtual task track_performance();
+    real current_ipc;
+    
+    forever begin
+        @(vif.monitor_cb);
+        
+        // Calculate current IPC
+        if (vif.monitor_cb.cycle_count > 0) begin
+            current_ipc = real'(vif.monitor_cb.instr_count) / real'(vif.monitor_cb.cycle_count);
+        end else begin
+            current_ipc = 0.0;
         end
-    endtask
+        
+        // Update peak IPC
+        if (current_ipc > peak_ipc) 
+            peak_ipc = current_ipc;
+        
+        // Note: Stall detection not available - Vortex RTL doesn't expose stall signals
+        
+        // Periodic performance reporting (every 10000 cycles)
+        if (vif.monitor_cb.busy && (vif.monitor_cb.cycle_count % 10000 == 0)) begin
+            `uvm_info("STATUS_MON", $sformatf(
+                "Performance @ cycle %0d: instrs=%0d, IPC=%.3f",
+                vif.monitor_cb.cycle_count, 
+                vif.monitor_cb.instr_count,
+                current_ipc), UVM_DEBUG)
+        end
+    end
+endtask
+
     
     //==========================================================================
     // Wait for Execution Start

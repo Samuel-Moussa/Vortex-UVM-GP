@@ -16,6 +16,8 @@ package vortex_test_pkg;
     
     import vortex_config_pkg::*;
     import vortex_env_pkg::*;
+    `include "mem_model.sv"
+
     
     //==========================================================================
     // Include Test Files
@@ -23,7 +25,7 @@ package vortex_test_pkg;
     
     `include "vortex_base_test.sv"
     `include "vortex_sanity_test.sv"
-    //`include "vortex_smoke_test.sv"
+    `include "vortex_smoke_test.sv"
     // `include "vecadd_test.sv"      // To be added later
     // `include "sgemm_test.sv"       // To be added later
     // `include "riscv_dv_test.sv"    // To be added later

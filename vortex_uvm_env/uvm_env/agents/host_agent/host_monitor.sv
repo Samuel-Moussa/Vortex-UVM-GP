@@ -242,15 +242,21 @@ class host_monitor extends uvm_monitor;
                     current_ipc = 0.0;
                 end
                 
+                // `uvm_info("HOST_MON", $sformatf(
+                //     "Performance Update @ cycle %0d:\n" +
+                //     "  Instructions: %0d\n" +
+                //     "  IPC:          %.3f\n" +
+                //     "  Cache Misses: %0d",
+                //     status_vif.monitor_cb.cycle_count,
+                //     status_vif.monitor_cb.instr_count,
+                //     current_ipc,
+                //     status_vif.monitor_cb.cache_miss_count), UVM_DEBUG)
                 `uvm_info("HOST_MON", $sformatf(
-                    "Performance Update @ cycle %0d:\n" +
-                    "  Instructions: %0d\n" +
-                    "  IPC:          %.3f\n" +
-                    "  Cache Misses: %0d",
-                    status_vif.monitor_cb.cycle_count,
-                    status_vif.monitor_cb.instr_count,
-                    current_ipc,
-                    status_vif.monitor_cb.cache_miss_count), UVM_DEBUG)
+    "Performance: cycles=%0d, instrs=%0d, IPC=%.3f",
+    status_vif.monitor_cb.cycle_count,
+    status_vif.monitor_cb.instr_count,
+    current_ipc), UVM_DEBUG)
+
             end
         end
     endtask
