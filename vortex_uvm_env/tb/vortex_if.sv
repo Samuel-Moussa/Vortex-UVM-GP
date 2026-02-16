@@ -255,11 +255,55 @@ interface vortex_if (
     
     system_cg sys_cov = new();
 
+    // //==========================================================================
+    // // DEBUG: Interface Status Display
+    // //==========================================================================
+    
+    // task automatic print_status();
+    //     $display("================================================================================");
+    //     $display("VORTEX INTERFACE STATUS @ %0t", $time);
+    //     $display("================================================================================");
+    //     $display("Clock: %b | Reset: %b", clk, reset_n);
+    //     $display("");
+    //     $display("STATUS INTERFACE:");
+    //     $display("  Busy:   %b", status_if.busy);
+    //     $display("  Idle:   %b", status_if.idle);
+    //     $display("  ebreak: %b", status_if.ebreak_detected);
+    //     $display("  Cycles: %0d", status_if.cycle_count);
+    //     $display("  Instrs: %0d", status_if.instr_count);
+    //     // $display("  IPC:    %0.2f", status_if.ipc);
+    //     $display("");
+    //     $display("AXI INTERFACE:");
+    //     $display("  AW: valid=%b ready=%b addr=0x%h", 
+    //         axi_if.awvalid, axi_if.awready, axi_if.awaddr);
+    //     $display("  W:  valid=%b ready=%b last=%b", 
+    //         axi_if.wvalid, axi_if.wready, axi_if.wlast);
+    //     $display("  B:  valid=%b ready=%b", 
+    //         axi_if.bvalid, axi_if.bready);
+    //     $display("  AR: valid=%b ready=%b addr=0x%h", 
+    //         axi_if.arvalid, axi_if.arready, axi_if.araddr);
+    //     $display("  R:  valid=%b ready=%b last=%b", 
+    //         axi_if.rvalid, axi_if.rready, axi_if.rlast);
+    //     $display("");
+    //     $display("MEMORY INTERFACE:");
+    //     $display("  Req: valid=%b ready=%b rw=%b addr=0x%h", 
+    //         mem_if.req_valid, mem_if.req_ready, mem_if.req_rw, mem_if.req_addr);
+    //     $display("  Rsp: valid=%b ready=%b", 
+    //         mem_if.rsp_valid, mem_if.rsp_ready);
+    //     $display("");
+    //     $display("DCR INTERFACE:");
+    //     $display("  Write: valid=%b addr=0x%h data=0x%h", 
+    //         dcr_if.wr_valid, dcr_if.wr_addr, dcr_if.wr_data);
+    //     $display("================================================================================");
+    // endtask
+
     //==========================================================================
     // DEBUG: Interface Status Display
     //==========================================================================
     
     task automatic print_status();
+        real ipc_calculated;
+        
         $display("================================================================================");
         $display("VORTEX INTERFACE STATUS @ %0t", $time);
         $display("================================================================================");
@@ -271,7 +315,15 @@ interface vortex_if (
         $display("  ebreak: %b", status_if.ebreak_detected);
         $display("  Cycles: %0d", status_if.cycle_count);
         $display("  Instrs: %0d", status_if.instr_count);
-        $display("  IPC:    %0.2f", status_if.ipc);
+        
+        // Calculate IPC (instead of reading non-existent status_if.ipc)
+        if (status_if.cycle_count > 0 && status_if.instr_count > 0) begin
+            ipc_calculated = real'(status_if.instr_count) / real'(status_if.cycle_count);
+            $display("  IPC:    %.4f (calculated)", ipc_calculated);
+        end else begin
+            $display("  IPC:    N/A");
+        end
+        
         $display("");
         $display("AXI INTERFACE:");
         $display("  AW: valid=%b ready=%b addr=0x%h", 
@@ -296,6 +348,9 @@ interface vortex_if (
             dcr_if.wr_valid, dcr_if.wr_addr, dcr_if.wr_data);
         $display("================================================================================");
     endtask
+
+
+
     
     // Automatic status printing on significant events
     always @(posedge clk) begin

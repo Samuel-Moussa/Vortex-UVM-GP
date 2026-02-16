@@ -63,6 +63,40 @@ class dcr_base_sequence extends uvm_sequence #(dcr_transaction);
     
 endclass : dcr_base_sequence
 
+
+
+// //==============================================================================
+// // Base DCR Sequence
+// //==============================================================================
+// class dcr_base_sequence extends uvm_sequence #(dcr_transaction);
+//     `uvm_object_utils(dcr_base_sequence)
+    
+//     function new(string name = "dcr_base_sequence");
+//         super.new(name);
+//     endfunction
+    
+//     // Helper task - writes specific DCR value (no randomization)
+//     task write_dcr(bit [31:0] write_addr, bit [31:0] write_data);
+//         dcr_transaction trans;
+        
+//         trans = dcr_transaction::type_id::create("trans");
+//         start_item(trans);
+        
+//         // Direct assignment
+//         trans.addr = write_addr;
+//         trans.data = write_data;
+        
+//         finish_item(trans);
+        
+//         `uvm_info("DCR_SEQ", 
+//                  $sformatf("DCR Write: addr=0x%03h data=0x%08h", 
+//                            write_addr, write_data), 
+//                  UVM_MEDIUM)
+//     endtask
+    
+// endclass : dcr_base_sequence
+
+
 //==============================================================================
 // Startup Configuration Sequence
 // Configures startup PC and optional argv pointer

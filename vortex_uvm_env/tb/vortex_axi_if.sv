@@ -16,6 +16,7 @@
 //
 // Author: Vortex UVM Team
 ////////////////////////////////////////////////////////////////////////////////
+// verilog_mode: verilog-2017
 
 `ifndef VORTEX_AXI_IF_SV
 `define VORTEX_AXI_IF_SV

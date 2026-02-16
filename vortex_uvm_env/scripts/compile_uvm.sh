@@ -106,6 +106,13 @@ VLOG_OPTS="$VLOG_OPTS +incdir+$VORTEX_UVM_HOME/tb"
 VLOG_OPTS="$VLOG_OPTS +incdir+$VORTEX_UVM_HOME/uvm_env"
 VLOG_OPTS="$VLOG_OPTS +incdir+$VORTEX_UVM_HOME/uvm_tests"
 
+# In scripts/compile_uvm.sh, after existing +incdir lines
+
+VLOG_OPTS="$VLOG_OPTS +incdir+$VORTEX_HOME/hw/rtl/cache"
+VLOG_OPTS="$VLOG_OPTS +incdir+$VORTEX_HOME/hw/rtl/fpu"
+VLOG_OPTS="$VLOG_OPTS +incdir+$VORTEX_HOME/hw/rtl/mem"
+
+
 # UVM Home (for includes)
 if [ -n "$UVM_HOME" ]; then
     print_info "UVM_HOME: $UVM_HOME"
