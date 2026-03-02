@@ -62,7 +62,7 @@ module vortex_tb_top;
     //==========================================================================
     
     parameter CLK_PERIOD = 10;          // 100 MHz clock (10ns period)
-    parameter RESET_CYCLES = 50;        // Reset duration in clock cycles
+    parameter RESET_CYCLES = 200;        // Reset duration in clock cycles
     parameter TIMEOUT_CYCLES = 1000000; // Default simulation timeout
     
     // Memory configuration parameters
@@ -106,6 +106,19 @@ module vortex_tb_top;
         $display("[TB_TOP @ %0t] Reset sequence complete - System ready", $time);
     end
 
+//==========================================================================
+// DCR INTERFACE INITIALIZATION
+// ✅ PERMANENT FIX: RTL now initializes startup_addr during reset
+// No force needed - VX_dcr_data.sv sets dcrs.startup_addr = 0x80000000 on reset
+//==========================================================================
+
+initial begin
+    vif.dcr_if.wr_valid = 1'b0;
+    vif.dcr_if.wr_addr  = 12'h000;
+    vif.dcr_if.wr_data  = 32'h00000000;
+    
+    $display("[TB_TOP @ %0t] DCR interface initialized", $time);
+end
     //==========================================================================
     // INTERFACE INSTANTIATION
     //==========================================================================
@@ -250,10 +263,10 @@ end
   //==========================================================================
   initial begin
     // Initialize response signals
-    vif.mem_if.mem_responder_cb.req_ready <= 1'b0;
-    vif.mem_if.mem_responder_cb.rsp_valid <= 1'b0;
-    vif.mem_if.mem_responder_cb.rsp_data  <= '0;
-    vif.mem_if.mem_responder_cb.rsp_tag   <= '0;
+    vif.mem_if.mem_responder_cb.req_ready[0] <= 1'b0;
+    vif.mem_if.mem_responder_cb.rsp_valid[0] <= 1'b0;
+    vif.mem_if.mem_responder_cb.rsp_data[0]  <= '0;
+    vif.mem_if.mem_responder_cb.rsp_tag[0]   <= '0;
     
     // Wait for reset release
     wait(reset_n == 1'b1);
@@ -261,56 +274,109 @@ end
     
     $display("[TB_TOP @ %0t] Starting memory responder (using clocking block)", $time);
     
-    forever begin
-      @(vif.mem_if.mem_responder_cb);
+//     forever begin
+//       @(vif.mem_if.mem_responder_cb);
       
-      // Check if DUT has a valid memory request
-      if (vif.mem_if.mem_responder_cb.req_valid) begin
+//       // Check if DUT has a valid memory request
+//       if (vif.mem_if.mem_responder_cb.req_valid) begin
         
 
-        // Process the request based on read/write
-        if (vif.mem_if.mem_responder_cb.req_rw) begin
-          // Write request - handle byte enables properly
-          automatic bit [31:0] addr   = vif.mem_if.mem_responder_cb.req_addr;
-          automatic bit [63:0] data   = vif.mem_if.mem_responder_cb.req_data;
-          automatic bit [7:0]  byteen = vif.mem_if.mem_responder_cb.req_byteen;
+//         // Process the request based on read/write
+//         if (vif.mem_if.mem_responder_cb.req_rw) begin
+//           // Write request - handle byte enables properly
+//           automatic bit [31:0] addr   = vif.mem_if.mem_responder_cb.req_addr;
+//           automatic bit [63:0] data   = vif.mem_if.mem_responder_cb.req_data;
+//           automatic bit [7:0]  byteen = vif.mem_if.mem_responder_cb.req_byteen;
           
-          // Write individual bytes based on byte enable
-          for (int i = 0; i < 8; i++) begin
-            if (byteen[i]) begin
-              memory.write_byte(addr + i, data[i*8 +: 8]);
-            end
-          end
+//           // Write individual bytes based on byte enable
+//           for (int i = 0; i < 8; i++) begin
+//             if (byteen[i]) begin
+//               memory.write_byte(addr + i, data[i*8 +: 8]);
+//             end
+//           end
           
-          $display("[TB_TOP @ %0t] MEM WRITE: addr=0x%08h data=0x%016h byteen=0x%02h tag=0x%02h",
-                   $time, addr, data, byteen,
-                   vif.mem_if.mem_responder_cb.req_tag);
+//           $display("[TB_TOP @ %0t] MEM WRITE: addr=0x%08h data=0x%016h byteen=0x%02h tag=0x%02h",
+//                    $time, addr, data, byteen,
+//                    vif.mem_if.mem_responder_cb.req_tag);
 
+//         end else begin
+//           // Read request
+//           $display("[TB_TOP @ %0t] MEM READ:  addr=0x%08h tag=0x%01h", 
+//                    $time,
+//                    vif.mem_if.mem_responder_cb.req_addr,
+//                    vif.mem_if.mem_responder_cb.req_tag);
+//         end
+        
+//         // Drive response signals via clocking block (1 cycle later due to NBA)
+//         vif.mem_if.mem_responder_cb.req_ready <= 1'b1;
+//         vif.mem_if.mem_responder_cb.rsp_valid <= 1'b1;
+//         vif.mem_if.mem_responder_cb.rsp_data  <= memory.read_word(vif.mem_if.mem_responder_cb.req_addr);
+//         vif.mem_if.mem_responder_cb.rsp_tag   <= vif.mem_if.mem_responder_cb.req_tag;
+        
+//         $display("[TB_TOP @ %0t] MEM RESP:  data=0x%016h tag=0x%01h", 
+//                  $time,
+//                  memory.read_word(vif.mem_if.mem_responder_cb.req_addr),
+//                  vif.mem_if.mem_responder_cb.req_tag);
+        
+//       end else begin
+//         // No request - keep ready asserted, deassert response valid
+//         vif.mem_if.mem_responder_cb.req_ready <= 1'b1;  // Always ready
+//         vif.mem_if.mem_responder_cb.rsp_valid <= 1'b0;
+//       end
+//     end
+//   end
+
+forever begin
+    @(vif.mem_if.mem_responder_cb);
+    
+    // Check if DUT has a valid memory request (port 0)
+    if (vif.mem_if.mem_responder_cb.req_valid[0]) begin
+        
+        // ✅ CRITICAL FIX: Convert word address to byte address
+        // Vortex memory interface uses WORD addresses (index of 64-byte blocks)
+        // Memory model uses BYTE addresses
+        // Conversion: byte_addr = word_addr << 6 (multiply by 64)
+        automatic bit [31:0] word_addr = vif.mem_if.mem_responder_cb.req_addr[0];
+        automatic bit [31:0] byte_addr = word_addr << 6;
+        
+        // Process the request based on read/write
+        if (vif.mem_if.mem_responder_cb.req_rw[0]) begin
+            // Write request
+            automatic bit [63:0] data   = vif.mem_if.mem_responder_cb.req_data[0];
+            automatic bit [7:0]  byteen = vif.mem_if.mem_responder_cb.req_byteen[0];
+            
+            for (int i = 0; i < 8; i++) begin
+                if (byteen[i]) begin
+                    memory.write_byte(byte_addr + i, data[i*8 +: 8]);
+                end
+            end
+            
+            $display("[TB_TOP @ %0t] MEM WRITE: word=0x%08h byte=0x%08h data=0x%016h byteen=0x%02h",
+                    $time, word_addr, byte_addr, data, byteen);
         end else begin
-          // Read request
-          $display("[TB_TOP @ %0t] MEM READ:  addr=0x%08h tag=0x%01h", 
-                   $time,
-                   vif.mem_if.mem_responder_cb.req_addr,
-                   vif.mem_if.mem_responder_cb.req_tag);
+            // Read request
+            $display("[TB_TOP @ %0t] MEM READ:  word=0x%08h byte=0x%08h tag=0x%01h", 
+                    $time, word_addr, byte_addr,
+                    vif.mem_if.mem_responder_cb.req_tag[0]);
         end
         
-        // Drive response signals via clocking block (1 cycle later due to NBA)
-        vif.mem_if.mem_responder_cb.req_ready <= 1'b1;
-        vif.mem_if.mem_responder_cb.rsp_valid <= 1'b1;
-        vif.mem_if.mem_responder_cb.rsp_data  <= memory.read_word(vif.mem_if.mem_responder_cb.req_addr);
-        vif.mem_if.mem_responder_cb.rsp_tag   <= vif.mem_if.mem_responder_cb.req_tag;
+        // Drive response signals
+        vif.mem_if.mem_responder_cb.req_ready[0] <= 1'b1;
+        vif.mem_if.mem_responder_cb.rsp_valid[0] <= 1'b1;
+        vif.mem_if.mem_responder_cb.rsp_data[0]  <= memory.read_dword(byte_addr);
+        vif.mem_if.mem_responder_cb.rsp_tag[0]   <= vif.mem_if.mem_responder_cb.req_tag[0];
         
-        $display("[TB_TOP @ %0t] MEM RESP:  data=0x%08h tag=0x%01h", 
-                 $time,
-                 memory.read_word(vif.mem_if.mem_responder_cb.req_addr),
-                 vif.mem_if.mem_responder_cb.req_tag);
-        
-      end else begin
-        // No request - keep ready asserted, deassert response valid
-        vif.mem_if.mem_responder_cb.req_ready <= 1'b1;  // Always ready
-        vif.mem_if.mem_responder_cb.rsp_valid <= 1'b0;
-      end
+        $display("[TB_TOP @ %0t] MEM RESP:  data=0x%016h tag=0x%01h", 
+                $time,
+                memory.read_dword(byte_addr),
+                vif.mem_if.mem_responder_cb.req_tag[0]);
+
+    end else begin
+        // No request - keep ready asserted
+        vif.mem_if.mem_responder_cb.req_ready[0] <= 1'b1;
+        vif.mem_if.mem_responder_cb.rsp_valid[0] <= 1'b0;
     end
+end
   end
 
 
@@ -443,11 +509,11 @@ end
         //----------------------------------------------------------------------
         always_ff @(posedge clk) begin
             if (!reset_n) begin
-                vif.axi_if.awready <= 1'b0;
+                vif.axi_if.slave_cb.awready <= 1'b0;
                 aw_id_reg <= '0;
                 aw_addr_reg <= '0;
             end else begin
-                vif.axi_if.awready <= 1'b1;
+                vif.axi_if.slave_cb.awready <= 1'b1;
                 
                 if (vif.axi_if.awvalid && vif.axi_if.awready) begin
                     aw_id_reg <= vif.axi_if.awid;
@@ -463,12 +529,12 @@ end
         //----------------------------------------------------------------------
         always_ff @(posedge clk) begin
             if (!reset_n) begin
-                vif.axi_if.wready <= 1'b0;
+                vif.axi_if.slave_cb.wready <= 1'b0;
             end else begin
-                vif.axi_if.wready <= 1'b1;
+                vif.axi_if.slave_cb.wready <= 1'b1;
                 
                 if (vif.axi_if.wvalid && vif.axi_if.wready) begin
-                    automatic bit [31:0] addr = aw_addr_reg;
+                    automatic bit [31:0] addr = aw_addr_reg ; // ✅ Convert word address to byte address
                     automatic bit [63:0] data = vif.axi_if.wdata;
                     
                     // Apply byte enables
@@ -491,17 +557,17 @@ end
         //----------------------------------------------------------------------
         always_ff @(posedge clk) begin
             if (!reset_n) begin
-                vif.axi_if.bvalid <= 1'b0;
-                vif.axi_if.bid <= '0;
-                vif.axi_if.bresp <= 2'b00;
+                vif.axi_if.slave_cb.bvalid <= 1'b0;
+                vif.axi_if.slave_cb.bid <= '0;
+                vif.axi_if.slave_cb.bresp <= 2'b00;
             end else begin
                 if (vif.axi_if.wvalid && vif.axi_if.wready && vif.axi_if.wlast) begin
-                    vif.axi_if.bvalid <= 1'b1;
-                    vif.axi_if.bid <= aw_id_reg;
-                    vif.axi_if.bresp <= 2'b00; // OKAY
+                    vif.axi_if.slave_cb.bvalid <= 1'b1;
+                    vif.axi_if.slave_cb.bid <= aw_id_reg;
+                    vif.axi_if.slave_cb.bresp <= 2'b00; // OKAY
                     $display("[AXI_MEM @ %0t] B: id=%0d resp=OKAY", $time, aw_id_reg);
                 end else if (vif.axi_if.bvalid && vif.axi_if.bready) begin
-                    vif.axi_if.bvalid <= 1'b0;
+                    vif.axi_if.slave_cb.bvalid <= 1'b0;
                 end
             end
         end
@@ -511,12 +577,12 @@ end
         //----------------------------------------------------------------------
         always_ff @(posedge clk) begin
             if (!reset_n) begin
-                vif.axi_if.arready <= 1'b0;
+                vif.axi_if.slave_cb.arready <= 1'b0;
                 ar_id_reg <= '0;
                 ar_addr_reg <= '0;
                 ar_len_reg <= '0;
             end else begin
-                vif.axi_if.arready <= 1'b1;
+                vif.axi_if.slave_cb.arready <= 1'b1;
                 
                 if (vif.axi_if.arvalid && vif.axi_if.arready) begin
                     ar_id_reg <= vif.axi_if.arid;
@@ -534,31 +600,42 @@ end
         //----------------------------------------------------------------------
         always_ff @(posedge clk) begin
             if (!reset_n) begin
-                vif.axi_if.rvalid <= 1'b0;
-                vif.axi_if.rid <= '0;
-                vif.axi_if.rdata <= '0;
-                vif.axi_if.rresp <= 2'b00;
-                vif.axi_if.rlast <= 1'b0;
+                vif.axi_if.slave_cb.rvalid <= 1'b0;
+                vif.axi_if.slave_cb.rid <= '0;
+                vif.axi_if.slave_cb.rdata <= '0;
+                vif.axi_if.slave_cb.rresp <= 2'b00;
+                vif.axi_if.slave_cb.rlast <= 1'b0;
                 read_beat_count <= '0;
             end else begin
                 if (vif.axi_if.arvalid && vif.axi_if.arready) begin
-                    vif.axi_if.rvalid <= 1'b1;
+                    vif.axi_if.slave_cb.rvalid <= 1'b1;
                 end
                 
+                // if (vif.axi_if.rvalid && vif.axi_if.rready) begin
+                //     automatic bit [31:0] addr = ar_addr_reg + (read_beat_count << 3);
+                //     // ✅ araddr_reg is a WORD address from Vortex AXI bus
+                //     // Memory model is BYTE addressed → convert: byte = word << 6
+                //     automatic bit [63:0] data = memory.read_dword(ar_addr_reg << 6);
+
                 if (vif.axi_if.rvalid && vif.axi_if.rready) begin
-                    automatic bit [31:0] addr = ar_addr_reg + (read_beat_count << 3);
-                    automatic bit [63:0] data = memory.read_dword(addr);
+                    // ar_addr_reg = WORD address → shift left 6 to get byte address
+                    // read_beat_count × 8 = byte offset within the 64-byte cache line
+                    automatic bit [31:0] base_byte_addr = ar_addr_reg;
+                    automatic bit [31:0] burst_offset   = read_beat_count << 3;
+                    automatic bit [31:0] addr           = base_byte_addr + burst_offset;
+                    automatic bit [63:0] data           = memory.read_dword(addr);
+
                     
-                    vif.axi_if.rid <= ar_id_reg;
-                    vif.axi_if.rdata <= data;
-                    vif.axi_if.rresp <= 2'b00; // OKAY
-                    vif.axi_if.rlast <= (read_beat_count == ar_len_reg);
+                    vif.axi_if.slave_cb.rid <= ar_id_reg;
+                    vif.axi_if.slave_cb.rdata <= data;
+                    vif.axi_if.slave_cb.rresp <= 2'b00; // OKAY
+                    vif.axi_if.slave_cb.rlast <= (read_beat_count == ar_len_reg);
                     
                     $display("[AXI_MEM @ %0t] R: addr=0x%08h data=0x%016h beat=%0d/%0d", 
                              $time, addr, data, read_beat_count+1, ar_len_reg+1);
                     
                     if (read_beat_count == ar_len_reg) begin
-                        vif.axi_if.rvalid <= 1'b0;
+                        vif.axi_if.slave_cb.rvalid <= 1'b0;
                         read_beat_count <= '0;
                     end else begin
                         read_beat_count <= read_beat_count + 1;
@@ -573,68 +650,227 @@ end
     //==========================================================================
     
     `ifdef USE_AXI_WRAPPER
+        // //----------------------------------------------------------------------
+        // // Vortex with AXI wrapper
+        // //----------------------------------------------------------------------
+        // Vortex_axi #(
+        //     .AXI_DATA_WIDTH(MEM_DATA_WIDTH),
+        //     .AXI_ADDR_WIDTH(MEM_ADDR_WIDTH)
+        // ) dut (
+        //     .clk(clk),
+        //     .reset(!reset_n),
+
+        //     // AXI Write Address Channel
+        //     .m_axi_awid(vif.axi_if.awid),
+        //     .m_axi_awaddr(vif.axi_if.awaddr),
+        //     .m_axi_awlen(vif.axi_if.awlen),
+        //     .m_axi_awsize(vif.axi_if.awsize),
+        //     .m_axi_awburst(vif.axi_if.awburst),
+        //     .m_axi_awlock(vif.axi_if.awlock),
+        //     .m_axi_awcache(vif.axi_if.awcache),
+        //     .m_axi_awprot(vif.axi_if.awprot),
+        //     .m_axi_awqos(vif.axi_if.awqos),
+        //     .m_axi_awregion(vif.axi_if.awregion),
+        //     .m_axi_awvalid({vif.axi_if.awvalid}),
+        //     .m_axi_awready(vif.axi_if.awready),
+
+        //     // AXI Write Data Channel
+        //     .m_axi_wdata(vif.axi_if.wdata),
+        //     .m_axi_wstrb(vif.axi_if.wstrb),
+        //     .m_axi_wlast(vif.axi_if.wlast),
+        //     .m_axi_wvalid(vif.axi_if.wvalid),
+        //     .m_axi_wready(vif.axi_if.wready),
+
+        //     // AXI Write Response Channel
+        //     .m_axi_bid(vif.axi_if.bid),
+        //     .m_axi_bresp(vif.axi_if.bresp),
+        //     .m_axi_bvalid(vif.axi_if.bvalid),
+        //     .m_axi_bready(vif.axi_if.bready),
+
+        //     // AXI Read Address Channel
+        //     .m_axi_arid(vif.axi_if.arid),
+        //     .m_axi_araddr(vif.axi_if.araddr),
+        //     .m_axi_arlen(vif.axi_if.arlen),
+        //     .m_axi_arsize(vif.axi_if.arsize),
+        //     .m_axi_arburst(vif.axi_if.arburst),
+        //     .m_axi_arlock(vif.axi_if.arlock),
+        //     .m_axi_arcache(vif.axi_if.arcache),
+        //     .m_axi_arprot(vif.axi_if.arprot),
+        //     .m_axi_arqos(vif.axi_if.arqos),
+        //     .m_axi_arregion(vif.axi_if.arregion),
+        //     .m_axi_arvalid(vif.axi_if.arvalid),
+        //     .m_axi_arready(vif.axi_if.arready),
+
+        //     // AXI Read Data Channel
+        //     .m_axi_rid(vif.axi_if.rid),
+        //     .m_axi_rdata(vif.axi_if.rdata),
+        //     .m_axi_rresp(vif.axi_if.rresp),
+        //     .m_axi_rlast(vif.axi_if.rlast),
+        //     .m_axi_rvalid(vif.axi_if.rvalid),
+        //     .m_axi_rready(vif.axi_if.rready),
+
+        //     // DCR Interface
+        //     .dcr_wr_valid(vif.dcr_if.wr_valid),
+        //     .dcr_wr_addr(vif.dcr_if.wr_addr),
+        //     .dcr_wr_data(vif.dcr_if.wr_data),
+
+        //     // Status
+        //     .busy(vif.status_if.busy)
+        // );
+
+        
+        // initial $display("[TB_TOP @ %0t] DUT instantiated: Vortex with AXI wrapper", $time);
+
+
         //----------------------------------------------------------------------
-        // Vortex with AXI wrapper
+        // Intermediate wires — match Vortex_axi exact port types
+        // AXI_NUM_BANKS=1, AXI_TID_WIDTH=VX_MEM_TAG_WIDTH
         //----------------------------------------------------------------------
+localparam AXI_TID_W = VX_gpu_pkg::VX_MEM_TAG_WIDTH;
+
+        // AW channel
+        wire                      axi_awvalid [1];
+        wire                      axi_awready [1];
+        wire [MEM_ADDR_WIDTH-1:0] axi_awaddr  [1];
+        wire [AXI_TID_W-1:0]     axi_awid    [1];
+        wire [7:0]                axi_awlen   [1];
+        wire [2:0]                axi_awsize  [1];
+        wire [1:0]                axi_awburst [1];
+        wire [1:0]                axi_awlock  [1];
+        wire [3:0]                axi_awcache [1];
+        wire [2:0]                axi_awprot  [1];
+        wire [3:0]                axi_awqos   [1];
+        wire [3:0]                axi_awregion[1];
+        // W channel
+        wire                      axi_wvalid  [1];
+        wire                      axi_wready  [1];
+        wire [MEM_DATA_WIDTH-1:0] axi_wdata   [1];
+        wire [MEM_DATA_WIDTH/8-1:0] axi_wstrb [1];
+        wire                      axi_wlast   [1];
+        // B channel
+        wire                      axi_bvalid  [1];
+        wire                      axi_bready  [1];
+        wire [AXI_TID_W-1:0]     axi_bid     [1];
+        wire [1:0]                axi_bresp   [1];
+        // AR channel
+        wire                      axi_arvalid [1];
+        wire                      axi_arready [1];
+        wire [MEM_ADDR_WIDTH-1:0] axi_araddr  [1];
+        wire [AXI_TID_W-1:0]     axi_arid    [1];
+        wire [7:0]                axi_arlen   [1];
+        wire [2:0]                axi_arsize  [1];
+        wire [1:0]                axi_arburst [1];
+        wire [1:0]                axi_arlock  [1];
+        wire [3:0]                axi_arcache [1];
+        wire [2:0]                axi_arprot  [1];
+        wire [3:0]                axi_arqos   [1];
+        wire [3:0]                axi_arregion[1];
+        // R channel
+        wire                      axi_rvalid  [1];
+        wire                      axi_rready  [1];
+        wire [MEM_DATA_WIDTH-1:0] axi_rdata   [1];
+        wire                      axi_rlast   [1];
+        wire [AXI_TID_W-1:0]     axi_rid     [1];
+        wire [1:0]                axi_rresp   [1];
+
+        // Connect interface scalars to wire array element [0]
+        // DUT outputs → interface
+        assign vif.axi_if.awvalid  = axi_awvalid[0];
+        assign vif.axi_if.awaddr   = axi_awaddr[0];
+        assign vif.axi_if.awid     = axi_awid[0][3:0];
+        assign vif.axi_if.awlen    = axi_awlen[0];
+        assign vif.axi_if.awsize   = axi_awsize[0];
+        assign vif.axi_if.awburst  = axi_awburst[0];
+        assign vif.axi_if.awlock   = axi_awlock[0];
+        assign vif.axi_if.awcache  = axi_awcache[0];
+        assign vif.axi_if.awprot   = axi_awprot[0];
+        assign vif.axi_if.awqos    = axi_awqos[0];
+        assign vif.axi_if.awregion = axi_awregion[0];
+        assign vif.axi_if.wvalid   = axi_wvalid[0];
+        assign vif.axi_if.wdata    = axi_wdata[0];
+        assign vif.axi_if.wstrb    = axi_wstrb[0];
+        assign vif.axi_if.wlast    = axi_wlast[0];
+        assign vif.axi_if.arvalid  = axi_arvalid[0];
+        assign vif.axi_if.araddr   = axi_araddr[0];
+        assign vif.axi_if.arid     = axi_arid[0][3:0];
+        assign vif.axi_if.arlen    = axi_arlen[0];
+        assign vif.axi_if.arsize   = axi_arsize[0];
+        assign vif.axi_if.arburst  = axi_arburst[0];
+        assign vif.axi_if.arlock   = axi_arlock[0];
+        assign vif.axi_if.arcache  = axi_arcache[0];
+        assign vif.axi_if.arprot   = axi_arprot[0];
+        assign vif.axi_if.arqos    = axi_arqos[0];
+        assign vif.axi_if.arregion = axi_arregion[0];
+        // Interface → DUT inputs
+        assign axi_awready[0]  = vif.axi_if.awready;
+        assign axi_wready[0]   = vif.axi_if.wready;
+        assign axi_bvalid[0]   = vif.axi_if.bvalid;
+        assign axi_bid[0]      = AXI_TID_W'(vif.axi_if.bid);
+        assign axi_bresp[0]    = vif.axi_if.bresp;
+        assign axi_bready[0]   = vif.axi_if.bready;
+        assign axi_arready[0]  = vif.axi_if.arready;
+        assign axi_rvalid[0]   = vif.axi_if.rvalid;
+        assign axi_rdata[0]    = vif.axi_if.rdata;
+        assign axi_rlast[0]    = vif.axi_if.rlast;
+        assign axi_rid[0]      = AXI_TID_W'(vif.axi_if.rid);
+        assign axi_rresp[0]    = vif.axi_if.rresp;
+        assign axi_rready[0]   = vif.axi_if.rready;
+
         Vortex_axi #(
             .AXI_DATA_WIDTH(MEM_DATA_WIDTH),
-            .AXI_ADDR_WIDTH(MEM_ADDR_WIDTH)
+            .AXI_ADDR_WIDTH(MEM_ADDR_WIDTH),
+            .AXI_TID_WIDTH(AXI_TID_W),
+            .AXI_NUM_BANKS(1)
         ) dut (
             .clk(clk),
             .reset(!reset_n),
-            
-            // AXI Master Interface
-            .m_axi_awid(vif.axi_if.awid),
-            .m_axi_awaddr(vif.axi_if.awaddr),
-            .m_axi_awlen(vif.axi_if.awlen),
-            .m_axi_awsize(vif.axi_if.awsize),
-            .m_axi_awburst(vif.axi_if.awburst),
-            .m_axi_awlock(vif.axi_if.awlock),
-            .m_axi_awcache(vif.axi_if.awcache),
-            .m_axi_awprot(vif.axi_if.awprot),
-            .m_axi_awvalid(vif.axi_if.awvalid),
-            .m_axi_awready(vif.axi_if.awready),
-            
-            .m_axi_wdata(vif.axi_if.wdata),
-            .m_axi_wstrb(vif.axi_if.wstrb),
-            .m_axi_wlast(vif.axi_if.wlast),
-            .m_axi_wvalid(vif.axi_if.wvalid),
-            .m_axi_wready(vif.axi_if.wready),
-            
-            .m_axi_bid(vif.axi_if.bid),
-            .m_axi_bresp(vif.axi_if.bresp),
-            .m_axi_bvalid(vif.axi_if.bvalid),
-            .m_axi_bready(vif.axi_if.bready),
-            
-            .m_axi_arid(vif.axi_if.arid),
-            .m_axi_araddr(vif.axi_if.araddr),
-            .m_axi_arlen(vif.axi_if.arlen),
-            .m_axi_arsize(vif.axi_if.arsize),
-            .m_axi_arburst(vif.axi_if.arburst),
-            .m_axi_arlock(vif.axi_if.arlock),
-            .m_axi_arcache(vif.axi_if.arcache),
-            .m_axi_arprot(vif.axi_if.arprot),
-            .m_axi_arvalid(vif.axi_if.arvalid),
-            .m_axi_arready(vif.axi_if.arready),
-            
-            .m_axi_rid(vif.axi_if.rid),
-            .m_axi_rdata(vif.axi_if.rdata),
-            .m_axi_rresp(vif.axi_if.rresp),
-            .m_axi_rlast(vif.axi_if.rlast),
-            .m_axi_rvalid(vif.axi_if.rvalid),
-            .m_axi_rready(vif.axi_if.rready),
-            
-            // DCR Interface
+            .m_axi_awvalid(axi_awvalid),
+            .m_axi_awready(axi_awready),
+            .m_axi_awaddr(axi_awaddr),
+            .m_axi_awid(axi_awid),
+            .m_axi_awlen(axi_awlen),
+            .m_axi_awsize(axi_awsize),
+            .m_axi_awburst(axi_awburst),
+            .m_axi_awlock(axi_awlock),
+            .m_axi_awcache(axi_awcache),
+            .m_axi_awprot(axi_awprot),
+            .m_axi_awqos(axi_awqos),
+            .m_axi_awregion(axi_awregion),
+            .m_axi_wvalid(axi_wvalid),
+            .m_axi_wready(axi_wready),
+            .m_axi_wdata(axi_wdata),
+            .m_axi_wstrb(axi_wstrb),
+            .m_axi_wlast(axi_wlast),
+            .m_axi_bvalid(axi_bvalid),
+            .m_axi_bready(axi_bready),
+            .m_axi_bid(axi_bid),
+            .m_axi_bresp(axi_bresp),
+            .m_axi_arvalid(axi_arvalid),
+            .m_axi_arready(axi_arready),
+            .m_axi_araddr(axi_araddr),
+            .m_axi_arid(axi_arid),
+            .m_axi_arlen(axi_arlen),
+            .m_axi_arsize(axi_arsize),
+            .m_axi_arburst(axi_arburst),
+            .m_axi_arlock(axi_arlock),
+            .m_axi_arcache(axi_arcache),
+            .m_axi_arprot(axi_arprot),
+            .m_axi_arqos(axi_arqos),
+            .m_axi_arregion(axi_arregion),
+            .m_axi_rvalid(axi_rvalid),
+            .m_axi_rready(axi_rready),
+            .m_axi_rdata(axi_rdata),
+            .m_axi_rlast(axi_rlast),
+            .m_axi_rid(axi_rid),
+            .m_axi_rresp(axi_rresp),
             .dcr_wr_valid(vif.dcr_if.wr_valid),
             .dcr_wr_addr(vif.dcr_if.wr_addr),
             .dcr_wr_data(vif.dcr_if.wr_data),
-            
-            // Status
             .busy(vif.status_if.busy)
         );
-        
+
         initial $display("[TB_TOP @ %0t] DUT instantiated: Vortex with AXI wrapper", $time);
-        
+
     `else
         //----------------------------------------------------------------------
         // Vortex with custom memory interface (default)
@@ -642,20 +878,20 @@ end
         Vortex dut (
             .clk(clk),
             .reset(!reset_n),
+    
+            // DIRECT ARRAY-TO-ARRAY CONNECTION!
+            .mem_req_valid(vif.mem_if.req_valid),      // Clean!
+            .mem_req_ready(vif.mem_if.req_ready),      // Clean!
+            .mem_req_rw(vif.mem_if.req_rw),            // Clean!
+            .mem_req_addr(vif.mem_if.req_addr),        // Clean!
+            .mem_req_data(vif.mem_if.req_data),        // Clean!
+            .mem_req_byteen(vif.mem_if.req_byteen),    // Clean!
+            .mem_req_tag(vif.mem_if.req_tag),          // Clean!
             
-            // Custom Memory Interface - FIXED: Connect as arrays with [0:0]
-            .mem_req_valid({vif.mem_if.req_valid}),
-            .mem_req_ready({vif.mem_if.req_ready}),
-            .mem_req_rw({vif.mem_if.req_rw}),
-            .mem_req_addr({vif.mem_if.req_addr}),
-            .mem_req_data({vif.mem_if.req_data}),
-            .mem_req_byteen({vif.mem_if.req_byteen}),
-            .mem_req_tag({vif.mem_if.req_tag}),
-            
-            .mem_rsp_valid({vif.mem_if.rsp_valid}),
-            .mem_rsp_ready({vif.mem_if.rsp_ready}),
-            .mem_rsp_data({vif.mem_if.rsp_data}),
-            .mem_rsp_tag({vif.mem_if.rsp_tag}),        
+            .mem_rsp_valid(vif.mem_if.rsp_valid),      // Clean!
+            .mem_rsp_ready(vif.mem_if.rsp_ready),      // Clean!
+            .mem_rsp_data(vif.mem_if.rsp_data),        // Clean!
+            .mem_rsp_tag(vif.mem_if.rsp_tag),          // Clean!      
             
             // DCR Interface
             .dcr_wr_valid(vif.dcr_if.wr_valid),
@@ -686,7 +922,7 @@ end
             logic        tb_execution_complete;
             int          tb_idle_cycles;
             
-            parameter int IDLE_THRESHOLD = 200;  // Cycles idle before declaring done
+            parameter int IDLE_THRESHOLD = 500;  // Cycles idle before declaring done
             
             always_ff @(posedge clk) begin
             if (!reset_n) begin
@@ -701,7 +937,10 @@ end
                 tb_cycle_count <= tb_cycle_count + 1;
                 
                 // Track memory activity (single port interface)
-                if (vif.mem_if.req_valid && vif.mem_if.req_ready) begin
+                // if (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0]) begin
+                    if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
+                        (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0])) begin
+
                     tb_mem_ops <= tb_mem_ops + 1;
                     tb_idle_cycles <= 0;
                     
@@ -721,7 +960,10 @@ end
                     tb_idle_cycles <= tb_idle_cycles + 1;
                     
                     // Completion detection
-                    if (tb_idle_cycles == IDLE_THRESHOLD) begin
+                    // if (tb_idle_cycles == IDLE_THRESHOLD) begin
+                    if (tb_idle_cycles == IDLE_THRESHOLD ||
+                        (tb_execution_started && !vif.status_if.busy)) begin
+
                         tb_execution_complete <= 1;
                         $display("\n╔═══════════════════════════════════════════════════╗");
                         $display("║  ✓ EXECUTION COMPLETE (idle %0d cycles)        ║", IDLE_THRESHOLD);

@@ -468,16 +468,28 @@ if [[ -n "$PROGRAM" ]]; then
         print_info "Output: $PROGRAM_HEX"
         
         # Perform conversion based on type
+        # OBJCOPY_LOG="$RESULTS_RUN_DIR/logs/objcopy.log"
+                # Perform conversion based on type
         OBJCOPY_LOG="$RESULTS_RUN_DIR/logs/objcopy.log"
+        
+        # Toolchain: riscv64 handles both rv32 and rv64 ELFs via ELF header
+        OBJCOPY="riscv64-unknown-elf-objcopy"
+
         
         if [[ "$PROGRAM_TYPE" == "vortex" ]]; then
             # Vortex kernel.bin uses specific format
-            if riscv64-unknown-elf-objcopy \
+            # if riscv64-unknown-elf-objcopy \
+            #     -I binary \
+            #     -O verilog \
+            #     --change-addresses=0x80000000 \
+            #     --verilog-data-width=1 \
+            #     --reverse-bytes=4 \
+            #     "$PROGRAM_SOURCE" \
+            if $OBJCOPY \
                 -I binary \
                 -O verilog \
                 --change-addresses=0x80000000 \
                 --verilog-data-width=1 \
-                --reverse-bytes=4 \
                 "$PROGRAM_SOURCE" \
                 "$PROGRAM_HEX" 2>&1 | tee "$OBJCOPY_LOG"; then
                 print_success "Vortex kernel converted"
@@ -489,10 +501,15 @@ if [[ -n "$PROGRAM" ]]; then
             
         elif [[ "$PROGRAM_TYPE" == "riscv-test" || "$PROGRAM_TYPE" == "riscv-dv" ]]; then
             # RISC-V tests are ELF format
-            if riscv64-unknown-elf-objcopy \
+            # if riscv64-unknown-elf-objcopy \
+            #     -O verilog \
+            #     --verilog-data-width=1 \
+            #     --reverse-bytes=4 \
+            #     "$PROGRAM_SOURCE" \
+            if $OBJCOPY \
                 -O verilog \
+                --change-addresses=0x80000000 \
                 --verilog-data-width=1 \
-                --reverse-bytes=4 \
                 "$PROGRAM_SOURCE" \
                 "$PROGRAM_HEX" 2>&1 | tee "$OBJCOPY_LOG"; then
                 print_success "RISC-V test converted"
@@ -504,10 +521,15 @@ if [[ -n "$PROGRAM" ]]; then
             
         elif [[ "$PROGRAM_TYPE" == "custom-elf" ]]; then
             # Custom ELF
-            if riscv64-unknown-elf-objcopy \
+            # if riscv64-unknown-elf-objcopy \
+            #     -O verilog \
+            #     --verilog-data-width=1 \
+            #     --reverse-bytes=4 \
+            #     "$PROGRAM_SOURCE" \
+            if $OBJCOPY \
                 -O verilog \
+                --change-addresses=0x80000000 \
                 --verilog-data-width=1 \
-                --reverse-bytes=4 \
                 "$PROGRAM_SOURCE" \
                 "$PROGRAM_HEX" 2>&1 | tee "$OBJCOPY_LOG"; then
                 print_success "Custom ELF converted"
@@ -519,12 +541,18 @@ if [[ -n "$PROGRAM" ]]; then
             
         elif [[ "$PROGRAM_TYPE" == "custom-bin" ]]; then
             # Custom binary
-            if riscv64-unknown-elf-objcopy \
+            # if riscv64-unknown-elf-objcopy \
+            #     -I binary \
+            #     -O verilog \
+            #     --change-addresses=0x80000000 \
+            #     --verilog-data-width=1 \
+            #     --reverse-bytes=4 \
+            #     "$PROGRAM_SOURCE" \
+            if $OBJCOPY \
                 -I binary \
                 -O verilog \
                 --change-addresses=0x80000000 \
                 --verilog-data-width=1 \
-                --reverse-bytes=4 \
                 "$PROGRAM_SOURCE" \
                 "$PROGRAM_HEX" 2>&1 | tee "$OBJCOPY_LOG"; then
                 print_success "Custom binary converted"
@@ -617,7 +645,7 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     # Compile UVM
     print_info "Compiling UVM environment..."
     if [[ "$SIMULATOR" == "questa" ]]; then
-        vlog -sv \
+        vlog -sv $COMPILE_OPTS \
             +incdir+/opt/questa_sim-2021.2_1/questasim/verilog_src/questa_uvm_pkg-1.2/src \
             -f uvm_env.flist \
             2>&1 | tee "$RESULTS_RUN_DIR/logs/compile_uvm.log"
@@ -667,10 +695,10 @@ LOG_FILE="$RESULTS_RUN_DIR/logs/simulation.log"
 
 if [[ "$SIMULATOR" == "questa" ]]; then
     if [[ $GUI_MODE -eq 1 ]]; then
-        vsim vortex_tb_top $SIM_OPTS \
+        vsim +define+USE_AXI_WRAPPER vortex_tb_top $SIM_OPTS \
             -do "add wave -r /*; run -all"
     else
-        vsim -c vortex_tb_top $SIM_OPTS \
+        vsim -c +define+USE_AXI_WRAPPER vortex_tb_top $SIM_OPTS \
             -do "run -all; quit -f" \
             2>&1 | tee "$LOG_FILE"
     fi

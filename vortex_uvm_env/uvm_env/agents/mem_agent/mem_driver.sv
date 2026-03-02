@@ -97,8 +97,8 @@ class mem_driver extends uvm_driver #(mem_transaction);
         
         // Initialize interface signals using clocking block
         @(vif.master_cb);
-        vif.master_cb.req_valid <= 1'b0;
-        vif.master_cb.rsp_ready <= 1'b1;  // Always ready to accept responses
+        vif.master_cb.req_valid[0] <= 1'b0;
+        vif.master_cb.rsp_ready[0] <= 1'b1;  // Always ready to accept responses
         
         // Fork background cycle counter
         fork
@@ -169,12 +169,12 @@ class mem_driver extends uvm_driver #(mem_transaction);
         
         // Drive request signals using clocking block
         @(vif.master_cb);
-        vif.master_cb.req_valid <= 1'b1;
-        vif.master_cb.req_rw    <= trans.rw;
-        vif.master_cb.req_addr  <= trans.addr;
-        vif.master_cb.req_data  <= trans.data;
-        vif.master_cb.req_byteen <= trans.byteen;
-        vif.master_cb.req_tag   <= trans.tag;
+        vif.master_cb.req_valid[0] <= 1'b1;
+        vif.master_cb.req_rw[0]    <= trans.rw;
+        vif.master_cb.req_addr[0]  <= trans.addr;
+        vif.master_cb.req_data[0]  <= trans.data;
+        vif.master_cb.req_byteen[0] <= trans.byteen;
+        vif.master_cb.req_tag[0]   <= trans.tag;
         
         // Wait for handshake (req_ready HIGH)
         fork
@@ -182,7 +182,7 @@ class mem_driver extends uvm_driver #(mem_transaction);
                 do begin
                     @(vif.master_cb);
                     timeout_count++;
-                end while (!vif.master_cb.req_ready);
+                end while (!vif.master_cb.req_ready[0]);
             end
             
             begin
@@ -196,7 +196,7 @@ class mem_driver extends uvm_driver #(mem_transaction);
         disable fork;
         
         // Deassert req_valid after handshake
-        vif.master_cb.req_valid <= 1'b0;
+        vif.master_cb.req_valid[0] <= 1'b0;
         
         `uvm_info("MEM_DRV", $sformatf("%s request accepted after %0d cycles", 
             trans.is_read() ? "READ" : "WRITE", timeout_count), UVM_HIGH)
@@ -210,7 +210,7 @@ class mem_driver extends uvm_driver #(mem_transaction);
         int timeout_count = 0;
         
         // Ensure rsp_ready is HIGH
-        vif.master_cb.rsp_ready <= 1'b1;
+        vif.master_cb.rsp_ready[0] <= 1'b1;
         
         // Wait for response (rsp_valid HIGH)
         fork
@@ -218,7 +218,7 @@ class mem_driver extends uvm_driver #(mem_transaction);
                 do begin
                     @(vif.master_cb);
                     timeout_count++;
-                end while (!vif.master_cb.rsp_valid);
+                end while (!vif.master_cb.rsp_valid[0]);
             end
             
             begin
@@ -232,8 +232,8 @@ class mem_driver extends uvm_driver #(mem_transaction);
         disable fork;
         
         // Capture response data using clocking block
-        trans.rsp_data = vif.master_cb.rsp_data;
-        trans.rsp_tag  = vif.master_cb.rsp_tag;
+        trans.rsp_data = vif.master_cb.rsp_data[0];
+        trans.rsp_tag  = vif.master_cb.rsp_tag[0];
         
         // Verify tag matches
         if (trans.rsp_tag != trans.tag) begin

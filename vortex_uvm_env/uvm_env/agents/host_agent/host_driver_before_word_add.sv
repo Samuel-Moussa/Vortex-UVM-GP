@@ -213,16 +213,13 @@ class host_driver extends uvm_driver #(host_transaction);
     // Operation: Load Program (Using Memory Clocking Block)
     //==========================================================================
     virtual task load_program(host_transaction trans);
-        bit [31:0] byte_addr;
-        bit [31:0] word_addr;
+        bit [31:0] addr;
         bit [31:0] data_word;
         
-        // ✅ FIX: Vortex uses word-addressed memory (64-byte words)
-        // Memory interface req_addr carries WORD addresses (byte_addr >> 6)
-        byte_addr = trans.load_address[31:0];
+        `uvm_info("HOST_DRV", $sformatf("Loading program to 0x%016h (%0d bytes)",
+            trans.load_address, trans.program_size), UVM_MEDIUM)
         
-        `uvm_info("HOST_DRV", $sformatf("Loading program to byte 0x%08h (word 0x%08h), size=%0d bytes",
-            byte_addr, byte_addr >> 6, trans.program_size), UVM_MEDIUM)
+        addr = trans.load_address[31:0];  // Use lower 32 bits for address
         
         // Write program data word by word
         for (int i = 0; i < trans.program_size; i += 4) begin
@@ -232,12 +229,9 @@ class host_driver extends uvm_driver #(host_transaction);
                 data_word |= (trans.program_data[i+j] << (j*8));
             end
             
-            // ✅ CRITICAL: Convert byte address to word address (÷64 bytes)
-            // This matches Vortex's 512-bit (64-byte) memory word addressing
-            word_addr = (byte_addr + i) >> 6;
-            
             // Write word using memory clocking block
-            write_memory_word(word_addr, data_word, 4'hF);
+            write_memory_word(addr, data_word, 4'hF);
+            addr += 4;
         end
         
         num_programs_loaded++;
@@ -377,13 +371,10 @@ class host_driver extends uvm_driver #(host_transaction);
     endtask
     
     //==========================================================================
-    // Helper: Write Memory Word
-    // NOTE: addr parameter is WORD address (index of 64-byte blocks), NOT byte address.
-    //       Convert byte addresses with: word_addr = byte_addr >> 6
-    //       This matches Vortex's 512-bit (64-byte) memory word addressing.
+    // Helper: Write Memory Word (Using Memory Clocking Block)
     //==========================================================================
     virtual task write_memory_word(
-        input bit [31:0] addr,  // WORD address (not byte)
+        input bit [31:0] addr,
         input bit [31:0] data,
         input bit [3:0]  byteen = 4'hF
     );
@@ -411,13 +402,10 @@ class host_driver extends uvm_driver #(host_transaction);
     endtask
     
     //==========================================================================
-    // Helper: Read Memory Word
-    // NOTE: addr parameter is WORD address (index of 64-byte blocks), NOT byte address.
-    //       Convert byte addresses with: word_addr = byte_addr >> 6
-    //       This matches Vortex's 512-bit (64-byte) memory word addressing.
+    // Helper: Read Memory Word (Using Memory Clocking Block)
     //==========================================================================
     virtual task read_memory_word(
-        input  bit [31:0] addr,  // WORD address (not byte)
+        input  bit [31:0] addr,
         output bit [31:0] data
     );
         // Drive request using memory master clocking block
