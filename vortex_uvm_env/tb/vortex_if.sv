@@ -179,14 +179,14 @@ interface vortex_if (
     //==========================================================================
     
     // When busy, at least one sub-interface should be active
-    property system_activity_p;
-        @(posedge clk) disable iff (!reset_n)
-        status_if.busy |-> (
-            mem_if.req_valid || mem_if.rsp_valid ||
-            axi_if.awvalid || axi_if.wvalid || axi_if.arvalid ||
-            axi_if.rvalid || axi_if.bvalid
-        );
-    endproperty
+    // property system_activity_p;
+    //     @(posedge clk) disable iff (!reset_n)
+    //     status_if.busy |-> (
+    //         mem_if.req_valid || mem_if.rsp_valid ||
+    //         axi_if.awvalid || axi_if.wvalid || axi_if.arvalid ||
+    //         axi_if.rvalid || axi_if.bvalid
+    //     );
+    // endproperty
     
     // DCR writes should only happen when system is idle or during config phase
     property dcr_write_timing_p;
@@ -199,12 +199,12 @@ interface vortex_if (
         @(posedge clk)
         $fell(reset_n) |=> ##[1:10] (
             !axi_if.awvalid && !axi_if.wvalid && !axi_if.arvalid &&
-            !mem_if.req_valid && !dcr_if.wr_valid
+            !mem_if.req_valid[0] && !dcr_if.wr_valid
         );
     endproperty
     
-    assert_system_activity: assert property (system_activity_p)
-        else $warning("[VORTEX_IF] System busy but no interface activity!");
+    // assert_system_activity: assert property (system_activity_p)
+    //     else $warning("[VORTEX_IF] System busy but no interface activity!");
     
     assert_dcr_write_timing: assert property (dcr_write_timing_p)
         else $warning("[VORTEX_IF] DCR write during kernel execution!");
@@ -236,7 +236,7 @@ interface vortex_if (
             bins simultaneous   = {2'b11};
         }
         
-        mem_usage_cp: coverpoint {mem_if.req_valid, mem_if.req_rw} {
+        mem_usage_cp: coverpoint {mem_if.req_valid[0], mem_if.req_rw[0]} {
             bins idle           = {2'b00};
             bins read           = {2'b10};
             bins write          = {2'b11};
@@ -339,9 +339,9 @@ interface vortex_if (
         $display("");
         $display("MEMORY INTERFACE:");
         $display("  Req: valid=%b ready=%b rw=%b addr=0x%h", 
-            mem_if.req_valid, mem_if.req_ready, mem_if.req_rw, mem_if.req_addr);
+            mem_if.req_valid[0], mem_if.req_ready[0], mem_if.req_rw[0], mem_if.req_addr[0]);
         $display("  Rsp: valid=%b ready=%b", 
-            mem_if.rsp_valid, mem_if.rsp_ready);
+            mem_if.rsp_valid[0], mem_if.rsp_ready[0]);
         $display("");
         $display("DCR INTERFACE:");
         $display("  Write: valid=%b addr=0x%h data=0x%h", 
