@@ -33,11 +33,10 @@ import uvm_pkg::*;
 `include "uvm_macros.svh"
 
 // Memory interface parameters (matching VX_define.vh)
-parameter VX_MEM_ADDR_WIDTH   = 32;
-parameter VX_MEM_DATA_WIDTH   = 512; //it was 64 
-parameter VX_MEM_TAG_WIDTH    = 8;
+parameter VX_MEM_ADDR_WIDTH   = 26;  // 32 - CLOG2(64) = 26
+parameter VX_MEM_DATA_WIDTH   = 512; // L3_LINE_SIZE(64) * 8 
+parameter VX_MEM_TAG_WIDTH    = 50; // Actual RTL elaborated value
 parameter VX_MEM_BYTEEN_WIDTH = VX_MEM_DATA_WIDTH/8;
-
 
 // ===========================================================================
 // DCR (Device Configuration Register) Parameters
