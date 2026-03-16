@@ -17,6 +17,7 @@
 +incdir+$VORTEX_HOME/hw/rtl/tcu/bhf
 
 +define+SIMULATION
++define+USE_AXI_WRAPPER
 +define+EXT_F_ENABLE=1
 +define+EXT_D_ENABLE=1
 +define+EXT_M_ENABLE=1
