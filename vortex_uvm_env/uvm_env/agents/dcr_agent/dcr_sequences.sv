@@ -115,12 +115,30 @@ class dcr_startup_config_sequence extends dcr_base_sequence;
     
     function new(string name = "dcr_startup_config_sequence");
         super.new(name);
-        // Default values
-        startup_pc = 64'h0000_0000_8000_0000;  // Standard RISC-V start address
-        argv_ptr = 64'h0;                       // NULL argv by default
+        // RTL default fallback — overridden from cfg.startup_addr in body()
+        // RV32 default = 0x80000000, RV64 default = 0x080000000
+        startup_pc = 64'h80000000;
+        argv_ptr = 64'h0;
     endfunction
     
     virtual task body();
+        // Pull startup_pc from vortex_config in config DB (set by apply_plusargs).
+        // This is the ONLY correct source — honours +STARTUP_ADDR plusarg at runtime.
+        begin
+            vortex_config cfg;
+            if (uvm_config_db #(vortex_config)::get(
+                    null, get_full_name(), "cfg", cfg)) begin
+                startup_pc = cfg.startup_addr;
+                `uvm_info("DCR_SEQ",
+                    $sformatf("startup_pc from cfg.startup_addr: 0x%016h", startup_pc),
+                    UVM_HIGH)
+            end else begin
+                `uvm_info("DCR_SEQ",
+                    $sformatf("cfg not in config DB — using startup_pc=0x%016h", startup_pc),
+                    UVM_MEDIUM)
+            end
+        end
+
         `uvm_info("DCR_SEQ", $sformatf(
             "Configuring startup: PC=0x%016h, argv=0x%016h",
             startup_pc, argv_ptr), UVM_LOW)
@@ -155,10 +173,26 @@ class dcr_minimal_startup_sequence extends dcr_base_sequence;
     
     function new(string name = "dcr_minimal_startup_sequence");
         super.new(name);
-        startup_pc = 64'h0000_0000_8000_0000;
+        startup_pc = 64'h80000000;  // RTL default; overridden from cfg in body()
     endfunction
     
     virtual task body();
+        // Pull startup_pc from cfg.startup_addr — honours +STARTUP_ADDR plusarg
+        begin
+            vortex_config cfg;
+            if (uvm_config_db #(vortex_config)::get(
+                    null, get_full_name(), "cfg", cfg)) begin
+                startup_pc = cfg.startup_addr;
+                `uvm_info("DCR_SEQ",
+                    $sformatf("startup_pc from cfg.startup_addr: 0x%016h", startup_pc),
+                    UVM_HIGH)
+            end else begin
+                `uvm_info("DCR_SEQ",
+                    $sformatf("cfg not in config DB — using startup_pc=0x%016h", startup_pc),
+                    UVM_MEDIUM)
+            end
+        end
+
         `uvm_info("DCR_SEQ", $sformatf(
             "Minimal startup configuration: PC=0x%016h", startup_pc), UVM_LOW)
         
