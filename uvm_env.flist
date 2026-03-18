@@ -1,0 +1,84 @@
+# UVM Environment Compilation File List
+# Compilation order is critical - packages first, then interfaces, then components
+
+# Set UVM environment base directory
++incdir+$UVM_HOME
++incdir+$VORTEX_UVM_HOME/tb
++incdir+$VORTEX_UVM_HOME/uvm_env
++incdir+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent
++incdir+$VORTEX_UVM_HOME/uvm_tests
+
+# 1. UVM (compiled separately first, already done)
+
+# 2. Config package
+$VORTEX_UVM_HOME/uvm_env/vortex_config.sv
+
+# 3. Interfaces
+$VORTEX_UVM_HOME/tb/vortex_axi_if.sv
+$VORTEX_UVM_HOME/tb/vortex_mem_if.sv
+$VORTEX_UVM_HOME/tb/vortex_dcr_if.sv
+$VORTEX_UVM_HOME/tb/vortex_status_if.sv
+$VORTEX_UVM_HOME/tb/vortex_if.sv
+
+# 4. Memory model (standalone)
+# $VORTEX_UVM_HOME/tb/mem_model.sv
+
+# 5. Agent packages (each self-contained)
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent_pkg.sv
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_agent_pkg.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent_pkg.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent_pkg.sv
+$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent_pkg.sv
+
+# 6. Agent components (standalone, import their own pkg)
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_transaction.sv
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequences.sv
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequencer.sv
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_driver.sv
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_monitor.sv
+$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_agent.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_transaction.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequences.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequencer.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_driver.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_monitor.sv
+$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent.sv
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_transaction.sv
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequences.sv
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequencer.sv
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_driver.sv
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_monitor.sv
+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent.sv
+$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_transaction.sv
+$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_monitor.sv
+$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_transaction.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequences.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequencer.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_driver.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_monitor.sv
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent.sv
+
+# 7. Ref model
+#$VORTEX_UVM_HOME/uvm_env/ref_model/simx_pkg.sv
+#$VORTEX_UVM_HOME/uvm_env/ref_model/simx_wrapper.sv
+
+# 8. Env package (imports only, NO `includes of sv files)
+$VORTEX_UVM_HOME/uvm_env/vortex_env_pkg.sv
+
+# 9. Env components (standalone, in dependency order)
+$VORTEX_UVM_HOME/uvm_env/vortex_virtual_sequencer.sv
+$VORTEX_UVM_HOME/uvm_env/vortex_scoreboard.sv
+$VORTEX_UVM_HOME/uvm_env/vortex_coverage_collector.sv
+$VORTEX_UVM_HOME/uvm_env/vortex_env.sv
+
+# 10. Test package (imports only, NO `includes of sv files)
+$VORTEX_UVM_HOME/uvm_tests/vortex_test_pkg.sv
+
+# 11. Test components (standalone)
+$VORTEX_UVM_HOME/uvm_tests/vortex_base_test.sv
+#$VORTEX_UVM_HOME/uvm_tests/vortex_sanity_test.sv
+$VORTEX_UVM_HOME/uvm_tests/vortex_smoke_test.sv
+
+# 12. TB top (last)
+$VORTEX_UVM_HOME/tb/vortex_tb_top.sv
