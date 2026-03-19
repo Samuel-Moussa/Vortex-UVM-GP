@@ -124,7 +124,7 @@ $VORTEX_UVM_HOME/uvm_tests/vortex_test_pkg.sv
 # ==============================================================================
 $VORTEX_UVM_HOME/uvm_tests/vortex_base_test.sv
 #$VORTEX_UVM_HOME/uvm_tests/vortex_base_test_complex.sv
-#$VORTEX_UVM_HOME/uvm_tests/vortex_smoke_test.sv
+$VORTEX_UVM_HOME/uvm_tests/vortex_smoke_test.sv
 $VORTEX_UVM_HOME/uvm_tests/vortex_sanity_test.sv
 #$VORTEX_UVM_HOME/uvm_tests/functional_memory_test.sv
 
