@@ -52,13 +52,22 @@ class dcr_transaction extends uvm_sequence_item;
     // Addresses are (word_index << 2) per Vortex spec
     //==========================================================================
     
+    // typedef enum bit [31:0] {
+    //     DCR_STARTUP_ADDR0 = (VX_DCR_BASE_STARTUP_ADDR0 << 2),  // PC[31:0]
+    //     DCR_STARTUP_ADDR1 = (VX_DCR_BASE_STARTUP_ADDR1 << 2),  // PC[63:32]
+    //     DCR_ARGV_PTR0     = (VX_DCR_BASE_STARTUP_ARG0  << 2),  // argv[31:0]
+    //     DCR_ARGV_PTR1     = (VX_DCR_BASE_STARTUP_ARG1  << 2),  // argv[63:32]
+    //     DCR_MPM_CLASS     = (VX_DCR_BASE_MPM_CLASS     << 2)   // Perf monitor
+    // } dcr_addr_e;
+
     typedef enum bit [31:0] {
-        DCR_STARTUP_ADDR0 = (VX_DCR_BASE_STARTUP_ADDR0 << 2),  // PC[31:0]
-        DCR_STARTUP_ADDR1 = (VX_DCR_BASE_STARTUP_ADDR1 << 2),  // PC[63:32]
-        DCR_ARGV_PTR0     = (VX_DCR_BASE_STARTUP_ARG0  << 2),  // argv[31:0]
-        DCR_ARGV_PTR1     = (VX_DCR_BASE_STARTUP_ARG1  << 2),  // argv[63:32]
-        DCR_MPM_CLASS     = (VX_DCR_BASE_MPM_CLASS     << 2)   // Perf monitor
-    } dcr_addr_e;
+    DCR_STARTUP_ADDR0 = VX_DCR_BASE_STARTUP_ADDR0,  // ✅ 0x001 (NO << 2!)
+    DCR_STARTUP_ADDR1 = VX_DCR_BASE_STARTUP_ADDR1,  // ✅ 0x002 (NO << 2!)  
+    DCR_ARGV_PTR0     = VX_DCR_BASE_STARTUP_ARG0,   // ✅ 0x003
+    DCR_ARGV_PTR1     = VX_DCR_BASE_STARTUP_ARG1,   // ✅ 0x004
+    DCR_MPM_CLASS     = VX_DCR_BASE_MPM_CLASS       // ✅ 0x005
+} dcr_addr_e;
+
     
     //==========================================================================
     // Constraints

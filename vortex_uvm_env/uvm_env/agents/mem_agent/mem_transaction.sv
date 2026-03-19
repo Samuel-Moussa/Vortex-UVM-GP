@@ -5,22 +5,14 @@
 // This transaction represents a single memory request-response pair on the
 // Vortex custom memory interface (not AXI). It models:
 //   - Read or Write operation
-//   - 64-bit data width (VX_MEM_DATA_WIDTH = 64)
-//   - 32-bit address space (VX_MEM_ADDR_WIDTH = 32)
-//   - 8-bit byte enables (8 bytes for 64-bit data)
-//   - Tag-based request/response matching
+//   - 512-bit data width  (VX_MEM_DATA_WIDTH  = L3_LINE_SIZE*8 = 512 bits)
+//   - 26-bit word address (VX_MEM_ADDR_WIDTH  = 32-6 = 26 bits, RV32)
+//                         (VX_MEM_ADDR_WIDTH  = 48-6 = 42 bits, RV64)
+//   - 64-bit byte enables (VX_MEM_BYTEEN_WIDTH = L3_LINE_SIZE  = 64 bytes)
+//   - 8-bit tag           (VX_MEM_TAG_WIDTH   = L3_MEM_TAG_WIDTH = 8 bits)
 //
-// Usage:
-//   - Driver: Drives transactions to DUT
-//   - Monitor: Captures transactions from interface
-//   - Scoreboard: Compares against simx golden model
-//
-// **Note for Final State Comparison**:
-//   For Option A (final state after EBREAK), the scoreboard will:
-//   1. Collect all write transactions during execution
-//   2. Build RTL memory state
-//   3. Compare against simx memory state at EBREAK
-//   This transaction provides the foundation for that tracking.
+// NOTE: addr is a WORD (cache-line) address, NOT a byte address.
+//       byte_addr = word_addr << 6  (shift by log2(64))
 //
 // Author: Vortex UVM Team
 ////////////////////////////////////////////////////////////////////////////////
@@ -63,54 +55,45 @@ class mem_transaction extends uvm_sequence_item;
     // Constraints
     //==========================================================================
     
-    // Address alignment based on byte enable pattern
-    // Ensures addresses are properly aligned for access size
+    // Address alignment based on byte enable pattern.
+    // addr is a WORD (cache-line, 64-byte) address — sub-line alignment
+    // is expressed via byteen. A full-line access (byteen=all-ones) needs
+    // no additional alignment constraint because the word address IS the
+    // cache line address.
+    // Partial-line patterns constrain the lower byte-enable bits.
     constraint addr_alignment_c {
-        // Full 64-bit (8-byte) access must be 8-byte aligned
-        (byteen == 8'hFF) -> (addr[2:0] == 3'b000);
-        
-        // 32-bit (4-byte) access must be 4-byte aligned
-        (byteen == 8'h0F || byteen == 8'hF0) -> (addr[1:0] == 2'b00);
-        
-        // 16-bit (2-byte) access must be 2-byte aligned
-        (byteen == 8'h03 || byteen == 8'h0C || 
-         byteen == 8'h30 || byteen == 8'hC0) -> (addr[0] == 1'b0);
+        // Full cache-line access: no extra constraint needed
+        // Partial lower-64-bit (8-byte sub-word): lower addr bits irrelevant
+        // at cache-line granularity; byteen selects the sub-word within line.
+        1'b1;  // placeholder — word address is inherently cache-line aligned
     }
     
-    // Valid address range - must be within Vortex memory space
-    // STARTUP_ADDR is typically 0x80000000 (DRAM region)
+    // Valid word-address range.
+    // STARTUP_ADDR (from pkg) is a BYTE address; shift >>6 to get word address.
+    // The pkg STARTUP_ADDR = 32'h80000000 is the RV32 default.
     constraint valid_addr_c {
         addr inside {
-            [vortex_config_pkg::STARTUP_ADDR:
-             (vortex_config_pkg::STARTUP_ADDR + 32'h0FFFFFFF)]  // 256MB range
+            [(vortex_config_pkg::STARTUP_ADDR >> 6) :
+             ((vortex_config_pkg::STARTUP_ADDR >> 6) + 26'h3FFFFF)]  // ~256MB
         };
     }
     
-    // Byte enable must have at least one bit set
-    // Zero byte enable is illegal
+    // Byte enable must have at least one bit set (64-bit field)
     constraint valid_byteen_c {
-        byteen != 8'h00;
+        byteen != '0;
     }
     
-    // Common byte enable patterns (soft constraint - can be overridden)
-    // Favors full-word and aligned accesses
+    // Common byte-enable patterns for a 64-byte cache line (soft — overridable)
     constraint reasonable_byteen_c {
         soft byteen inside {
-            8'hFF,  // Full 64-bit word (8 bytes)
-            8'h0F,  // Lower 32-bit word (4 bytes)
-            8'hF0,  // Upper 32-bit word (4 bytes)
-            8'h03,  // Byte 0-1 (halfword)
-            8'h0C,  // Byte 2-3 (halfword)
-            8'h30,  // Byte 4-5 (halfword)
-            8'hC0,  // Byte 6-7 (halfword)
-            8'h01,  // Byte 0
-            8'h02,  // Byte 1
-            8'h04,  // Byte 2
-            8'h08,  // Byte 3
-            8'h10,  // Byte 4
-            8'h20,  // Byte 5
-            8'h40,  // Byte 6
-            8'h80   // Byte 7
+            {64{1'b1}},                  // Full 64-byte cache line
+            64'h0000_0000_FFFF_FFFF,     // Lower 32 bytes
+            64'hFFFF_FFFF_0000_0000,     // Upper 32 bytes
+            64'h0000_0000_0000_00FF,     // First 8 bytes (doubleword)
+            64'hFF00_0000_0000_0000,     // Last 8 bytes
+            64'h0000_0000_0000_000F,     // First 4 bytes (word)
+            64'h0000_0000_0000_0003,     // First 2 bytes (halfword)
+            64'h0000_0000_0000_0001      // First byte
         };
     }
     
@@ -160,10 +143,10 @@ class mem_transaction extends uvm_sequence_item;
             return -1;
     endfunction
     
-    // Get the number of active bytes (for partial writes)
+    // Get the number of active bytes (for partial writes) — byteen is 64 bits
     function int get_active_bytes();
         int count = 0;
-        for (int i = 0; i < 8; i++) begin
+        for (int i = 0; i < 64; i++) begin
             if (byteen[i]) count++;
         end
         return count;
@@ -172,10 +155,12 @@ class mem_transaction extends uvm_sequence_item;
     // Get human-readable access size string
     function string get_access_size_string();
         case (get_active_bytes())
-            1: return "BYTE";
-            2: return "HALFWORD";
-            4: return "WORD";
-            8: return "DOUBLEWORD";
+            1:  return "BYTE";
+            2:  return "HALFWORD";
+            4:  return "WORD";
+            8:  return "DOUBLEWORD";
+            32: return "HALF_LINE";
+            64: return "FULL_LINE";
             default: return $sformatf("%0d BYTES", get_active_bytes());
         endcase
     endfunction
