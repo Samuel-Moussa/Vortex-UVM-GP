@@ -67,13 +67,12 @@ class axi_transaction extends uvm_sequence_item;
         AXI_SLVERR = 2'b10,
         AXI_DECERR = 2'b11
     } axi_resp_e;
-    
+
     //==========================================================================
     // Configuration Handle
     // Used to get parameterized values like AXI_ID_WIDTH
     //==========================================================================
     vortex_config cfg;
-    
     //==========================================================================
     // Transaction Fields - Common to Both Read and Write
     //==========================================================================
@@ -81,14 +80,12 @@ class axi_transaction extends uvm_sequence_item;
     // Transaction type selector
     rand axi_trans_type_e trans_type;
     
-    // Transaction ID for out-of-order support
-    // Width is parameterized from config (typically 4 bits = 16 IDs)
-    // Constrained to actual ID width to avoid overflow
-    rand bit [15:0] id;
+    // Transaction ID — AXI_ID_WIDTH = VX_MEM_TAG_WIDTH = 8 (256 IDs)
+    rand bit [7:0] id;
     
-    // Starting address of the transaction
-    // Must be aligned based on 'size' field
-    rand bit [31:0] addr;
+    // Starting address — 64-bit to cover both RV32 (32-bit) and RV64 (48-bit)
+    // RV32 upper bits constrained to 0 via cfg; stored wide to avoid truncation
+    rand bit [63:0] addr;
     
     // Burst length minus 1 (AXI4 encoding)
     // len=0 means 1 beat, len=255 means 256 beats
@@ -107,23 +104,18 @@ class axi_transaction extends uvm_sequence_item;
     // Only valid when trans_type == AXI_WRITE
     //==========================================================================
     
-    // Write data array - one entry per beat
-    // Size is (len + 1) - allocated in post_randomize()
-    rand bit [63:0] wdata[];
+    // Write data array — one entry per beat, 512-bit wide (VX_MEM_DATA_WIDTH=512)
+    rand bit [511:0] wdata[];
     
-    // Write strobe array - byte enables for each beat
-    // wstrb[i] = 1 means byte i is written
-    // Size is (len + 1) - allocated in post_randomize()
-    rand bit [7:0] wstrb[];
+    // Write strobe array — 64 bytes per 512-bit beat (VX_MEM_BYTEEN_WIDTH=64)
+    rand bit [63:0] wstrb[];
     
     //==========================================================================
     // Read-Specific Fields
-    // Only valid when trans_type == AXI_READ
-    // Populated by driver/monitor during response phase
     //==========================================================================
     
-    // Read data array - filled when R channel data arrives
-    bit [63:0] rdata[];
+    // Read data — 512-bit wide (VX_MEM_DATA_WIDTH=512)
+    bit [511:0] rdata[];
     
     // Read response array - one per beat (can have errors mid-burst)
     axi_resp_e rresp[];
@@ -167,14 +159,10 @@ class axi_transaction extends uvm_sequence_item;
     // Constraints
     //==========================================================================
     
-    // Constrain ID to configured width
-    // Prevents using IDs that don't exist in hardware
+    // ID is 8-bit fixed (AXI_ID_WIDTH = VX_MEM_TAG_WIDTH = 8)
+    // No additional constraint needed — field declaration enforces 8-bit range
     constraint valid_id_c {
-        if (cfg != null) {
-            id < (1 << cfg.AXI_ID_WIDTH);
-        } else {
-            id < 16; // Default to 4-bit IDs if no config provided
-        }
+        id < (1 << AXI_ID_WIDTH);  // AXI_ID_WIDTH = 8 from vortex_config_pkg
     }
     
     // Burst length must be valid AXI4 range
@@ -199,27 +187,22 @@ class axi_transaction extends uvm_sequence_item;
     }
     
     // AXI4 Protocol Requirement: Bursts cannot cross 4KB boundaries
-    // This constraint ensures start and end addresses are in same 4KB page
     constraint no_4kb_cross_c {
-        // Check that first and last byte are in same 4KB page
-        (addr & 32'hFFFFF000) == 
-        ((addr + ((len + 1) * (1 << size))) & 32'hFFFFF000);
+        (addr & 64'hFFFFFFFFFFFFF000) == 
+        ((addr + ((len + 1) * (1 << size))) & 64'hFFFFFFFFFFFFF000);
     }
     
     // Soft constraint for typical burst lengths
-    // Encourages common patterns but can be overridden
     constraint reasonable_burst_c {
         soft len inside {0, 1, 3, 7, 15}; // 1, 2, 4, 8, 16 beats
     }
     
     // Soft constraint for typical burst type
-    // INCR is most common in practice
     constraint typical_burst_type_c {
         soft burst == AXI_INCR;
     }
     
     // Data array size must match burst length
-    // Solver must create arrays before populating them
     constraint data_size_c {
         if (trans_type == AXI_WRITE) {
             wdata.size() == len + 1;
@@ -229,11 +212,10 @@ class axi_transaction extends uvm_sequence_item;
         solve len before wstrb;
     }
     
-    // Default to full byte enables (all lanes active)
-    // Can be overridden for partial writes
+    // Default to full byte enables — 64 bytes per 512-bit beat
     constraint full_strobes_c {
         foreach (wstrb[i]) {
-            soft wstrb[i] == 8'hFF; // All bytes enabled
+            soft wstrb[i] == 64'hFFFF_FFFF_FFFF_FFFF;
         }
     }
     
@@ -260,7 +242,6 @@ class axi_transaction extends uvm_sequence_item;
         super.new(name);
         completed = 0;
         error = 0;
-        cfg = null; // Will be populated by driver/monitor
     endfunction
     
     //==========================================================================
@@ -303,31 +284,21 @@ class axi_transaction extends uvm_sequence_item;
     endfunction
     
     // Calculates the address for a specific beat number
-    // Handles all three burst types correctly
-    // beat_num: 0 = first beat, 1 = second beat, etc.
-    function bit [31:0] get_next_addr(int beat_num);
-        bit [31:0] next_addr;
+    function bit [63:0] get_next_addr(int beat_num);
+        bit [63:0] next_addr;
         
         case (burst)
-            // FIXED: All beats use same address (FIFO access pattern)
             AXI_FIXED: begin
                 next_addr = addr;
             end
-            
-            // INCR: Each beat increments by transfer size
-            // Most common for normal memory accesses
             AXI_INCR: begin
                 next_addr = addr + (beat_num * get_bytes_per_beat());
             end
-            
-            // WRAP: Addresses wrap at burst boundary
-            // Used for cache line fills
             AXI_WRAP: begin
                 int wrap_boundary = get_num_beats() * get_bytes_per_beat();
                 int offset = (addr + (beat_num * get_bytes_per_beat())) % wrap_boundary;
                 next_addr = (addr & ~(wrap_boundary - 1)) | offset;
             end
-            
             default: next_addr = addr;
         endcase
         
@@ -335,12 +306,10 @@ class axi_transaction extends uvm_sequence_item;
     endfunction
     
     // Checks if burst violates 4KB boundary rule
-    // Should never return 1 if constraints are working correctly
-    // Useful for debugging constraint failures
     function bit crosses_4kb_boundary();
-        bit [31:0] start_page = addr & 32'hFFFFF000;
-        bit [31:0] end_addr = addr + get_total_bytes() - 1;
-        bit [31:0] end_page = end_addr & 32'hFFFFF000;
+        bit [63:0] start_page = addr & 64'hFFFFFFFFFFFFF000;
+        bit [63:0] end_addr   = addr + get_total_bytes() - 1;
+        bit [63:0] end_page   = end_addr & 64'hFFFFFFFFFFFFF000;
         return (start_page != end_page);
     endfunction
     
