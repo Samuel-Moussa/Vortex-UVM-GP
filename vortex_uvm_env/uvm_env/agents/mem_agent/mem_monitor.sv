@@ -143,23 +143,34 @@ class mem_monitor extends uvm_monitor;
         forever begin
             @(vif.monitor_cb);
             
-            // Guard against reset and X-states
+            // // Guard against reset and X-states
             if (!vif.reset_n) continue;
-            if ($isunknown(vif.monitor_cb.req_valid)) continue;
-            if ($isunknown(vif.monitor_cb.req_ready)) continue;
+            // if ($isunknown(vif.monitor_cb.req_valid)) continue;
+            // if ($isunknown(vif.monitor_cb.req_ready)) continue;
             
-            // Detect request handshake
-            if (vif.monitor_cb.req_valid && vif.monitor_cb.req_ready) begin
+            // // Detect request handshake
+            // if (vif.monitor_cb.req_valid && vif.monitor_cb.req_ready) begin
                 
                 // Create new transaction object
                 trans = mem_transaction::type_id::create("trans");
                 
-                // Capture all request fields from clocking block
-                trans.rw     = vif.monitor_cb.req_rw;
-                trans.addr   = vif.monitor_cb.req_addr;
-                trans.data   = vif.monitor_cb.req_data;
-                trans.byteen = vif.monitor_cb.req_byteen;
-                trans.tag    = vif.monitor_cb.req_tag;
+            //     // Capture all request fields from clocking block
+            //     trans.rw     = vif.monitor_cb.req_rw;
+            //     trans.addr   = vif.monitor_cb.req_addr;
+            //     trans.data   = vif.monitor_cb.req_data;
+            //     trans.byteen = vif.monitor_cb.req_byteen;
+            //     trans.tag    = vif.monitor_cb.req_tag;
+
+                            // AFTER (add [0] everywhere):
+                if ($isunknown(vif.monitor_cb.req_valid[0])) continue;
+                if ($isunknown(vif.monitor_cb.req_ready[0])) continue;
+
+                if (vif.monitor_cb.req_valid[0] && vif.monitor_cb.req_ready[0]) begin
+                    trans.rw     = vif.monitor_cb.req_rw[0];
+                    trans.addr   = vif.monitor_cb.req_addr[0];
+                    trans.data   = vif.monitor_cb.req_data[0];
+                    trans.byteen = vif.monitor_cb.req_byteen[0];
+                    trans.tag    = vif.monitor_cb.req_tag[0];
                 
                 // Record timing information
                 trans.req_time = $time;
@@ -203,22 +214,22 @@ class mem_monitor extends uvm_monitor;
             
             // Guard against reset and X-states
             if (!vif.reset_n) continue;
-            if ($isunknown(vif.monitor_cb.rsp_valid)) continue;
-            if ($isunknown(vif.monitor_cb.rsp_ready)) continue;
+            if ($isunknown(vif.monitor_cb.rsp_valid[0])) continue;
+            if ($isunknown(vif.monitor_cb.rsp_ready[0])) continue;
             
             // Detect response handshake
-            if (vif.monitor_cb.rsp_valid && vif.monitor_cb.rsp_ready) begin
+            if (vif.monitor_cb.rsp_valid[0] && vif.monitor_cb.rsp_ready[0]) begin
                 
                 // Capture response fields
-                tag = vif.monitor_cb.rsp_tag;
+                tag = vif.monitor_cb.rsp_tag[0];
                 
                 // Find matching request by tag
                 if (outstanding_trans.exists(tag)) begin
                     trans = outstanding_trans[tag];
                     
                     // Complete the transaction
-                    trans.rsp_data = vif.monitor_cb.rsp_data;
-                    trans.rsp_tag  = vif.monitor_cb.rsp_tag;
+                    trans.rsp_data = vif.monitor_cb.rsp_data[0];
+                    trans.rsp_tag  = vif.monitor_cb.rsp_tag[0];
                     trans.rsp_time = $time;
                     
                     // Calculate cycle-accurate latency
