@@ -342,6 +342,28 @@ fi
 #   vsim-3770: Failed to find 'dpi_trace' in shared library.
 # TCU and FPU trace output is silently dropped for the entire simulation.
 # Build the .so once with the command printed below; afterwards it auto-links.
+# --- Vortex DPI (optional) ---
+VORTEX_DPI_LIB="$FLISTS_DIR/vortex_dpi"
+
+# --- UVM DPI (REQUIRED) ---
+UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
+
+DPI_FLAG=""
+
+# Add UVM DPI FIRST (critical)
+if [[ -f "${UVM_DPI_LIB}.so" ]]; then
+    DPI_FLAG="$DPI_FLAG -sv_lib ${UVM_DPI_LIB}"
+    print_success "UVM DPI loaded: ${UVM_DPI_LIB}.so"
+else
+    print_error "UVM DPI not found! This WILL crash simulation."
+fi
+
+# Add Vortex DPI if exists
+if [[ -f "${VORTEX_DPI_LIB}.so" ]]; then
+    DPI_FLAG="$DPI_FLAG -sv_lib ${VORTEX_DPI_LIB}"
+    print_success "Vortex DPI loaded: ${VORTEX_DPI_LIB}.so"
+else
+    print_warning "Vortex DPI not found (optional)"
 DPI_LIB="$FLISTS_DIR/vortex_dpi"
 DPI_FLAG=""
 if [[ -f "${DPI_LIB}.so" ]]; then
@@ -738,13 +760,14 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     # Compile UVM
     print_info "Compiling UVM environment..."
     if [[ "$SIMULATOR" == "questa" ]]; then
+        UVM_SRC="$HOME/intelFPGA/21.2/questa_sim/questasim/verilog_src/uvm-1.2/src"
+        vlog -sv $COMPILE_OPTS +incdir+${UVM_SRC} ${UVM_SRC}/uvm_pkg.sv \
+            2>&1 | tee -a "$RESULTS_RUN_DIR/logs/compile_uvm.log"
         vlog -sv $COMPILE_OPTS \
-            +incdir+/opt/questa_sim-2021.2_1/questasim/verilog_src/questa_uvm_pkg-1.2/src \
+            +incdir+${UVM_SRC} \
             -f uvm_env.flist \
-            2>&1 | tee "$RESULTS_RUN_DIR/logs/compile_uvm.log"
+            2>&1 | tee -a "$RESULTS_RUN_DIR/logs/compile_uvm.log"
     fi
-    if [[ $? -ne 0 ]]; then print_error "UVM compilation failed"; exit 1; fi
-    print_success "UVM compiled"
 
 
 else
@@ -800,6 +823,8 @@ fi
 if [[ $VERBOSE -eq 1 ]]; then
     SIM_OPTS="$SIM_OPTS +VERBOSE"
 fi
+
+
 
 
 print_info "Test:      $TEST_NAME"

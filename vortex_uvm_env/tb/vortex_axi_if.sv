@@ -19,13 +19,16 @@
 //   - slave_cb:   All 'input' (TB drives directly in always_ff/initial)
 //   - monitor_cb: All 'input' (passive observation)
 //
+// Fixed issues:
+//   - AXI4 violations (AWVALID drop, WLAST timing, ID ordering, BVALID timing) pass silently. No SVA properties on any channel.
+//
 // Author: Vortex UVM Team
 ////////////////////////////////////////////////////////////////////////////////
 
 `ifndef VORTEX_AXI_IF_SV
 `define VORTEX_AXI_IF_SV
 
-interface vortex_axi_if #(
+interface automatic vortex_axi_if #(
     parameter ADDR_WIDTH = 32,   // byte address (32 RV32, 48 RV64)
     parameter DATA_WIDTH = 512,  // FIX: was 64 — must be VX_MEM_DATA_WIDTH = 512
     parameter ID_WIDTH   = 8     // FIX: was 4  — must be VX_MEM_TAG_WIDTH  = 8
@@ -429,6 +432,139 @@ endclocking
     axi_protocol_cg axi_cov = new();
 
     // No initial signal assignments — signals start X, driven by DUT/TB only.
+
+    //==========================================================================
+    // ADDITIONAL SVA PROPERTIES (wlast_before_bvalid, rlast_beat_count,
+    //                            id_stable, bvalid_after_wlast)
+    //==========================================================================
+
+    // -----------------------------------------------------------------------
+    // AW Channel: AWID must remain stable while AWVALID and not yet accepted
+    // -----------------------------------------------------------------------
+    property awid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (awvalid && !awready) |=> $stable(awid);
+    endproperty
+
+    assert_awid_stable: assert property (awid_stable_p)
+        else $error("[VORTEX_AXI_IF] AWID changed before AWREADY handshake!");
+
+    // -----------------------------------------------------------------------
+    // AR Channel: ARID must remain stable while ARVALID and not yet accepted
+    // -----------------------------------------------------------------------
+    property arid_stable_p;
+        @(posedge clk) disable iff (!reset_n)
+        (arvalid && !arready) |=> $stable(arid);
+    endproperty
+
+    assert_arid_stable: assert property (arid_stable_p)
+        else $error("[VORTEX_AXI_IF] ARID changed before ARREADY handshake!");
+
+    // -----------------------------------------------------------------------
+    // W Channel: WLAST must assert on the final beat of the burst.
+    // Specifically: once WVALID goes high, WLAST must eventually assert
+    // before or when WVALID drops after the handshake completes.
+    // This property checks WLAST is not held high across two separate
+    // write handshakes (i.e. it deasserts after the beat it marks).
+    // -----------------------------------------------------------------------
+    property wlast_deasserts_after_beat_p;
+        @(posedge clk) disable iff (!reset_n)
+        (wvalid && wready && wlast) |=> !wlast;
+    endproperty
+
+    assert_wlast_deasserts: assert property (wlast_deasserts_after_beat_p)
+        else $error("[VORTEX_AXI_IF] WLAST held high across consecutive beats!");
+
+    // -----------------------------------------------------------------------
+    // B Channel: BVALID must not assert until WLAST has been accepted.
+    // Track whether the write data burst has completed using a flag.
+    // BVALID before WLAST handshake = protocol violation.
+    // -----------------------------------------------------------------------
+    logic wlast_accepted;
+
+    always_ff @(posedge clk or negedge reset_n) begin
+        if (!reset_n)
+            wlast_accepted <= 1'b0;
+        else if (wvalid && wready && wlast)
+            wlast_accepted <= 1'b1;
+        else if (bvalid && bready)
+            wlast_accepted <= 1'b0;
+    end
+
+    property bvalid_after_wlast_p;
+        @(posedge clk) disable iff (!reset_n)
+        $rose(bvalid) |-> wlast_accepted;
+    endproperty
+
+    assert_bvalid_after_wlast: assert property (bvalid_after_wlast_p)
+        else $error("[VORTEX_AXI_IF] BVALID asserted before WLAST accepted!");
+
+    // -----------------------------------------------------------------------
+    // R Channel: RLAST beat count check.
+    // RLAST must assert exactly on beat number (arlen+1), not before.
+    // Track beats per burst and verify rlast only fires on the last beat.
+    // -----------------------------------------------------------------------
+    logic [7:0] r_beat_count;
+    logic [7:0] r_burst_len;
+
+    always_ff @(posedge clk or negedge reset_n) begin
+        if (!reset_n) begin
+            r_beat_count <= 8'h0;
+            r_burst_len  <= 8'h0;
+        end else begin
+            // Latch burst length on AR handshake
+            if (arvalid && arready)
+                r_burst_len <= arlen;
+            // Count R beats
+            if (rvalid && rready) begin
+                if (rlast)
+                    r_beat_count <= 8'h0;
+                else
+                    r_beat_count <= r_beat_count + 1;
+            end
+        end
+    end
+
+    // RLAST must not assert before the last beat
+    property rlast_not_early_p;
+        @(posedge clk) disable iff (!reset_n)
+        (rvalid && rready && rlast) |-> (r_beat_count == r_burst_len);
+    endproperty
+
+    // RLAST must assert on the last beat (no silent extra beats)
+    property rlast_on_last_beat_p;
+        @(posedge clk) disable iff (!reset_n)
+        (rvalid && rready && !rlast) |-> (r_beat_count < r_burst_len);
+    endproperty
+
+    assert_rlast_not_early: assert property (rlast_not_early_p)
+        else $error("[VORTEX_AXI_IF] RLAST asserted early! beat=%0d expected=%0d",
+                    r_beat_count, r_burst_len);
+
+    assert_rlast_on_last_beat: assert property (rlast_on_last_beat_p)
+        else $error("[VORTEX_AXI_IF] Beat after RLAST expected but more beats present!");
+
+    // -----------------------------------------------------------------------
+    // W Channel: WVALID must not assert before AW handshake has occurred.
+    // AXI4 allows W before AW but this is optional — for Vortex which always
+    // sends AW before W, flag any violation as a warning-level cover.
+    // -----------------------------------------------------------------------
+    logic aw_accepted;
+
+    always_ff @(posedge clk or negedge reset_n) begin
+        if (!reset_n)
+            aw_accepted <= 1'b0;
+        else if (awvalid && awready)
+            aw_accepted <= 1'b1;
+        else if (wvalid && wready && wlast)
+            aw_accepted <= 1'b0;
+    end
+
+    // Cover point: W before AW (legal in AXI4 but unexpected for Vortex)
+    cover_w_before_aw: cover property (
+        @(posedge clk) disable iff (!reset_n)
+        $rose(wvalid) && !aw_accepted
+    );
 
 endinterface : vortex_axi_if
 
