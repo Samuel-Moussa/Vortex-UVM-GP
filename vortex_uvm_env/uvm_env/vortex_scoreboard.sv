@@ -265,6 +265,8 @@ class vortex_scoreboard extends uvm_scoreboard;
                 tr.busy, tr.ebreak_detected, tr.cycle_count), UVM_DEBUG)
     if (tr.ebreak_detected && !ebreak_seen) begin
       ebreak_seen = 1;
+      if (cfg != null && cfg.ebreak_event != null)
+        cfg.ebreak_event.trigger();
       `uvm_info("SCOREBOARD",
         "EBREAK detected — running SimX and comparing results.", UVM_MEDIUM)
       run_final_comparison();
