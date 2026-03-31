@@ -547,3 +547,9 @@ class vAddr_t
 #endif
 
 } // namespace vortex
+
+#ifdef MEM_DUMP_ENABLE
+#include <cstdint>
+#include <string>
+void dump_raw_dmem(const uint8_t* mem_ptr, size_t mem_bytes, const std::string &out_path);
+#endif

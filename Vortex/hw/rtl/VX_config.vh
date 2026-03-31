@@ -559,7 +559,7 @@
 
 // Memory Request Queue Size
 `ifndef ICACHE_MREQ_SIZE
-`define ICACHE_MREQ_SIZE 4
+`define ICACHE_MREQ_SIZE 16
 `endif
 
 // Memory Response Queue Size
@@ -620,12 +620,12 @@
 
 // Memory Request Queue Size
 `ifndef DCACHE_MREQ_SIZE
-`define DCACHE_MREQ_SIZE 4
+`define DCACHE_MREQ_SIZE 16
 `endif
 
 // Memory Response Queue Size
 `ifndef DCACHE_MRSQ_SIZE
-`define DCACHE_MRSQ_SIZE 4
+`define DCACHE_MRSQ_SIZE 16
 `endif
 
 // Number of Associative Ways

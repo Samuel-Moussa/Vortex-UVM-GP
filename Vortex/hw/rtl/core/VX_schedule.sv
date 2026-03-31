@@ -227,7 +227,21 @@ module VX_schedule import VX_gpu_pkg::*; #(
             wspawn.valid    <=  0;
 
             // activate first warp
-            warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
+           // warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
+
+                   // DEBUG: Print startup_addr at reset ⬇️
+        `ifdef SIMULATION
+        $display("%t: *** VX_schedule[%0d] RESET: base_dcrs.startup_addr=0x%h ***", 
+                 $time, CORE_ID, base_dcrs.startup_addr);
+        `endif
+        
+        warp_pcs[0]     <= from_fullPC(base_dcrs.startup_addr);
+        
+        `ifdef SIMULATION
+        $display("%t: *** VX_schedule[%0d] RESET: warp_pcs[0]=0x%h (from_fullPC=0x%h) ***", 
+                 $time, CORE_ID, warp_pcs[0], from_fullPC(base_dcrs.startup_addr));
+        `endif
+
             active_warps[0] <= 1;
             thread_masks[0][0] <= 1;
             is_single_warp  <= 1;

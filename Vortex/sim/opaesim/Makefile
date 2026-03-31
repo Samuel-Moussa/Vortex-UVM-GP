@@ -8,7 +8,7 @@ AFU_DIR := $(RTL_DIR)/afu/opae
 
 CXXFLAGS += -std=c++17 -Wall -Wextra -Wfatal-errors -Wno-array-bounds
 CXXFLAGS += -fPIC -Wno-maybe-uninitialized
-CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(DESTDIR)
+CXXFLAGS += -I$(SRC_DIR) -I$(ROOT_DIR)/hw -I$(SW_COMMON_DIR) -I$(ROOT_DIR)/sim/simx -I$(DESTDIR)
 CXXFLAGS += -I/$(THIRD_PARTY_DIR)/softfloat/source/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/spdlog/include
 CXXFLAGS += -I$(THIRD_PARTY_DIR)/ramulator/ext/yaml-cpp/include
@@ -79,7 +79,7 @@ RTL_PKGS += $(RTL_DIR)/VX_trace_pkg.sv
 TOP = vortex_afu_shim
 
 VL_FLAGS += --language 1800-2009 --assert -Wall -Wpedantic
-VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO
+VL_FLAGS += -Wno-DECLFILENAME -Wno-REDEFMACRO -Wno-UNUSEDPARAM -Wno-PROCASSINIT -fno-dfg -Wno-UNUSEDPARAM -Wno-PROCASSINIT -fno-dfg
 VL_FLAGS += --x-initial unique --x-assign unique
 VL_FLAGS += -DSIMULATION -DSV_DPI
 VL_FLAGS += -DXLEN_$(XLEN)
