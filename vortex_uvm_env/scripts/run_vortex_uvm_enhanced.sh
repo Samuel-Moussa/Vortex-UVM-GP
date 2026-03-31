@@ -709,6 +709,10 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     COMPILE_OPTS="$COMPILE_OPTS +define+NUM_CORES=$NUM_CORES"
     COMPILE_OPTS="$COMPILE_OPTS +define+NUM_WARPS=$NUM_WARPS"
     COMPILE_OPTS="$COMPILE_OPTS +define+NUM_THREADS=$NUM_THREADS"
+    COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MSHR_SIZE=16"
+    COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MSHR_SIZE=16"
+    COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MREQ_SIZE=16"
+    COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MREQ_SIZE=16"
 
 
     if [[ "$MEMORY_INTERFACE" == "axi" ]]; then
@@ -847,6 +851,12 @@ UVM_FATALS=$(grep -c "^# UVM_FATAL /" "$LOG_FILE" 2>/dev/null || true)
 UVM_FATALS=${UVM_FATALS:-0}
 REAL_UVM_ERRORS=$((UVM_ERRORS > 2 ? UVM_ERRORS - 2 : UVM_ERRORS))
 
+# Count RTL assertion errors — lines starting with "# ** Error:" in the log.
+# These are real DUT failures that must cause the run to be marked FAILED
+# even when UVM itself reports TEST PASSED (UVM doesn't see RTL asserts).
+RTL_ERRORS=$(grep -c "^# \*\* Error:" "$LOG_FILE" 2>/dev/null || true)
+RTL_ERRORS=${RTL_ERRORS:-0}
+
 
 if [[ $SIM_EXIT_CODE -ne 0 ]]; then
     print_error "Simulation crashed (exit code: $SIM_EXIT_CODE)"
@@ -872,9 +882,16 @@ elif grep -q "^\# \*\*\* TEST FAILED" "$LOG_FILE" 2>/dev/null; then
     EXIT_CODE=1
 
 
+elif [[ $RTL_ERRORS -gt 0 ]]; then
+    FIRST_RTL=$(grep "^# \*\* Error:" "$LOG_FILE" | head -1 | sed 's/^# \*\* Error: *//')
+    print_error "TEST FAILED — $RTL_ERRORS RTL assertion error(s)"
+    print_error "  First: $FIRST_RTL"
+    TEST_STATUS="FAILED"
+    EXIT_CODE=2
+
 elif grep -qE "UVM_ERROR :[[:space:]]+0" "$LOG_FILE" 2>/dev/null && \
      grep -q "TEST PASSED\|SMOKE TEST PASSED" "$LOG_FILE" 2>/dev/null; then
-    print_success "TEST PASSED ✓"
+    print_success "TEST PASSED ✓  (0 UVM errors, 0 RTL errors)"
     TEST_STATUS="PASSED"
     EXIT_CODE=0
 
