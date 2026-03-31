@@ -13,6 +13,16 @@
 //   that is forwarded from the internal monitor.  The env connects these
 //   directly to the scoreboard exports and coverage imps.
 //
+// FIX (March 2026):
+//   connect_phase virtual sequencer wiring for axi_agent, dcr_agent, and
+//   host_agent was missing the get_is_active() guard.  When any of these
+//   agents runs in PASSIVE mode their m_sequencer is never created
+//   (build_phase only creates it when UVM_ACTIVE), so assigning a null
+//   handle to the virtual sequencer caused any virtual sequence using
+//   p_sequencer.m_axi_sequencer / m_dcr_sequencer / m_host_sequencer to
+//   crash at runtime.  All three assignments now mirror the mem_agent
+//   pattern: null-check AND active-check AND sequencer-null-check.
+//
 // Author: Vortex UVM Team
 // Date: December 2025
 ////////////////////////////////////////////////////////////////////////////////
@@ -180,13 +190,19 @@ class vortex_env extends uvm_env;
         m_mem_agent.m_sequencer != null)
       m_virtual_sequencer.m_mem_sequencer = m_mem_agent.m_sequencer;
 
-    if (m_axi_agent != null && m_axi_agent.m_sequencer != null)
+    if (m_axi_agent  != null &&
+        m_axi_agent.get_is_active()  == UVM_ACTIVE &&
+        m_axi_agent.m_sequencer  != null)
       m_virtual_sequencer.m_axi_sequencer = m_axi_agent.m_sequencer;
 
-    if (m_dcr_agent != null && m_dcr_agent.m_sequencer != null)
+    if (m_dcr_agent  != null &&
+        m_dcr_agent.get_is_active()  == UVM_ACTIVE &&
+        m_dcr_agent.m_sequencer  != null)
       m_virtual_sequencer.m_dcr_sequencer = m_dcr_agent.m_sequencer;
 
-    if (m_host_agent != null && m_host_agent.m_sequencer != null)
+    if (m_host_agent != null &&
+        m_host_agent.get_is_active() == UVM_ACTIVE &&
+        m_host_agent.m_sequencer != null)
       m_virtual_sequencer.m_host_sequencer = m_host_agent.m_sequencer;
 
     // ------------------------------------------------------------------
