@@ -83,8 +83,8 @@ class vortex_smoke_test extends vortex_base_test;
         // If you need different values, recompile RTL with +define+NUM_WARPS=N.
         // Leaving them at the values set by set_defaults() / apply_plusargs().
         
-        cfg.enable_scoreboard = 0;
-        cfg.enable_coverage   = 0;
+        cfg.enable_scoreboard = 1;
+        cfg.enable_coverage   = 1;
         cfg.simx_enable       = 0;
         // DO NOT override cfg.axi_agent_enable here!
         // apply_plusargs() already set it correctly from +USE_AXI_WRAPPER:
