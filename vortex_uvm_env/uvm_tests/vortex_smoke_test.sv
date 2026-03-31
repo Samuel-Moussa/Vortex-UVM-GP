@@ -1,3 +1,19 @@
+// ////////////////////////////////////////////////////////////////////////////////
+// // File: vortex_smoke_test.sv - FINAL WORKING VERSION
+// // Description: Complete Smoke Test with Program Loading
+// //
+// // ALL BUGS FIXED:
+// // ===============
+// // 1. ✅ DCR clocking block usage (race conditions eliminated)
+// // 2. ✅ DCR protocol compliance (deassert between writes)
+// // 3. ✅ Correct DCR addresses (byte addressing: 0x004, 0x008)
+// // 4. ✅ PROGRAM LOADING (critical - was missing!)
+// //
+// // Author: Vortex UVM Team  
+// // Date: February 2026
+// ////////////////////////////////////////////////////////////////////////////////
+
+
 ////////////////////////////////////////////////////////////////////////////////
 // File: vortex_smoke_test.sv - FINAL WORKING VERSION (TB_TOP DCR Edition)
 // Description: Complete Smoke Test with Program Loading
