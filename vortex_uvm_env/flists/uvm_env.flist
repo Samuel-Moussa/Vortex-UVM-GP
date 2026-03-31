@@ -2,91 +2,56 @@
 # Compilation order is critical - packages first, then interfaces, then components
 
 # Set UVM environment base directory
++incdir+$UVM_HOME
 +incdir+$VORTEX_UVM_HOME/tb
 +incdir+$VORTEX_UVM_HOME/uvm_env
 +incdir+$VORTEX_UVM_HOME/uvm_env/agents/mem_agent
 +incdir+$VORTEX_UVM_HOME/uvm_tests
 
-# ============================================================================
-# 1. TESTBENCH CONFIGURATION FILES (Must come first)
-# ============================================================================
-$VORTEX_UVM_HOME/tb/VX_config.vh
-$VORTEX_UVM_HOME/tb/VX_define.vh
-$VORTEX_UVM_HOME/tb/VX_platform.vh
-$VORTEX_UVM_HOME/tb/VX_types.vh
-$VORTEX_UVM_HOME/tb/VX_scope.vh
+# 1. UVM (compiled separately first, already done)
+
+# 2. Config package
 $VORTEX_UVM_HOME/uvm_env/vortex_config.sv
 
-# ============================================================================
-# 2. TESTBENCH INTERFACES (Before any modules that use them)
-# ============================================================================
-$VORTEX_UVM_HOME/tb/vortex_if.sv
+# 3. Interfaces
 $VORTEX_UVM_HOME/tb/vortex_axi_if.sv
-$VORTEX_UVM_HOME/tb/vortex_dcr_if.sv
 $VORTEX_UVM_HOME/tb/vortex_mem_if.sv
+$VORTEX_UVM_HOME/tb/vortex_dcr_if.sv
 $VORTEX_UVM_HOME/tb/vortex_status_if.sv
-# ============================================================================
-# 3. TESTBENCH MEMORY MODEL
-# ============================================================================
-$VORTEX_UVM_HOME/tb/mem_model.sv
+$VORTEX_UVM_HOME/tb/vortex_if.sv
 
-# ============================================================================
-# 4. AGENT PACKAGES (Transactions, Sequences, Drivers, Monitors)
-# ============================================================================
+# 4. Memory model (standalone)
+# $VORTEX_UVM_HOME/tb/mem_model.sv
 
-# --- Memory Agent Package ---
+# 5. Agent packages (each self-contained)
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent_pkg.sv
-
-# --- Host Agent Package ---
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent_pkg.sv
-
-# --- AXI Agent Package ---
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_agent_pkg.sv
-
-# --- DCR Agent Package ---
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent_pkg.sv
-
-# --- Status Agent Package ---
+$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent_pkg.sv
 $VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent_pkg.sv
-# ==============================================================================
-# AXI agent components
-# ==============================================================================
+
+# 6. Agent components (standalone, import their own pkg)
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_transaction.sv
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequences.sv
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequencer.sv
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_driver.sv
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_monitor.sv
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_agent.sv
-# ==============================================================================
-# DCR agent components
-# ==============================================================================
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_transaction.sv
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequences.sv
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequencer.sv
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_driver.sv
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_monitor.sv
 $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent.sv
-
-# ==============================================================================
-# Memory agent components
-# ==============================================================================
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_transaction.sv
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequences.sv
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequencer.sv
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_driver.sv
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_monitor.sv
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent.sv
-
-# ==============================================================================
-# Status agent components
-# ==============================================================================
 $VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_transaction.sv
 $VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_monitor.sv
 $VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent.sv
-
-# ==============================================================================
-# Host agent components
-# ==============================================================================
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_transaction.sv
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequences.sv
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequencer.sv
@@ -94,42 +59,150 @@ $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_driver.sv
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_monitor.sv
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent.sv
 
-# # ============================================================================
-# # 5. REFERENCE MODEL
-# # ============================================================================
-# $VORTEX_UVM_HOME/uvm_env/ref_model/simx_pkg.sv
-# $VORTEX_UVM_HOME/uvm_env/ref_model/simx_wrapper.sv
+# 7. Ref model
+#$VORTEX_UVM_HOME/uvm_env/ref_model/simx_pkg.sv
+#$VORTEX_UVM_HOME/uvm_env/ref_model/simx_wrapper.sv
 
-# ============================================================================
-# 6. UVM ENVIRONMENT PACKAGE (Contains all env components)
-# ============================================================================
+# 8. Env package (imports only, NO `includes of sv files)
 $VORTEX_UVM_HOME/uvm_env/vortex_env_pkg.sv
 
-# ==============================================================================
-# 11. ENVIRONMENT COMPONENTS
-# ==============================================================================
+# 9. Env components (standalone, in dependency order)
 $VORTEX_UVM_HOME/uvm_env/vortex_virtual_sequencer.sv
-#$VORTEX_UVM_HOME/uvm_env/vortex_scoreboard.sv
-#$VORTEX_UVM_HOME/uvm_env/vortex_coverage_collector.sv
+$VORTEX_UVM_HOME/uvm_env/vortex_scoreboard.sv
+$VORTEX_UVM_HOME/uvm_env/vortex_coverage_collector.sv
 $VORTEX_UVM_HOME/uvm_env/vortex_env.sv
 
-# ============================================================================
-# 7. UVM TEST PACKAGE (Contains all test classes)
-# ============================================================================
+# 10. Test package (imports only, NO `includes of sv files)
 $VORTEX_UVM_HOME/uvm_tests/vortex_test_pkg.sv
 
-
-# ==============================================================================
-# 14. TEST COMPONENTS
-# ==============================================================================
+# 11. Test components (standalone)
 $VORTEX_UVM_HOME/uvm_tests/vortex_base_test.sv
-#$VORTEX_UVM_HOME/uvm_tests/vortex_base_test_complex.sv
-#$VORTEX_UVM_HOME/uvm_tests/vortex_smoke_test.sv
-$VORTEX_UVM_HOME/uvm_tests/vortex_sanity_test.sv
-#$VORTEX_UVM_HOME/uvm_tests/functional_memory_test.sv
+#$VORTEX_UVM_HOME/uvm_tests/vortex_sanity_test.sv
+$VORTEX_UVM_HOME/uvm_tests/vortex_smoke_test.sv
 
-# ============================================================================
-# 8. TESTBENCH TOP MODULE (Must be last)
-# ============================================================================
+# 12. TB top (last)
 $VORTEX_UVM_HOME/tb/vortex_tb_top.sv
 
+
+
+# ################################################################################
+# # File: uvm_env.flist
+# # Description: UVM environment files in compilation order
+# # Usage: vlog -sv -f uvm_env.flist
+# ################################################################################
+
+# # ==============================================================================
+# # 1. GLOBAL CONFIGURATION (must be first)
+# # ==============================================================================
+# ../uvm_env/vortex_config.sv
+
+# # ==============================================================================
+# # 2. TESTBENCH INTERFACES (before packages that use them)
+# # ==============================================================================
+# ../tb/vortex_mem_if.sv
+# ../tb/vortex_dcr_if.sv
+# ../tb/vortex_axi_if.sv
+# ../tb/vortex_status_if.sv
+# ../tb/vortex_if.sv
+
+# # ==============================================================================
+# # 3. AGENT PACKAGES (MUST COME BEFORE AGENT COMPONENTS)
+# # ==============================================================================
+# ../uvm_env/agents/axi_agent/axi_agent_pkg.sv
+# ../uvm_env/agents/dcr_agent/dcr_agent_pkg.sv
+# ../uvm_env/agents/mem_agent/mem_agent_pkg.sv
+# ../uvm_env/agents/status_agent/status_agent_pkg.sv
+# ../uvm_env/agents/host_agent/host_agent_pkg.sv
+
+# # ==============================================================================
+# # 4. AXI AGENT COMPONENTS
+# # ==============================================================================
+# ../uvm_env/agents/axi_agent/axi_transaction.sv
+# ../uvm_env/agents/axi_agent/axi_sequences.sv
+# ../uvm_env/agents/axi_agent/axi_sequencer.sv
+# ../uvm_env/agents/axi_agent/axi_driver.sv
+# ../uvm_env/agents/axi_agent/axi_monitor.sv
+# ../uvm_env/agents/axi_agent/axi_agent.sv
+
+# # ==============================================================================
+# # 5. DCR AGENT COMPONENTS
+# # ==============================================================================
+# ../uvm_env/agents/dcr_agent/dcr_transaction.sv
+# ../uvm_env/agents/dcr_agent/dcr_sequences.sv
+# ../uvm_env/agents/dcr_agent/dcr_sequencer.sv
+# ../uvm_env/agents/dcr_agent/dcr_driver.sv
+# ../uvm_env/agents/dcr_agent/dcr_monitor.sv
+# ../uvm_env/agents/dcr_agent/dcr_agent.sv
+
+# # ==============================================================================
+# # 6. MEMORY AGENT COMPONENTS
+# # ==============================================================================
+# ../uvm_env/agents/mem_agent/mem_transaction.sv
+# ../uvm_env/agents/mem_agent/mem_sequences.sv
+# ../uvm_env/agents/mem_agent/mem_sequencer.sv
+# ../uvm_env/agents/mem_agent/mem_driver.sv
+# ../uvm_env/agents/mem_agent/mem_monitor.sv
+# ../uvm_env/agents/mem_agent/mem_agent.sv
+
+# # ==============================================================================
+# # 7. STATUS AGENT COMPONENTS
+# # ==============================================================================
+# ../uvm_env/agents/status_agent/status_transaction.sv
+# ../uvm_env/agents/status_agent/status_monitor.sv
+# ../uvm_env/agents/status_agent/status_agent.sv
+
+# # ==============================================================================
+# # 8. HOST AGENT COMPONENTS
+# # ==============================================================================
+# ../uvm_env/agents/host_agent/host_transaction.sv
+# ../uvm_env/agents/host_agent/host_sequences.sv
+# ../uvm_env/agents/host_agent/host_sequencer.sv
+# ../uvm_env/agents/host_agent/host_driver.sv
+# ../uvm_env/agents/host_agent/host_monitor.sv
+# ../uvm_env/agents/host_agent/host_agent.sv
+
+# # ==============================================================================
+# # 9. REFERENCE MODEL (if needed - uncomment when ready)
+# # ==============================================================================
+# # ../uvm_env/ref_model/simx_pkg.sv
+# # ../uvm_env/ref_model/simx_wrapper.sv
+
+# # ==============================================================================
+# # 10. ENVIRONMENT PACKAGE (depends on all agent packages)
+# # ==============================================================================
+# ../uvm_env/vortex_env_pkg.sv
+
+# # ==============================================================================
+# # 11. ENVIRONMENT COMPONENTS
+# # ==============================================================================
+# ../uvm_env/vortex_virtual_sequencer.sv
+# ../uvm_env/vortex_scoreboard.sv
+# ../uvm_env/vortex_coverage_collector.sv
+# ../uvm_env/vortex_env.sv
+
+# # # ==============================================================================
+# # # 12. STANDALONE & VIRTUAL SEQUENCES
+# # # ==============================================================================
+# # ../uvm_env/sequences/vortex_base_sequence.sv
+# # ../uvm_env/sequences/mem_write_read_sequence.sv
+# # ../uvm_env/sequences/vortex_virtual_sequence.sv
+
+# # ==============================================================================
+# # 13. TEST PACKAGE (depends on environment package)
+# # ==============================================================================
+# ../uvm_tests/vortex_test_pkg.sv
+
+# # ==============================================================================
+# # 14. TEST COMPONENTS
+# # ==============================================================================
+# ../uvm_tests/vortex_base_test.sv
+# #../uvm_tests/vortex_base_test_complex.sv
+# #../uvm_tests/vortex_smoke_test.sv
+# ../uvm_tests/vortex_sanity_test.sv
+# #../uvm_tests/functional_memory_test.sv
+
+# # ==============================================================================
+# # 15. MEMORY MODEL & TESTBENCH TOP (MUST BE LAST)
+# # ==============================================================================
+# ../tb/mem_model.sv
+# ../tb/vortex_tb_top.sv

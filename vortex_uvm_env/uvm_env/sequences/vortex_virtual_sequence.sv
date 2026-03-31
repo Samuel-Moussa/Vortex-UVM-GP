@@ -76,16 +76,61 @@ class vortex_virtual_sequence extends uvm_sequence;
     
     //==========================================================================
     // Helper Method: Wait for Execution Complete
-    // Waits for status_agent to detect EBREAK
+    //
+    // Blocks until the DUT signals EBREAK (kernel execution finished).
+    //
+    // Mechanism:
+    //   vortex_scoreboard.write_status() calls cfg.ebreak_event.trigger()
+    //   the moment it observes ebreak_detected == 1 from the status_agent
+    //   monitor.  This task waits on that event, so it unblocks at exactly
+    //   the simulation time the EBREAK is seen — no polling, no fixed delay.
+    //
+    // Timeout:
+    //   A parallel watchdog converts cfg.test_timeout_cycles to nanoseconds
+    //   (assuming 10 ns/cycle = 100 MHz default) and fires uvm_error if the
+    //   DUT never signals EBREAK.  This keeps the test from hanging forever
+    //   while still reporting a clean failure.
     //==========================================================================
     virtual task wait_for_execution_complete();
-        // TODO: Implement via status_agent event or callback
-        `uvm_info("VIRT_SEQ", "Waiting for execution to complete...", UVM_MEDIUM)
-        
-        // Placeholder: In real implementation, wait for status_agent event
-        #10us;
-        
-        `uvm_info("VIRT_SEQ", "Execution complete", UVM_MEDIUM)
+        int unsigned timeout_ns;
+
+        if (cfg == null) begin
+            `uvm_fatal("VIRT_SEQ",
+                "wait_for_execution_complete() called but cfg is null — "
+                "did pre_body() run and find a config?")
+        end
+
+        if (cfg.ebreak_event == null) begin
+            `uvm_fatal("VIRT_SEQ",
+                "cfg.ebreak_event is null — was vortex_config created correctly?")
+        end
+
+        // 10 ns per cycle at 100 MHz; adjust if your CLK_PERIOD_NS differs
+        timeout_ns = cfg.test_timeout_cycles * 10;
+
+        `uvm_info("VIRT_SEQ",
+            $sformatf("Waiting for EBREAK (timeout = %0d cycles / %0d ns)...",
+                      cfg.test_timeout_cycles, timeout_ns),
+            UVM_MEDIUM)
+
+        fork
+            // Branch 1 — wait for the ebreak event from the scoreboard
+            begin
+                cfg.ebreak_event.wait_trigger();
+                `uvm_info("VIRT_SEQ",
+                    "EBREAK event received — DUT execution complete", UVM_MEDIUM)
+            end
+
+            // Branch 2 — timeout watchdog
+            begin
+                #(timeout_ns * 1ns);
+                `uvm_error("VIRT_SEQ",
+                    $sformatf("wait_for_execution_complete() timed out after "
+                              "%0d cycles (%0d ns) — DUT never signalled EBREAK",
+                              cfg.test_timeout_cycles, timeout_ns))
+            end
+        join_any
+        disable fork;
     endtask
     
 endclass : vortex_virtual_sequence
