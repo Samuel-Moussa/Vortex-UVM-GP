@@ -34,16 +34,16 @@ The UVM environment will consist of the following key components:
 
 ## 4. Testcase Plan
 
-| Test Name                      | Description                                                                 | Priority |
-| ------------------------------ | --------------------------------------------------------------------------- | -------- |
-| `smoke_test`                   | Basic reset and DCR write/read test.                                        | High     |
-| `functional_memory_test`       | Verifies memory read/write operations through the memory interface.         | High     |
-| `axi_memory_test`              | Verifies memory read/write operations through the AXI4 interface.           | High     |
-| `kernel_launch_test`           | Tests the ability to launch a simple kernel (e.g., `vecadd`).               | High     |
-| `warp_scheduling_test`         | Verifies correct warp scheduling and context switching.                     | Medium   |
-| `barrier_sync_test`            | Tests barrier synchronization among threads.                                | Medium   |
+| Test Name                        | Description                                                                  | Priority |
+| ------------------------------   | ---------------------------------------------------------------------------  | -------- |
+| `smoke_test`                     | Basic reset and DCR write/read test.                                         | High     |
+| `functional_memory_test`         | Verifies memory read/write operations through the memory interface.          | High     |
+| `axi_memory_test`                | Verifies memory read/write operations through the AXI4 interface.            | High     |
+| `kernel_launch_test`             | Tests the ability to launch a simple kernel (e.g., `vecadd`).                | High     |
+| `warp_scheduling_test`           | Verifies correct warp scheduling and context switching.                      | Medium   |
+| `barrier_sync_test`              | Tests barrier synchronization among threads.                                 | Medium   |
 | `random_instruction_stress_test` | Executes a constrained-random stream of instructions to stress the pipeline. | Medium   |
-| `cache_coherence_test`         | Verifies coherence between L1, L2, and L3 caches.                           | Low      |
+| `cache_coherence_test`           | Verifies coherence between L1, L2, and L3 caches.                            | Low      |
 
 ## 5. Coverage Goals
 

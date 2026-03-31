@@ -118,16 +118,30 @@ class mem_model extends uvm_object;
   endfunction
 
   // --------------------------------------------------------------------------
-  // Load from Verilog hex (readmemh-style words with @addr markers)
-  // Notes:
-  // - Accepts lines like "@00000000" then 32-bit words per line (little-endian)
-  // - base_addr allows remapping the file's 0 to any address
+  // Load from Verilog hex file with @addr markers.
+  //
+  // Supports TWO token formats — auto-detected per line:
+  //
+  //   BYTE format  (objcopy --verilog-data-width=1):
+  //     @00000000
+  //     F1 40 22 F3 82 63 43 01 03 97 00 62 83 93 00 00
+  //     Each space-separated token is one byte.  Stored byte-by-byte.
+  //     This is the standard Vortex program format.
+  //
+  //   WORD format  (32-bit word per line, legacy):
+  //     @80000000
+  //     F32240F1
+  //     Each token is a 32-bit little-endian word.
+  //
+  //   Detection: token length <= 2 hex chars → BYTE; else → WORD.
+  //
+  // base_addr is added to every @-address from the file, allowing
+  // relocation (e.g. file's @0 → loaded at 0x80000000).
   // --------------------------------------------------------------------------
   function int load_hex_file(string file_path, bit [63:0] base_addr = 64'h0);
     int fd;
     string line;
-    bit [31:0] addr_off = 32'h0;
-    bit [31:0] word;
+    bit [63:0] addr_off = 64'h0;   // FIX: was bit[31:0] — truncated >4GB addrs
     int bytes_loaded = 0;
 
     fd = $fopen(file_path, "r");
@@ -137,31 +151,89 @@ class mem_model extends uvm_object;
     end
 
     while (!$feof(fd)) begin
+      int line_len;
       void'($fgets(line, fd));
-      if (line.len() == 0) continue;
+      line_len = line.len();
+      if (line_len == 0) continue;
 
-      // Skip comments starting with // or #
-      if ((line.len() >= 2 && line.tolower()[0] == "/" && line.tolower()[1] == "/") ||
-          (line.tolower()[0] == "#"))
+      // Strip trailing CR / LF
+      while (line_len > 0 &&
+             (line[line_len-1] == "\n" || line[line_len-1] == "\r")) begin
+        line = line.substr(0, line_len-2);
+        line_len = line.len();
+      end
+      if (line_len == 0) continue;
+
+      // Skip comments: // or #
+      if ((line_len >= 2 && line[0] == "/" && line[1] == "/") ||
+          (line[0] == "#"))
         continue;
 
-      // Address marker: @XXXXXXXX
-      if (line.tolower()[0] == "@") begin
-        //void'($sscanf(line.substr(1), "%h", addr_off));
+      // Address marker: @XXXXXXXX (up to 16 hex digits for full 64-bit)
+      if (line[0] == "@") begin
         void'($sscanf(line, "@%h", addr_off));
         continue;
       end
 
-      // 32-bit data word
-      if ($sscanf(line, "%h", word) == 1) begin
-        write_word(base_addr + addr_off, word);
-        addr_off += 4;
-        bytes_loaded += 4;
+      // ---------------------------------------------------------------
+      // Data line: tokenise on whitespace, store each token.
+      // Detect format from first token's char-count:
+      //   <= 2  → BYTE  (write_byte, advance addr by 1)
+      //   >  2  → WORD  (write_word little-endian, advance addr by 4)
+      // ---------------------------------------------------------------
+      begin
+        int ci;
+        int tok_start;
+        bit format_detected;
+        bit is_byte_fmt;
+
+        format_detected = 0;
+        is_byte_fmt     = 1;
+        tok_start       = 0;
+        ci              = 0;
+
+        while (ci <= line_len) begin
+          bit is_sep;
+          int tok_len;
+          string tok;
+
+          is_sep = (ci == line_len) ||
+                   (line[ci] == " ") || (line[ci] == "\t");
+
+          if (!is_sep) begin ci++; continue; end
+
+          tok_len = ci - tok_start;
+          ci++;
+
+          if (tok_len == 0) begin tok_start = ci; continue; end
+
+          tok = line.substr(tok_start, tok_start + tok_len - 1);
+          tok_start = ci;
+
+          if (!format_detected) begin
+            is_byte_fmt     = (tok_len <= 2);
+            format_detected = 1;
+          end
+
+          if (is_byte_fmt) begin
+            bit [7:0] bval;
+            void'($sscanf(tok, "%h", bval));
+            write_byte(base_addr + addr_off, bval);
+            addr_off     += 1;
+            bytes_loaded += 1;
+          end else begin
+            bit [31:0] wval;
+            void'($sscanf(tok, "%h", wval));
+            write_word(base_addr + addr_off, wval);
+            addr_off     += 4;
+            bytes_loaded += 4;
+          end
+        end
       end
     end
 
     $fclose(fd);
-    $display("[MEM_MODEL] Loaded %0d bytes from %s at 0x%016h",
+    $display("[MEM_MODEL] Loaded %0d bytes from %s at base=0x%016h",
              bytes_loaded, file_path, base_addr);
     return bytes_loaded;
   endfunction
@@ -263,6 +335,23 @@ class mem_model extends uvm_object;
     $display("  Bytes written         : %0d", total_bytes_written);
     $display("  Allocated byte entries: %0d", memory.num());
     $display("================================================================");
+  endfunction
+
+  // --------------------------------------------------------------------------
+  // 512-bit cache-line operations (little-endian, 64 bytes)
+  // Matches Vortex VX_MEM_DATA_WIDTH=512 / VX_MEM_LINE_SIZE=64.
+  // base_addr must be 64-byte aligned (low 6 bits are the cache-line offset).
+  // --------------------------------------------------------------------------
+  function void write_line(bit [63:0] base_addr, bit [511:0] data);
+    for (int i = 0; i < 64; i++)
+      write_byte(base_addr + i, data[i*8 +: 8]);
+  endfunction
+
+  function bit [511:0] read_line(bit [63:0] base_addr);
+    bit [511:0] data;
+    for (int i = 0; i < 64; i++)
+      data[i*8 +: 8] = read_byte(base_addr + i);
+    return data;
   endfunction
 
 endclass : mem_model
