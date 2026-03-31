@@ -32,6 +32,7 @@
 import uvm_pkg::*;
 `include "uvm_macros.svh"
 import vortex_config_pkg::*;
+import mem_agent_pkg::*;  // For mem_model reference in R-beat checking
 import axi_agent_pkg::*;
 
 class axi_monitor extends uvm_monitor;
@@ -80,6 +81,15 @@ class axi_monitor extends uvm_monitor;
     longint cycle_count;
     
     //==========================================================================
+    // Memory Model Reference
+    // Used for inline R-beat data comparison against expected content.
+    // Retrieved from config_db in build_phase (same handle as tb_top).
+    // When present, every R beat is compared immediately — D-cache bugs
+    // are caught at the exact beat they occur rather than post-mortem.
+    //==========================================================================
+    mem_model m_mem_model;
+
+    //==========================================================================
     // Statistics
     //==========================================================================
     int num_write_addr;          // AW handshakes observed
@@ -88,6 +98,7 @@ class axi_monitor extends uvm_monitor;
     int num_read_addr;           // AR handshakes observed
     int num_read_data;           // R beat handshakes observed
     int num_protocol_violations; // Protocol errors detected
+    int num_rdata_mismatches;    // R-beat data vs mem_model mismatches
     
     //==========================================================================
     // Constructor
@@ -106,7 +117,9 @@ class axi_monitor extends uvm_monitor;
         num_read_addr = 0;
         num_read_data = 0;
         num_protocol_violations = 0;
+        num_rdata_mismatches = 0;
         cycle_count = 0;
+        m_mem_model = null;
     endfunction
     
     //==========================================================================
@@ -125,6 +138,13 @@ class axi_monitor extends uvm_monitor;
             `uvm_warning("AXI_MON", "No vortex_config found - using defaults")
             cfg = vortex_config::type_id::create("cfg");
             cfg.set_defaults_from_vx_config();
+        end
+
+        // Get memory model for inline R-beat comparison (optional — warn if absent)
+        if (!uvm_config_db#(mem_model)::get(null, "*", "mem_model", m_mem_model)) begin
+            `uvm_warning("AXI_MON", "mem_model not found in config_db — R-beat inline check disabled. D-cache bugs will not be caught at the monitor.")
+        end else begin
+            `uvm_info("AXI_MON", "mem_model found — R-beat inline comparison enabled", UVM_MEDIUM)
         end
     endfunction
     
@@ -436,7 +456,47 @@ class axi_monitor extends uvm_monitor;
                     trans.rdata[beat] = vif.monitor_cb.rdata;
                     trans.rresp[beat] = axi_transaction::axi_resp_e'(vif.monitor_cb.rresp);
                     trans.data_cycle[beat] = cycle_count;
-                    
+
+                    // ----------------------------------------------------------------
+                    // INLINE R-BEAT COMPARISON vs mem_model
+                    //
+                    // AXI uses byte addresses. Each beat is VX_MEM_DATA_WIDTH=512 bits
+                    // (64 bytes = one cache line). Beat N reads from:
+                    //   byte_addr = araddr + (beat * VX_MEM_LINE_SIZE)
+                    //
+                    // We compare the full 512-bit rdata against mem_model.read_line()
+                    // at the beat's byte address. This fires a UVM_ERROR at the exact
+                    // simulation cycle where the D-cache returns wrong data, making
+                    // cache correctness bugs immediately visible rather than silent.
+                    //
+                    // Guards:
+                    //   - m_mem_model null: warning at build_phase, skip here silently
+                    //   - rresp != OKAY: slave signalled error, skip data comparison
+                    //   - address not written: mem_model returns 0x00 per-byte for
+                    //     uninitialised locations — comparison still runs and may flag
+                    //     false positives for instruction fetches before program load.
+                    //     Tests should load the program before reset deasserts to avoid
+                    //     this (smoke_test already does this correctly).
+                    // ----------------------------------------------------------------
+                    if (m_mem_model != null &&
+                        trans.rresp[beat] == axi_transaction::AXI_OKAY) begin
+                        automatic bit [63:0]  beat_byte_addr;
+                        automatic bit [511:0] expected_data;
+                        automatic bit [511:0] actual_data;
+
+                        beat_byte_addr = 64'(trans.addr) +
+                                         64'(beat) * vortex_config_pkg::VX_MEM_LINE_SIZE;
+                        expected_data  = m_mem_model.read_line(beat_byte_addr);
+                        actual_data    = trans.rdata[beat];
+
+                        if (actual_data !== expected_data) begin
+                            num_rdata_mismatches++;
+                            `uvm_error("AXI_MON_RDATA", $sformatf("R-beat DATA MISMATCH: ID=%0d beat=%0d/%0d addr=0x%016h DUT=0x%0h EXP=0x%0h", id, beat+1, trans.len+1, beat_byte_addr, actual_data, expected_data))
+                        end else begin
+                            `uvm_info("AXI_MON_RDATA", $sformatf("R-beat MATCH: ID=%0d beat=%0d addr=0x%016h", id, beat+1, beat_byte_addr), UVM_DEBUG)
+                        end
+                    end
+
                     // Increment beat counter
                     read_beat_count[id]++;
                     num_read_data++;
@@ -594,11 +654,19 @@ class axi_monitor extends uvm_monitor;
             $sformatf("  Read Addresses:      %0d\n", num_read_addr),
             $sformatf("  Read Data Beats:     %0d\n", num_read_data),
             $sformatf("  Protocol Violations: %0d\n", num_protocol_violations),
+            $sformatf("  R-beat Mismatches:   %0d\n", num_rdata_mismatches),
+            $sformatf("  mem_model active:    %s\n",  m_mem_model != null ? "YES" : "NO"),
             $sformatf("  Pending AW (no W):   %0d\n", aw_fifo.size()),
             $sformatf("  Pending B:           %0d\n", pending_b_resp.size()),
             $sformatf("  Pending R:           %0d\n", pending_r_resp.size()),
             "========================================"
         }, UVM_LOW)
+
+        // Promote mismatch count to error so the test fails if data was wrong
+        if (num_rdata_mismatches > 0)
+            `uvm_error("AXI_MON",
+                $sformatf("TEST FAILED — %0d R-beat data mismatch(es) vs mem_model",
+                           num_rdata_mismatches))
     endfunction
     
 endclass : axi_monitor
