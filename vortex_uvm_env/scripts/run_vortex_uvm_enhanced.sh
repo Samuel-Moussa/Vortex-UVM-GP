@@ -364,6 +364,21 @@ if [[ -f "${VORTEX_DPI_LIB}.so" ]]; then
     print_success "Vortex DPI loaded: ${VORTEX_DPI_LIB}.so"
 else
     print_warning "Vortex DPI not found (optional)"
+DPI_LIB="$FLISTS_DIR/vortex_dpi"
+DPI_FLAG=""
+if [[ -f "${DPI_LIB}.so" ]]; then
+    DPI_FLAG="-sv_lib ${DPI_LIB}"
+    print_success "DPI library: ${DPI_LIB}.so"
+else
+    print_warning "DPI library not found: ${DPI_LIB}.so"
+    print_info    "  TCU/FPU trace (dpi_trace) will be silent — vsim-3770 expected."
+    print_info    "  Build once with:"
+    print_info    "    QUESTA_INC=\$(dirname \$(which vsim))/../include"
+    print_info    "    gcc -shared -fPIC \\"
+    print_info    "        -o ${DPI_LIB}.so \\"
+    print_info    "        \$VORTEX_HOME/hw/dpi/util_dpi.cpp \\"
+    print_info    "        \$VORTEX_HOME/hw/dpi/float_dpi.cpp \\"
+    print_info    "        -I\$VORTEX_HOME/hw/dpi -I\$QUESTA_INC"
 fi
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -754,6 +769,7 @@ if [[ $NO_COMPILE -eq 0 ]]; then
             2>&1 | tee -a "$RESULTS_RUN_DIR/logs/compile_uvm.log"
     fi
 
+
 else
     print_header "Skipping Compilation"
 fi
@@ -791,20 +807,15 @@ fi
 
 
 if [[ -n "$PROGRAM_HEX" ]]; then
-    SIM_OPTS="$SIM_OPTS +PROGRAM=$PROGRAM_HEX"      # → PROGRAM=%s
+    SIM_OPTS="$SIM_OPTS +PROGRAM=$PROGRAM_HEX"
 fi
 
 
 if [[ $NO_WAVES -eq 0 ]]; then
     WAVE_FILE="$RESULTS_RUN_DIR/waves/${TEST_NAME}_${MEMORY_INTERFACE}.vcd"
-    SIM_OPTS="$SIM_OPTS +WAVE=$WAVE_FILE"           # → WAVE=%s
+    SIM_OPTS="$SIM_OPTS +WAVE=$WAVE_FILE"
 else
-    SIM_OPTS="$SIM_OPTS +NO_WAVES"                  # → NO_WAVES
-fi
-
-# FIX: --verbose flag must send +VERBOSE so apply_plusargs() can read it
-if [[ $VERBOSE -eq 1 ]]; then
-    SIM_OPTS="$SIM_OPTS +VERBOSE"                   # → VERBOSE
+    SIM_OPTS="$SIM_OPTS +NO_WAVES"
 fi
 
 
@@ -812,6 +823,8 @@ fi
 if [[ $VERBOSE -eq 1 ]]; then
     SIM_OPTS="$SIM_OPTS +VERBOSE"
 fi
+
+
 
 
 print_info "Test:      $TEST_NAME"
