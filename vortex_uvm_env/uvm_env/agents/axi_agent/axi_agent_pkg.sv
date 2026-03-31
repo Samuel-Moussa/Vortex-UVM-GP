@@ -39,6 +39,9 @@ package axi_agent_pkg;
     import uvm_pkg::*;
     `include "uvm_macros.svh"
     
+    // Added so axi_monitor can see mem_model (for R-beat checking)
+    import mem_agent_pkg::*;
+
     // Vortex configuration package - provides vortex_config class
     import vortex_config_pkg::*;
     

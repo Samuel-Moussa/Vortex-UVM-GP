@@ -307,6 +307,19 @@ class vortex_config extends uvm_object;
     rand bit            compare_on_the_fly;
 
     //==========================================================================
+    // SYNCHRONIZATION EVENTS
+    //
+    // ebreak_event: triggered by vortex_scoreboard.write_status() the moment
+    // the status_agent monitor observes ebreak_detected == 1 on the interface.
+    //
+    // Any virtual sequence waiting in wait_for_execution_complete() blocks on
+    // this event instead of using a fixed #10us placeholder.  The event is
+    // created in new() so it is always valid — no null-guard needed at use
+    // sites.  It is NOT rand (events cannot be randomized).
+    //==========================================================================
+    uvm_event           ebreak_event;
+
+    //==========================================================================
     // CONSTRAINTS
     //==========================================================================
 
@@ -424,6 +437,9 @@ class vortex_config extends uvm_object;
 
     function new(string name = "vortex_config");
         super.new(name);
+        // Create the ebreak synchronization event once — shared by all
+        // components that receive this config object via config_db.
+        ebreak_event = new("ebreak_event");
         set_defaults_from_vx_config();
     endfunction
 
