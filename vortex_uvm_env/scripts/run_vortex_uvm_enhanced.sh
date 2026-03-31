@@ -791,15 +791,20 @@ fi
 
 
 if [[ -n "$PROGRAM_HEX" ]]; then
-    SIM_OPTS="$SIM_OPTS +PROGRAM=$PROGRAM_HEX"
+    SIM_OPTS="$SIM_OPTS +PROGRAM=$PROGRAM_HEX"      # → PROGRAM=%s
 fi
 
 
 if [[ $NO_WAVES -eq 0 ]]; then
     WAVE_FILE="$RESULTS_RUN_DIR/waves/${TEST_NAME}_${MEMORY_INTERFACE}.vcd"
-    SIM_OPTS="$SIM_OPTS +WAVE=$WAVE_FILE"
+    SIM_OPTS="$SIM_OPTS +WAVE=$WAVE_FILE"           # → WAVE=%s
 else
-    SIM_OPTS="$SIM_OPTS +NO_WAVES"
+    SIM_OPTS="$SIM_OPTS +NO_WAVES"                  # → NO_WAVES
+fi
+
+# FIX: --verbose flag must send +VERBOSE so apply_plusargs() can read it
+if [[ $VERBOSE -eq 1 ]]; then
+    SIM_OPTS="$SIM_OPTS +VERBOSE"                   # → VERBOSE
 fi
 
 
