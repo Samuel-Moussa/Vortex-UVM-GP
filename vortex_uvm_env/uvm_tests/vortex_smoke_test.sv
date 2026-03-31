@@ -553,8 +553,8 @@ class vortex_smoke_test extends vortex_base_test;
     // Only override values this test needs to differ from defaults.
     //==========================================================================
     virtual function void customize_config();
-        cfg.enable_scoreboard   = 0;
-        cfg.enable_coverage     = 0;
+        cfg.enable_scoreboard   = 1;
+        cfg.enable_coverage     = 1;
         cfg.simx_enable         = 0;
         cfg.dcr_agent_is_active = 0;  // PASSIVE -- TB_TOP owns all DCR writes
 

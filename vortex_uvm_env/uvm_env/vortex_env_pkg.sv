@@ -66,6 +66,18 @@ package vortex_env_pkg;
   `include "vortex_coverage_collector.sv"
   `include "vortex_env.sv"
 
+
+    // Sequences — ORDER MATTERS
+    `include "sequences/vortex_base_sequence.sv"
+    `include "agents/mem_agent/mem_sequences.sv"        
+    `include "agents/axi_agent/axi_sequences.sv"
+    `include "agents/dcr_agent/dcr_sequences.sv"
+    `include "agents/host_agent/host_sequences.sv"
+    `include "sequences/vortex_virtual_sequence.sv"
+    `include "sequences/vortex_axi_mem_vseq.sv"
+    `include "sequences/vortex_functional_mem_vseq.sv"
+
+
 endpackage : vortex_env_pkg
 
 `endif // VORTEX_ENV_PKG_SV

@@ -462,24 +462,75 @@
         //==========================================================================
         // load_program() — MOD-1: promoted from vortex_smoke_test
         //==========================================================================
+        // virtual task load_program();
+        //     mem_model mem;
+        //     string    hex_file;
+        //     int       fd;
+        //     bit       found;
+
+        //     #2ns;
+        //     `uvm_info(get_type_name(), "LOADING PROGRAM", UVM_LOW)
+
+        //     found = 0;
+        //     if      (uvm_config_db#(mem_model)::get(null,            "*",             "mem_model", mem)) found = 1;
+        //     else if (uvm_config_db#(mem_model)::get(this,            "",              "mem_model", mem)) found = 1;
+        //     else if (uvm_config_db#(mem_model)::get(uvm_root::get(), "*",             "mem_model", mem)) found = 1;
+        //     else if (uvm_config_db#(mem_model)::get(null,            "uvm_test_top*", "mem_model", mem)) found = 1;
+
+        //     if (!found)
+        //         `uvm_fatal(get_type_name(),
+        //             "mem_model not in config_db -- TB_TOP must set it before run_phase")
+
+        //     if (!$value$plusargs("PROGRAM=%s", hex_file))
+        //         `uvm_fatal(get_type_name(), "No +PROGRAM= -- run with +PROGRAM=path/to/file.hex")
+
+        //     fd = $fopen(hex_file, "r");
+        //     if (fd == 0)
+        //         `uvm_fatal(get_type_name(), $sformatf("File not found: %s", hex_file))
+        //     $fclose(fd);
+
+        //     begin
+        //         bit [63:0] load_addr = cfg.startup_addr;
+        //         bytes_loaded = mem.load_hex_file(hex_file, load_addr);
+        //         `uvm_info(get_type_name(),
+        //             $sformatf("Loading %s at 0x%016h", hex_file, load_addr), UVM_LOW)
+        //     end
+
+        //     if (bytes_loaded == 0)
+        //         `uvm_fatal(get_type_name(), $sformatf("0 bytes loaded: %s", hex_file))
+
+        //     `uvm_info(get_type_name(),
+        //         $sformatf("Loaded %0d bytes", bytes_loaded), UVM_LOW)
+        // endtask
+        //==========================================================================
+        // load_program() — MOD-1: promoted from vortex_smoke_test
+        //==========================================================================
         virtual task load_program();
             mem_model mem;
             string    hex_file;
             int       fd;
-            bit       found;
+            int       tries;
 
-            #2ns;
             `uvm_info(get_type_name(), "LOADING PROGRAM", UVM_LOW)
 
-            found = 0;
-            if      (uvm_config_db#(mem_model)::get(null,            "*",             "mem_model", mem)) found = 1;
-            else if (uvm_config_db#(mem_model)::get(this,            "",              "mem_model", mem)) found = 1;
-            else if (uvm_config_db#(mem_model)::get(uvm_root::get(), "*",             "mem_model", mem)) found = 1;
-            else if (uvm_config_db#(mem_model)::get(null,            "uvm_test_top*", "mem_model", mem)) found = 1;
+            // Poll until TBTOP's initial block has registered mem_model
+            // (replaces blind #2ns which races against TB_TOP's initial block)
+            tries = 0;
+            mem   = null;
+            while (mem == null && tries < 200) begin
+                void'(uvm_config_db#(mem_model)::get(null, "*", "mem_model", mem));
+                if (mem == null) begin
+                    #10ns;
+                    tries++;
+                end
+            end
 
-            if (!found)
+            if (mem == null)
                 `uvm_fatal(get_type_name(),
-                    "mem_model not in config_db -- TB_TOP must set it before run_phase")
+                    "mem_model not in config_db after 2us -- TB_TOP must call set() before run_test()")
+
+            `uvm_info(get_type_name(),
+                $sformatf("mem_model found after %0d poll(s)", tries), UVM_LOW)
 
             if (!$value$plusargs("PROGRAM=%s", hex_file))
                 `uvm_fatal(get_type_name(), "No +PROGRAM= -- run with +PROGRAM=path/to/file.hex")
@@ -502,7 +553,6 @@
             `uvm_info(get_type_name(),
                 $sformatf("Loaded %0d bytes", bytes_loaded), UVM_LOW)
         endtask
-
         //==========================================================================
         // monitor_memory_activity() — MOD-1: promoted from vortex_smoke_test
         //==========================================================================
