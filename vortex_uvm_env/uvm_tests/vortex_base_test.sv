@@ -270,7 +270,7 @@
     //
     // NOTE: No `include directives — vortex_test_pkg.sv owns all includes.
     //       mem_model type is available because vortex_test_pkg.sv includes
-    //       mem_model.sv before this file.  Do NOT add `include "mem_model.sv"
+    //       mem_model.sv before this file.  Do NOT add import mem_model_pkg::*;
     //       here — it causes a multiply-defined typedef (E-B).
     //
     // Author: Vortex UVM Team  /  MOD-1 March 2026
@@ -281,9 +281,10 @@
 
     import uvm_pkg::*;
     `include "uvm_macros.svh"
-    `include "mem_model.sv"
+    import mem_model_pkg::*;
     import vortex_config_pkg::*;
     import vortex_env_pkg::*;
+    import vortex_test_pkg::*;
 
     class vortex_base_test extends uvm_test;
         `uvm_component_utils(vortex_base_test)

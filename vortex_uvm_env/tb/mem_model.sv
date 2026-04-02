@@ -8,6 +8,8 @@
 `ifndef MEM_MODEL_SV
 `define MEM_MODEL_SV
 
+package mem_model_pkg;
+
 // ✅ ADD: Import UVM
 import uvm_pkg::*;
 `include "uvm_macros.svh"
@@ -355,6 +357,9 @@ class mem_model extends uvm_object;
   endfunction
 
 endclass : mem_model
+
+endpackage : mem_model_pkg
+
 
 `endif // MEM_MODEL_SV
 

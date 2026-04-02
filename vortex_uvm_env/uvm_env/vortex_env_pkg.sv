@@ -28,6 +28,8 @@ package vortex_env_pkg;
   import dcr_agent_pkg::*;
   import host_agent_pkg::*;
   import status_agent_pkg::*;
+  import mem_model_pkg::*;
+
 
   // Note: vortex_virtual_sequencer.sv is `included by vortex_env.sv
   // Include scoreboard and coverage BEFORE env so env can reference them

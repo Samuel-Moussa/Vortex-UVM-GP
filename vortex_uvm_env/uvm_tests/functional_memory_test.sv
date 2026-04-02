@@ -36,7 +36,7 @@ import vortex_config_pkg::*;
 import vortex_env_pkg::*;
 import dcr_agent_pkg::*;
 
-`include "mem_model.sv"
+import mem_model_pkg::*;
 `include "vortex_base_test.sv"
 
 `include "../uvm_env/sequences/vortex_functional_mem_vseq.sv"

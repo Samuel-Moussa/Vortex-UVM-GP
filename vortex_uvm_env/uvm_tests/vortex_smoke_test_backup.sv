@@ -49,7 +49,7 @@ import dcr_agent_pkg::*;
 
 
 `include "vortex_base_test.sv"
-`include "mem_model.sv"
+import mem_model_pkg::*;
 
 
 class vortex_smoke_test extends vortex_base_test;

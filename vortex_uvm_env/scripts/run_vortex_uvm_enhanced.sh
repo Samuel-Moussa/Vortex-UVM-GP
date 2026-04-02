@@ -343,45 +343,79 @@ fi
 # TCU and FPU trace output is silently dropped for the entire simulation.
 # Build the .so once with the command printed below; afterwards it auto-links.
 # --- Vortex DPI (optional) ---
-VORTEX_DPI_LIB="$FLISTS_DIR/vortex_dpi"
+# VORTEX_DPI_LIB="$FLISTS_DIR/vortex_dpi"
+
+# # --- UVM DPI (REQUIRED) ---
+# UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
+
+# DPI_FLAG=""
+
+# # Add UVM DPI FIRST (critical)
+# if [[ -f "${UVM_DPI_LIB}.so" ]]; thenz
+#     DPI_FLAG="$DPI_FLAG -sv_lib ${UVM_DPI_LIB}"
+#     print_success "UVM DPI loaded: ${UVM_DPI_LIB}.so"
+# else
+#     print_error "UVM DPI not found! This WILL crash simulation."
+# fi
+
+# # Add Vortex DPI if exists
+# if [[ -f "${VORTEX_DPI_LIB}.so" ]]; then
+#     DPI_FLAG="$DPI_FLAG -sv_lib ${VORTEX_DPI_LIB}"
+#     print_success "Vortex DPI loaded: ${VORTEX_DPI_LIB}.so"
+# else
+#     print_warning "Vortex DPI not found (optional)"
+# DPI_LIB="$FLISTS_DIR/vortex_dpi"
+# DPI_FLAG=""
+# if [[ -f "${DPI_LIB}.so" ]]; then
+#     DPI_FLAG="-sv_lib ${DPI_LIB}"
+#     print_success "DPI library: ${DPI_LIB}.so"
+# else
+#     print_warning "DPI library not found: ${DPI_LIB}.so"
+#     print_info    "  TCU/FPU trace (dpi_trace) will be silent — vsim-3770 expected."
+#     print_info    "  Build once with:"
+#     print_info    "    QUESTA_INC=\$(dirname \$(which vsim))/../include"
+#     print_info    "    gcc -shared -fPIC \\"
+#     print_info    "        -o ${DPI_LIB}.so \\"
+#     print_info    "        \$VORTEX_HOME/hw/dpi/util_dpi.cpp \\"
+#     print_info    "        \$VORTEX_HOME/hw/dpi/float_dpi.cpp \\"
+#     print_info    "        -I\$VORTEX_HOME/hw/dpi -I\$QUESTA_INC"
+# fi
+# # ─────────────────────────────────────────────────────────────────────────────
+
+# ── FIX B ────────────────────────────────────────────────────────────────────
+# Without -sv_lib the DPI functions (dpi_trace etc.) are unresolved at runtime:
+#   vsim-3770: Failed to find 'dpi_trace' in shared library.
+# TCU and FPU trace output is silently dropped for the entire simulation.
+# ─────────────────────────────────────────────────────────────────────────────
 
 # --- UVM DPI (REQUIRED) ---
-UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
-
+UVM_DPI_LIB="${QUESTA_HOME:-/opt/questa_sim-2021.2_1/questasim}/uvm-1.2/linux_x86_64/uvm_dpi"
 DPI_FLAG=""
 
-# Add UVM DPI FIRST (critical)
 if [[ -f "${UVM_DPI_LIB}.so" ]]; then
-    DPI_FLAG="$DPI_FLAG -sv_lib ${UVM_DPI_LIB}"
+    DPI_FLAG="-sv_lib ${UVM_DPI_LIB}"
     print_success "UVM DPI loaded: ${UVM_DPI_LIB}.so"
 else
     print_error "UVM DPI not found! This WILL crash simulation."
 fi
 
-# Add Vortex DPI if exists
+# --- Vortex DPI (OPTIONAL) ---
+VORTEX_DPI_LIB="$FLISTS_DIR/vortex_dpi"
+
 if [[ -f "${VORTEX_DPI_LIB}.so" ]]; then
     DPI_FLAG="$DPI_FLAG -sv_lib ${VORTEX_DPI_LIB}"
     print_success "Vortex DPI loaded: ${VORTEX_DPI_LIB}.so"
 else
     print_warning "Vortex DPI not found (optional)"
-DPI_LIB="$FLISTS_DIR/vortex_dpi"
-DPI_FLAG=""
-if [[ -f "${DPI_LIB}.so" ]]; then
-    DPI_FLAG="-sv_lib ${DPI_LIB}"
-    print_success "DPI library: ${DPI_LIB}.so"
-else
-    print_warning "DPI library not found: ${DPI_LIB}.so"
     print_info    "  TCU/FPU trace (dpi_trace) will be silent — vsim-3770 expected."
     print_info    "  Build once with:"
     print_info    "    QUESTA_INC=\$(dirname \$(which vsim))/../include"
     print_info    "    gcc -shared -fPIC \\"
-    print_info    "        -o ${DPI_LIB}.so \\"
+    print_info    "        -o ${VORTEX_DPI_LIB}.so \\"
     print_info    "        \$VORTEX_HOME/hw/dpi/util_dpi.cpp \\"
     print_info    "        \$VORTEX_HOME/hw/dpi/float_dpi.cpp \\"
     print_info    "        -I\$VORTEX_HOME/hw/dpi -I\$QUESTA_INC"
 fi
-# ─────────────────────────────────────────────────────────────────────────────
-
 
 ################################################################################
 # Create Results Directory
@@ -760,7 +794,8 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     # Compile UVM
     print_info "Compiling UVM environment..."
     if [[ "$SIMULATOR" == "questa" ]]; then
-        UVM_SRC="$HOME/intelFPGA/21.2/questa_sim/questasim/verilog_src/uvm-1.2/src"
+        # AFTER (use the env var already set correctly in your .bashrc):
+        UVM_SRC="${UVM_HOME:-/opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src}"
         vlog -sv $COMPILE_OPTS +incdir+${UVM_SRC} ${UVM_SRC}/uvm_pkg.sv \
             2>&1 | tee -a "$RESULTS_RUN_DIR/logs/compile_uvm.log"
         vlog -sv $COMPILE_OPTS \

@@ -34,6 +34,8 @@ import uvm_pkg::*;
 import vortex_config_pkg::*;
 import mem_agent_pkg::*;  // For mem_model reference in R-beat checking
 import axi_agent_pkg::*;
+import mem_model_pkg::*;
+
 
 class axi_monitor extends uvm_monitor;
     `uvm_component_utils(axi_monitor)
@@ -125,14 +127,43 @@ class axi_monitor extends uvm_monitor;
     //==========================================================================
     // Build Phase
     //==========================================================================
+    // virtual function void build_phase(uvm_phase phase);
+    //     super.build_phase(phase);
+        
+    //     // Get virtual interface
+    //     if (!uvm_config_db#(virtual vortex_axi_if)::get(this, "", "vif", vif)) begin
+    //         `uvm_fatal("AXI_MON", "Failed to get virtual interface from config DB")
+    //     end
+        
+    //     // Get configuration
+    //     if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg)) begin
+    //         `uvm_warning("AXI_MON", "No vortex_config found - using defaults")
+    //         cfg = vortex_config::type_id::create("cfg");
+    //         cfg.set_defaults_from_vx_config();
+    //     end
+    //     if (!uvm_config_db#(mem_model)::get(null, "*", "mem_model", m_mem_model)) begin
+    //         `uvm_warning("AXI_MON", "memmodel not found in configdb ...")
+    //     end else begin
+    //         `uvm_info("AXI_MON", "mem_model found — R-beat inline comparison enabled", UVM_MEDIUM)
+    //     end
+    //     // Get memory model for inline R-beat comparison (optional — warn if absent)
+    //     if (!uvm_config_db#(mem_model)::get(this, "", "mem_model", m_mem_model)) begin
+    //         `uvm_warning("AXI_MON", "mem_model not found in config_db — R-beat inline check disabled. D-cache bugs will not be caught at the monitor.")
+    //     end else begin
+    //         `uvm_info("AXI_MON", "mem_model found — R-beat inline comparison enabled", UVM_MEDIUM)
+    //     end
+    // endfunction
+        //==========================================================================
+    // Build Phase
+    //==========================================================================
     virtual function void build_phase(uvm_phase phase);
         super.build_phase(phase);
-        
+
         // Get virtual interface
         if (!uvm_config_db#(virtual vortex_axi_if)::get(this, "", "vif", vif)) begin
             `uvm_fatal("AXI_MON", "Failed to get virtual interface from config DB")
         end
-        
+
         // Get configuration
         if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg)) begin
             `uvm_warning("AXI_MON", "No vortex_config found - using defaults")
@@ -141,13 +172,17 @@ class axi_monitor extends uvm_monitor;
         end
 
         // Get memory model for inline R-beat comparison (optional — warn if absent)
+        // Must use (null, "*") to match the wildcard set in vortex_tb_top.sv.
+        // get(this, "") only searches the component's own subtree and will never
+        // find a handle registered from a module-scope initial block.
         if (!uvm_config_db#(mem_model)::get(null, "*", "mem_model", m_mem_model)) begin
-            `uvm_warning("AXI_MON", "mem_model not found in config_db — R-beat inline check disabled. D-cache bugs will not be caught at the monitor.")
+            `uvm_warning("AXI_MON",
+                "mem_model not found in config_db — R-beat inline check disabled.")
         end else begin
-            `uvm_info("AXI_MON", "mem_model found — R-beat inline comparison enabled", UVM_MEDIUM)
+            `uvm_info("AXI_MON",
+                "mem_model found — R-beat inline comparison enabled", UVM_LOW)
         end
     endfunction
-    
     //==========================================================================
     // Run Phase
     // Fork all channel collectors and timeout watchdog

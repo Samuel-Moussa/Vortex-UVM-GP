@@ -187,7 +187,7 @@ module vortex_tb_top;
     // //==========================================================================
     
     // // Include mem_model class
-    // `include "mem_model.sv"
+    // import mem_model_pkg::*;
     
     // mem_model memory;
     

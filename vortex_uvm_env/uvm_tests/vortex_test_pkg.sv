@@ -16,7 +16,7 @@ package vortex_test_pkg;
     
     import vortex_config_pkg::*;
     import vortex_env_pkg::*;
-    `include "mem_model.sv"
+    import mem_model_pkg::*;
 
     
     //==========================================================================

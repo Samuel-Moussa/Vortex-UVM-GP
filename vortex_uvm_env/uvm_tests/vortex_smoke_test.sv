@@ -38,7 +38,7 @@
 // import vortex_env_pkg::*;
 // import dcr_agent_pkg::*;
 
-// `include "mem_model.sv"
+// import mem_model_pkg::*;
 // `include "vortex_base_test.sv"
 
 // class vortex_smoke_test extends vortex_base_test;
@@ -518,7 +518,7 @@ import vortex_config_pkg::*;
 import vortex_env_pkg::*;
 import dcr_agent_pkg::*;
 
-`include "mem_model.sv"
+//import mem_model_pkg::*;
 `include "vortex_base_test.sv"
 
 
