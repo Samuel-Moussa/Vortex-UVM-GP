@@ -39,19 +39,38 @@ import host_agent_pkg::*;
 //==============================================================================
 class host_base_sequence extends uvm_sequence #(host_transaction);
     `uvm_object_utils(host_base_sequence)
-    
+ 
+    // Configuration — populated in pre_body() from the sequencer's config_db entry.
+    // Available to all derived sequences for reading cfg.startup_addr etc.
+    vortex_config cfg;
+ 
     function new(string name = "host_base_sequence");
         super.new(name);
     endfunction
-    
-    // Helper: Create and send a transaction
+ 
+    // FIX 2: pre_body() — runs immediately before body(), after m_sequencer is bound.
+    // Fetches vortex_config so derived sequences can read cfg.startup_addr,
+    // cfg.test_timeout_cycles, etc. rather than using hardcoded defaults.
+    virtual task pre_body();
+        super.pre_body();
+        if (m_sequencer != null) begin
+            if (!uvm_config_db#(vortex_config)::get(m_sequencer, "", "cfg", cfg))
+                `uvm_warning("HOST_SEQ", "No vortex_config found on sequencer — cfg will be null")
+        end
+    endtask
+ 
+    // FIX 3: send_trans() intentionally does NOT call randomize().
+    // host_transaction has rand fields (op_type) and constraints
+    // (valid_config_c, reasonable_timeout_c) that would randomize num_cores,
+    // num_warps, timeout_cycles etc. on every call — overwriting values the
+    // caller has already set. All fields are set explicitly before send_trans().
     task send_trans(host_transaction trans);
         start_item(trans);
         finish_item(trans);
     endtask
-    
+ 
 endclass : host_base_sequence
-
+ 
 //==============================================================================
 // Reset Sequence
 // Performs device reset
@@ -75,49 +94,54 @@ class host_reset_sequence extends host_base_sequence;
     endtask
     
 endclass : host_reset_sequence
-
+ 
 //==============================================================================
 // Load Program Sequence
 // Loads program binary into memory
 //==============================================================================
 class host_load_program_sequence extends host_base_sequence;
     `uvm_object_utils(host_load_program_sequence)
-    
+ 
     string    program_path;
-    rand bit[63:0] load_address;
-    
-    // Default load address
-    constraint default_load_addr_c {
-        load_address == 64'h80000000;
-    }
-    
+    bit [63:0] load_address;  // FIX 4: NOT rand — caller sets this, or cfg.startup_addr is used
+ 
     function new(string name = "host_load_program_sequence");
         super.new(name);
-        program_path = "program.hex";
+        program_path  = "program.hex";
+        load_address  = 64'h80000000;  // RTL default; overridden from cfg in body()
     endfunction
-    
+ 
     virtual task body();
         host_transaction trans;
-        
+ 
+        // FIX 4: use cfg.startup_addr if available, so +STARTUP_ADDR plusarg is honoured.
+        // Caller can also set load_address directly before start() to override.
+        if (cfg != null && load_address == 64'h80000000)
+            load_address = cfg.startup_addr;
+ 
         `uvm_info("HOST_SEQ", $sformatf("Loading program: %s at 0x%016h",
             program_path, load_address), UVM_LOW)
-        
+ 
+        // NOTE: In the TB_TOP DCR flow the program is pre-loaded into mem_model
+        // directly by the test before reset deasserts. This sequence is provided
+        // for future tests that use the host_driver to load via the MEM interface.
         trans = host_transaction::type_id::create("load_trans");
-        trans.op_type = host_transaction::HOST_LOAD_PROGRAM;
+        trans.op_type     = host_transaction::HOST_LOAD_PROGRAM;
         trans.program_path = program_path;
         trans.load_address = load_address;
-        
-        // Load program from file
+ 
+        // FIX 4: guard send_trans — skip if file load fails to avoid sending
+        // a partial transaction with uninitialised program_data[].
         if (!trans.load_program_from_file(program_path)) begin
-            `uvm_error("HOST_SEQ", $sformatf("Failed to load program: %s", program_path))
+            `uvm_error("HOST_SEQ", $sformatf("Failed to load program: %s — skipping send", program_path))
             return;
         end
-        
+ 
         send_trans(trans);
     endtask
-    
+ 
 endclass : host_load_program_sequence
-
+ 
 //==============================================================================
 // Configure DCR Sequence
 // Writes a single DCR register
@@ -144,91 +168,112 @@ class host_configure_dcr_sequence extends host_base_sequence;
     endtask
     
 endclass : host_configure_dcr_sequence
-
+ 
 //==============================================================================
 // Launch Kernel Sequence
 // Configures and starts kernel execution
 //==============================================================================
 class host_launch_kernel_sequence extends host_base_sequence;
     `uvm_object_utils(host_launch_kernel_sequence)
-    
-    rand bit [63:0] startup_address;
-    rand bit [31:0] num_cores;
-    rand bit [31:0] num_warps;
-    rand bit [31:0] num_threads;
-    
-    // Default configuration
-    constraint default_config_c {
-        startup_address == 64'h80000000;
-        num_cores inside {[1:4]};
-        num_warps inside {[1:8]};
-        num_threads inside {[1:4]};
-    }
-    
+ 
+    // FIX 5: NOT rand — these are explicitly set by the caller or from cfg.
+    // Making them rand caused the solver to ignore caller assignments and
+    // hardcode startup_address == 64'h80000000, ignoring +STARTUP_ADDR.
+    bit [63:0] startup_address;
+    bit [31:0] num_cores;
+    bit [31:0] num_warps;
+    bit [31:0] num_threads;
+ 
     function new(string name = "host_launch_kernel_sequence");
         super.new(name);
+        // RTL defaults — overridden from cfg in body() if cfg is available
+        startup_address = 64'h80000000;
+        num_cores       = 1;
+        num_warps       = 4;
+        num_threads     = 4;
     endfunction
-    
+ 
     virtual task body();
         host_transaction trans;
-        
+ 
+        // FIX 5: honour +STARTUP_ADDR plusarg via cfg.startup_addr.
+        // Only override if caller left startup_address at the default value,
+        // so explicit pre-start assignments are preserved.
+        if (cfg != null && startup_address == 64'h80000000)
+            startup_address = cfg.startup_addr;
+        // Similarly pull core/warp/thread counts from cfg to match RTL compile
+        if (cfg != null) begin
+            if (num_cores   == 1) num_cores   = cfg.num_cores;
+            if (num_warps   == 4) num_warps   = cfg.num_warps;
+            if (num_threads == 4) num_threads = cfg.num_threads;
+        end
+ 
         `uvm_info("HOST_SEQ", $sformatf(
-            "Launching kernel at 0x%016h (cores=%0d, warps=%0d, threads=%0d)",
+            "Launching kernel at 0x%016h (cores=%0d warps=%0d threads=%0d)",
             startup_address, num_cores, num_warps, num_threads), UVM_LOW)
-        
+ 
         trans = host_transaction::type_id::create("launch_trans");
-        trans.op_type = host_transaction::HOST_LAUNCH_KERNEL;
+        trans.op_type         = host_transaction::HOST_LAUNCH_KERNEL;
         trans.startup_address = startup_address;
-        trans.num_cores = num_cores;
-        trans.num_warps = num_warps;
-        trans.num_threads = num_threads;
-        
+        trans.num_cores       = num_cores;
+        trans.num_warps       = num_warps;
+        trans.num_threads     = num_threads;
+ 
         send_trans(trans);
     endtask
-    
+ 
 endclass : host_launch_kernel_sequence
-
+ 
 //==============================================================================
 // Wait for Completion Sequence
 // Waits for kernel execution to complete
 //==============================================================================
 class host_wait_done_sequence extends host_base_sequence;
     `uvm_object_utils(host_wait_done_sequence)
-    
-    rand int timeout_cycles;
-    
-    // Reasonable timeout range
-    constraint reasonable_timeout_c {
-        timeout_cycles inside {[1000:100000]};
-    }
-    
+ 
+    // FIX 6: NOT rand — timeout_cycles is always explicitly set by the caller
+    // (e.g. wait_seq.timeout_cycles = cfg.test_timeout_cycles). Making it rand
+    // risked the constraint {inside [1000:100000]} overriding the caller's value
+    // if randomize() was ever called on this sequence by a parent.
+    int timeout_cycles;
+ 
     function new(string name = "host_wait_done_sequence");
         super.new(name);
         timeout_cycles = 10000;
     endfunction
-    
+ 
     virtual task body();
         host_transaction trans;
-        
-        `uvm_info("HOST_SEQ", $sformatf("Waiting for completion (timeout=%0d)",
+ 
+        // Use cfg.test_timeout_cycles if caller left the default and cfg is available
+        if (cfg != null && timeout_cycles == 10000)
+            timeout_cycles = int'(cfg.test_timeout_cycles);
+ 
+        `uvm_info("HOST_SEQ", $sformatf("Waiting for completion (timeout=%0d cycles)",
             timeout_cycles), UVM_LOW)
-        
+ 
         trans = host_transaction::type_id::create("wait_trans");
-        trans.op_type = host_transaction::HOST_WAIT_DONE;
+        trans.op_type      = host_transaction::HOST_WAIT_DONE;
         trans.timeout_cycles = timeout_cycles;
-        
+ 
+        // FIX 7: host_transaction.do_copy() exists — host_driver MUST write
+        // completion_flag back to the ORIGINAL trans object (not a clone) for
+        // this check to see the updated value. This is an explicit contract with
+        // the host_driver: it must not clone the transaction item for WAIT_DONE ops.
+        // If driver clones, completion_flag here will always be 0 (false positive error).
         send_trans(trans);
-        
+ 
         if (!trans.completion_flag) begin
-            `uvm_error("HOST_SEQ", "Kernel did not complete within timeout!")
+            `uvm_error("HOST_SEQ", $sformatf(
+                "Kernel did not complete within %0d cycles timeout!", timeout_cycles))
         end else begin
             `uvm_info("HOST_SEQ", $sformatf("Kernel completed in %0d cycles",
                 trans.get_execution_cycles()), UVM_LOW)
         end
     endtask
-    
+ 
 endclass : host_wait_done_sequence
-
+ 
 //==============================================================================
 // Read Result Sequence
 // Reads result data from memory
@@ -263,18 +308,26 @@ class host_read_result_sequence extends host_base_sequence;
         
         send_trans(trans);
         
-        // Print first few words of result
-        `uvm_info("HOST_SEQ", "Result data (first 4 words):", UVM_MEDIUM)
-        for (int i = 0; i < 16 && i < trans.result_data.size(); i += 4) begin
-            bit [31:0] word = {trans.result_data[i+3], trans.result_data[i+2],
-                               trans.result_data[i+1], trans.result_data[i]};
-            `uvm_info("HOST_SEQ", $sformatf("  [0x%016h] = 0x%08h",
-                result_address + i, word), UVM_MEDIUM)
+        // FIX 8: guard i+3 access against result_data bounds.
+        // Loop already checks i < trans.result_data.size() but accessing [i+3]
+        // is still out-of-bounds when result_data has fewer than i+4 elements.
+        // Also note: result_data is only valid here if host_driver wrote back to
+        // the ORIGINAL trans handle (no clone) — same contract as completion_flag.
+        if (trans.result_data.size() > 0) begin
+            `uvm_info("HOST_SEQ", "Result data (first 4 words):", UVM_MEDIUM)
+            for (int i = 0; i < 16 && (i + 4) <= trans.result_data.size(); i += 4) begin
+                bit [31:0] word = {trans.result_data[i+3], trans.result_data[i+2],
+                                   trans.result_data[i+1], trans.result_data[i]};
+                `uvm_info("HOST_SEQ", $sformatf("  [0x%016h] = 0x%08h",
+                    result_address + i, word), UVM_MEDIUM)
+            end
+        end else begin
+            `uvm_warning("HOST_SEQ", "result_data[] is empty — driver may have cloned the transaction")
         end
     endtask
     
 endclass : host_read_result_sequence
-
+ 
 //==============================================================================
 // Complete Test Sequence
 // Full test flow: Reset → Load → Launch → Wait → Read
@@ -305,63 +358,73 @@ class host_complete_test_sequence extends host_base_sequence;
     virtual task body();
         host_reset_sequence         reset_seq;
         host_load_program_sequence  load_seq;
+        host_configure_dcr_sequence dcr_seq;
         host_launch_kernel_sequence launch_seq;
         host_wait_done_sequence     wait_seq;
         host_read_result_sequence   read_seq;
-        
-        `uvm_info("HOST_SEQ", {"\n",
-            "========================================\n",
-            "  Starting Complete Test Sequence\n",
-            "========================================\n",
-            $sformatf("  Program:    %s\n", program_path),
-            $sformatf("  Load Addr:  0x%016h\n", load_address),
-            $sformatf("  Entry:      0x%016h\n", startup_address),
-            $sformatf("  Result:     0x%016h (%0d bytes)\n", result_address, result_size),
-            $sformatf("  Timeout:    %0d cycles\n", timeout_cycles),
-            "========================================\n",
-            "  All operations use clocking blocks\n",
-            "  for synchronization\n",
-            "========================================"
-        }, UVM_LOW)
-        
+ 
+        // FIX 10: m_sequencer null guard
+        if (m_sequencer == null)
+            `uvm_fatal("HOST_SEQ", "m_sequencer is null — start on env.m_host_agent.m_sequencer")
+ 
+        // Use cfg values if caller left fields at defaults
+        if (cfg != null) begin
+            if (startup_address == 64'h80000000) startup_address = cfg.startup_addr;
+            if (load_address    == 64'h80000000) load_address    = cfg.startup_addr;
+            if (timeout_cycles  == 50000)        timeout_cycles  = int'(cfg.test_timeout_cycles);
+        end
+ 
+        `uvm_info("HOST_SEQ", $sformatf(
+            "Complete test: program=%s entry=0x%016h result=0x%016h timeout=%0d",
+            program_path, startup_address, result_address, timeout_cycles), UVM_LOW)
+ 
         // Step 1: Reset device
-        `uvm_info("HOST_SEQ", "Step 1/5: Reset", UVM_LOW)
+        `uvm_info("HOST_SEQ", "Step 1/6: Reset", UVM_LOW)
         reset_seq = host_reset_sequence::type_id::create("reset_seq");
         reset_seq.start(m_sequencer);
-        
+ 
         // Step 2: Load program into memory
-        `uvm_info("HOST_SEQ", "Step 2/5: Load Program", UVM_LOW)
+        `uvm_info("HOST_SEQ", "Step 2/6: Load Program", UVM_LOW)
         load_seq = host_load_program_sequence::type_id::create("load_seq");
         load_seq.program_path = program_path;
         load_seq.load_address = load_address;
         load_seq.start(m_sequencer);
-        
-        // Step 3: Launch kernel
-        `uvm_info("HOST_SEQ", "Step 3/5: Launch Kernel", UVM_LOW)
+ 
+        // FIX 9: Step 3 — Configure DCR startup address before launch.
+        // Without this, DUT fetches from whatever startup_addr was in DCR at reset.
+        `uvm_info("HOST_SEQ", "Step 3/6: Configure DCR startup address", UVM_LOW)
+        dcr_seq = host_configure_dcr_sequence::type_id::create("dcr_addr0");
+        dcr_seq.dcr_address = VX_DCR_BASE_STARTUP_ADDR0;
+        dcr_seq.dcr_data    = startup_address[31:0];
+        dcr_seq.start(m_sequencer);
+ 
+        dcr_seq = host_configure_dcr_sequence::type_id::create("dcr_addr1");
+        dcr_seq.dcr_address = VX_DCR_BASE_STARTUP_ADDR1;
+        dcr_seq.dcr_data    = startup_address[63:32];
+        dcr_seq.start(m_sequencer);
+ 
+        // Step 4: Launch kernel
+        `uvm_info("HOST_SEQ", "Step 4/6: Launch Kernel", UVM_LOW)
         launch_seq = host_launch_kernel_sequence::type_id::create("launch_seq");
         launch_seq.startup_address = startup_address;
         launch_seq.start(m_sequencer);
-        
-        // Step 4: Wait for completion
-        `uvm_info("HOST_SEQ", "Step 4/5: Wait for Completion", UVM_LOW)
+ 
+        // Step 5: Wait for completion
+        `uvm_info("HOST_SEQ", "Step 5/6: Wait for Completion", UVM_LOW)
         wait_seq = host_wait_done_sequence::type_id::create("wait_seq");
         wait_seq.timeout_cycles = timeout_cycles;
         wait_seq.start(m_sequencer);
-        
-        // Step 5: Read results
-        `uvm_info("HOST_SEQ", "Step 5/5: Read Results", UVM_LOW)
+ 
+        // Step 6: Read results
+        `uvm_info("HOST_SEQ", "Step 6/6: Read Results", UVM_LOW)
         read_seq = host_read_result_sequence::type_id::create("read_seq");
         read_seq.result_address = result_address;
-        read_seq.result_size = result_size;
+        read_seq.result_size    = result_size;
         read_seq.start(m_sequencer);
-        
-        `uvm_info("HOST_SEQ", {"\n",
-            "========================================\n",
-            "  Complete Test Sequence Finished\n",
-            "========================================"
-        }, UVM_LOW)
+ 
+        `uvm_info("HOST_SEQ", "Complete test sequence finished", UVM_LOW)
     endtask
     
 endclass : host_complete_test_sequence
-
+ 
 `endif // HOST_SEQUENCES_SV

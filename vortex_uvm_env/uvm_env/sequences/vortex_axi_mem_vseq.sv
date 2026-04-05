@@ -49,6 +49,13 @@ class vortex_axi_mem_vseq extends vortex_virtual_sequence;
                        num_beats, read_addr), UVM_LOW)
 
         // ── confirmed field names from actual axi_sequences.sv ─────────────
+        // Guard: m_axi_sequencer is null when axi_agent is PASSIVE or disabled.
+        // vortex_env only assigns m_axi_sequencer when axi_agent_is_active==1
+        // (see connect_phase fix, March 2026).
+        if (p_sequencer.m_axi_sequencer == null) begin
+            `uvm_fatal("AXI_MEM_VSEQ", "m_axi_sequencer is null — axi_agent must be ACTIVE. Set cfg.axi_agent_is_active=1 in the test.")
+        end
+
         rd_seq           = axi_burst_read_seq::type_id::create("rd_seq");
         rd_seq.addr      = read_addr;    // .addr       ✓
         rd_seq.num_beats = num_beats;    // .num_beats  ✓
