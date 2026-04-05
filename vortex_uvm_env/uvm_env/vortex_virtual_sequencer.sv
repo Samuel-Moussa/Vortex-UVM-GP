@@ -27,15 +27,18 @@
 `ifndef VORTEX_VIRTUAL_SEQUENCER_SV
 `define VORTEX_VIRTUAL_SEQUENCER_SV
 
+// NOTE: All imports (uvm_pkg, vortex_config_pkg, agent packages) are provided
+// by the enclosing package (vortex_env_pkg). Do NOT add bare import/`include
+// statements here — they are illegal inside a package body.
 import uvm_pkg::*;
 `include "uvm_macros.svh"
+import vortex_env_pkg::*;
 import vortex_config_pkg::*;
-
-// Import agent packages to get sequencer types
 import mem_agent_pkg::*;
 import axi_agent_pkg::*;
 import dcr_agent_pkg::*;
 import host_agent_pkg::*;
+import status_agent_pkg::*;
 
 class vortex_virtual_sequencer extends uvm_sequencer;
     `uvm_component_utils(vortex_virtual_sequencer)

@@ -13,6 +13,19 @@
 //   ✓ Performance metrics calculation
 //   ✓ Event generation for synchronization
 //
+// FIX (March 2026) — TB_TOP DCR bypass path:
+//   Smoke and functional tests launch via TB_TOP's DCR initial block,
+//   bypassing the host driver entirely.  In this path the DUT starts
+//   executing as soon as reset deasserts, so busy=1 may be seen before
+//   UVM's run_phase begins.  The original monitor_kernel_execution() only
+//   detected the 0→1 rising edge, so it never set kernel_running=1 and
+//   the subsequent busy=0 completion event was also missed.
+//
+//   Fix: sample busy at run_phase entry and synthesise a launch event
+//   immediately if already high.  The falling edge (busy 1→0) and
+//   ebreak_detected are both monitored for completion, regardless of
+//   whether the launch edge was explicitly observed.
+//
 // Author: Vortex UVM Team
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -139,73 +152,109 @@ class host_monitor extends uvm_monitor;
     
     //==========================================================================
     // Monitor Kernel Execution
-    // Detects kernel start and completion
+    // Detects kernel start and completion via busy signal edge detection.
+    //
+    // FIX (March 2026): TB_TOP DCR flow bypasses the host driver entirely.
+    // The DUT starts executing as soon as reset deasserts — busy may already
+    // be HIGH before UVM's run_phase begins, so the 0→1 edge is invisible.
+    //
+    // Solution: treat busy=1 at ANY point as a launch event when
+    // kernel_running==0, including if it was already high at startup.
+    // Completion is detected on busy=0 OR ebreak_detected, regardless of
+    // whether the explicit launch edge was seen.  This makes the monitor
+    // correct for both the host-driver path and the TB_TOP DCR path.
     //==========================================================================
     virtual task monitor_kernel_execution();
         host_transaction trans;
         longint elapsed_cycles;
         real final_ipc;
-        
+        bit prev_busy;
+
+        // Sample initial busy state — if already high at run_phase start,
+        // synthesise a launch event immediately so completion is tracked.
+        @(status_vif.monitor_cb);
+        prev_busy = status_vif.monitor_cb.busy;
+
+        if (prev_busy && !kernel_running) begin
+            kernel_running     = 1;
+            kernel_start_time  = $time;
+            kernel_start_cycle = status_vif.monitor_cb.cycle_count;
+
+            trans = host_transaction::type_id::create("launch_trans_init");
+            trans.op_type        = host_transaction::HOST_LAUNCH_KERNEL;
+            trans.startup_address = last_startup_addr;
+            trans.start_time     = $time;
+            num_kernel_launches++;
+
+            `uvm_info("HOST_MON",
+                $sformatf("Kernel already running at run_phase start (busy=1 @ cycle %0d) — TB_TOP DCR flow detected",
+                          kernel_start_cycle), UVM_LOW)
+            ap.write(trans);
+        end
+
         forever begin
             @(status_vif.monitor_cb);
-            
-            // Detect kernel start (busy goes HIGH)
-            if (status_vif.monitor_cb.busy && !kernel_running) begin
-                kernel_running = 1;
-                kernel_start_time = $time;
+
+            // ----------------------------------------------------------------
+            // Launch detection: busy 0→1 rising edge
+            // Covers the normal host-driver path where busy rises during sim.
+            // ----------------------------------------------------------------
+            if (status_vif.monitor_cb.busy && !prev_busy && !kernel_running) begin
+                kernel_running     = 1;
+                kernel_start_time  = $time;
                 kernel_start_cycle = status_vif.monitor_cb.cycle_count;
-                
+
                 trans = host_transaction::type_id::create("launch_trans");
-                trans.op_type = host_transaction::HOST_LAUNCH_KERNEL;
+                trans.op_type         = host_transaction::HOST_LAUNCH_KERNEL;
                 trans.startup_address = last_startup_addr;
-                trans.start_time = $time;
-                
+                trans.start_time      = $time;
                 num_kernel_launches++;
-                
+
                 `uvm_info("HOST_MON", $sformatf(
                     "Kernel execution started at time %0t, cycle %0d",
                     $time, kernel_start_cycle), UVM_LOW)
-                
                 ap.write(trans);
             end
-            
-            // Detect kernel completion (ebreak or idle)
+
+            // ----------------------------------------------------------------
+            // Completion detection: busy 1→0 falling edge OR ebreak_detected.
+            //
+            // If kernel_running was never set (e.g. busy was already 0 before
+            // run_phase and never went high), skip — nothing to complete.
+            //
+            // ebreak_detected in TB_TOP is only asserted AFTER busy=0 AND
+            // AXI channels idle, so the busy=0 condition fires first in
+            // practice.  Checking both handles any ordering edge cases.
+            // ----------------------------------------------------------------
             if (kernel_running &&
-                (status_vif.monitor_cb.ebreak_detected || !status_vif.monitor_cb.busy)) begin
-                
+                (!status_vif.monitor_cb.busy || status_vif.monitor_cb.ebreak_detected)) begin
+
                 kernel_running = 0;
-                
+
                 trans = host_transaction::type_id::create("done_trans");
-                trans.op_type = host_transaction::HOST_WAIT_DONE;
+                trans.op_type       = host_transaction::HOST_WAIT_DONE;
                 trans.completion_flag = 1;
-                trans.start_time = kernel_start_time;
-                trans.end_time = $time;
-                
+                trans.start_time    = kernel_start_time;
+                trans.end_time      = $time;
+
                 elapsed_cycles = status_vif.monitor_cb.cycle_count - kernel_start_cycle;
-                
-                // Calculate IPC (FIXED: calculate instead of reading from interface)
-                if (elapsed_cycles > 0) begin
+
+                if (elapsed_cycles > 0)
                     final_ipc = real'(status_vif.monitor_cb.instr_count) / real'(elapsed_cycles);
-                end else begin
+                else
                     final_ipc = 0.0;
-                end
-                
+
                 num_kernel_completions++;
-                
+
                 `uvm_info("HOST_MON", $sformatf(
-                    "Kernel execution completed at time %0t\n" +
-                    "  Duration:     %0d ns\n" +
-                    "  Cycles:       %0d\n" +
-                    "  Instructions: %0d\n" +
-                    "  IPC:          %.3f",
-                    $time,
-                    trans.get_execution_cycles() * 10,
-                    elapsed_cycles,
-                    status_vif.monitor_cb.instr_count,
-                    final_ipc), UVM_LOW)
-                
+                    "Kernel execution completed at time %0t  cycles=%0d  instrs=%0d  IPC=%.3f",
+                    $time, elapsed_cycles,
+                    status_vif.monitor_cb.instr_count, final_ipc), UVM_LOW)
+
                 ap.write(trans);
             end
+
+            prev_busy = status_vif.monitor_cb.busy;
         end
     endtask
     

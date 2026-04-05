@@ -45,69 +45,63 @@ class mem_base_sequence extends uvm_sequence #(mem_transaction);
         super.new(name);
     endfunction
     
-    // Pre-start hook: Get configuration from sequencer
-    virtual task pre_start();
-        super.pre_start();
-        
+    // FIX 2: pre_body() — runs immediately before body(), after m_sequencer is bound.
+    // pre_start() runs before m_sequencer is set, so get(m_sequencer,...) returned null.
+    virtual task pre_body();
+        super.pre_body();
         if (!uvm_config_db#(vortex_config)::get(m_sequencer, "", "cfg", cfg)) begin
-            `uvm_warning("MEM_SEQ", "No config found - using defaults")
+            `uvm_warning("MEM_SEQ", "No cfg found on sequencer — using defaults")
             cfg = vortex_config::type_id::create("cfg");
             cfg.set_defaults_from_vx_config();
         end
     endtask
     
 endclass : mem_base_sequence
-
+ 
 //==============================================================================
 // Single Write Sequence
 // Writes a 64-bit value to specified address
 //==============================================================================
 class mem_write_sequence extends mem_base_sequence;
     `uvm_object_utils(mem_write_sequence)
-    
-    // Public parameters - set before starting sequence
-    rand bit [31:0] addr;
-    rand bit [63:0] data;        // 64-bit data for Vortex
-    rand bit [7:0]  byteen;      // 8-bit byte enable (8 bytes)
-    
-    // Default to 64-bit aligned, full word access
-    constraint addr_aligned_c {
-        addr[2:0] == 3'b000;     // 8-byte aligned
-    }
-    
-    // Default to full byte enables
+ 
+    // FIX 3: Field widths corrected to match mem_transaction exactly.
+    // addr is a WORD (cache-line = 64-byte) address, NOT a byte address.
+    //   byte_addr = word_addr << VX_MEM_OFFSET_BITS (= << 6)
+    // data is a full 512-bit cache line (VX_MEM_DATA_WIDTH).
+    // byteen is a 64-byte enable mask (VX_MEM_BYTEEN_WIDTH).
+    rand bit [vortex_config_pkg::VX_MEM_ADDR_WIDTH-1:0]   addr;
+    rand bit [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0]   data;
+    rand bit [vortex_config_pkg::VX_MEM_BYTEEN_WIDTH-1:0] byteen;
+ 
+    // Full 64-byte cache-line enable by default (soft — override for partial writes)
     constraint default_byteen_c {
-        soft byteen == 8'hFF;    // All 8 bytes enabled
+        soft byteen == {vortex_config_pkg::VX_MEM_BYTEEN_WIDTH{1'b1}};
     }
-    
+ 
     function new(string name = "mem_write_sequence");
         super.new(name);
     endfunction
-    
+ 
     virtual task body();
         mem_transaction trans;
-        
+ 
         trans = mem_transaction::type_id::create("trans");
-        
         start_item(trans);
-        
-        // Configure as write with specified parameters
+ 
         assert(trans.randomize() with {
-            rw == 1'b1;                      // Write operation
-            addr == local::addr;
-            data == local::data;
+            rw     == 1'b1;
+            addr   == local::addr;
+            data   == local::data;
             byteen == local::byteen;
         });
-        
+ 
         finish_item(trans);
-        
-        `uvm_info("MEM_SEQ", $sformatf(
-            "Write: [0x%h] = 0x%h (byteen=0x%h)", 
-            addr, data, byteen), UVM_MEDIUM)
+        `uvm_info("MEM_SEQ", $sformatf("Write: word_addr=0x%h byteen=0x%h", addr, byteen), UVM_MEDIUM)
     endtask
-    
+ 
 endclass : mem_write_sequence
-
+ 
 //==============================================================================
 // Single Read Sequence
 // Reads a 64-bit value from specified address
@@ -115,45 +109,40 @@ endclass : mem_write_sequence
 //==============================================================================
 class mem_read_sequence extends mem_base_sequence;
     `uvm_object_utils(mem_read_sequence)
-    
-    // Public parameters
-    rand bit [31:0] addr;
-    bit [63:0] read_data;        // Captured from response
-    
-    // 64-bit aligned address
-    constraint addr_aligned_c {
-        addr[2:0] == 3'b000;
-    }
-    
+ 
+    // FIX 4: addr is a WORD (cache-line) address — bit[VX_MEM_ADDR_WIDTH-1:0].
+    // FIX 8: read_data is 512-bit to capture the full cache-line response.
+    //        Callers that need a specific sub-word (e.g. [31:0]) select it
+    //        directly: rd_seq.read_data[31:0].
+    rand bit [vortex_config_pkg::VX_MEM_ADDR_WIDTH-1:0]   addr;
+    bit      [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0]   read_data;  // 512-bit
+ 
     function new(string name = "mem_read_sequence");
         super.new(name);
     endfunction
-    
+ 
     virtual task body();
         mem_transaction trans;
-        
+ 
         trans = mem_transaction::type_id::create("trans");
-        
         start_item(trans);
-        
-        // Configure as read
+ 
+        // FIX 4: byteen must be 64-bit full-line enable
         assert(trans.randomize() with {
-            rw == 1'b0;                      // Read operation
-            addr == local::addr;
-            byteen == 8'hFF;                 // Full word read
+            rw     == 1'b0;
+            addr   == local::addr;
+            byteen == {vortex_config_pkg::VX_MEM_BYTEEN_WIDTH{1'b1}};
         });
-        
+ 
         finish_item(trans);
-        
-        // Capture read data from completed transaction
+ 
+        // FIX 8: capture full 512-bit response
         read_data = trans.rsp_data;
-        
-        `uvm_info("MEM_SEQ", $sformatf(
-            "Read: [0x%h] => 0x%h", addr, read_data), UVM_MEDIUM)
+        `uvm_info("MEM_SEQ", $sformatf("Read: word_addr=0x%h => data[31:0]=0x%h", addr, read_data[31:0]), UVM_MEDIUM)
     endtask
-    
+ 
 endclass : mem_read_sequence
-
+ 
 //==============================================================================
 // Write-Read-Verify Sequence
 // Tests Read-After-Write (RAW) hazard
@@ -161,13 +150,10 @@ endclass : mem_read_sequence
 //==============================================================================
 class mem_write_read_sequence extends mem_base_sequence;
     `uvm_object_utils(mem_write_read_sequence)
-    
-    rand bit [31:0] addr;
-    rand bit [63:0] data;
-    
-    constraint addr_aligned_c {
-        addr[2:0] == 3'b000;
-    }
+ 
+    // FIX: addr is a WORD (cache-line) address; data is a full 512-bit cache line.
+    rand bit [vortex_config_pkg::VX_MEM_ADDR_WIDTH-1:0]   addr;
+    rand bit [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0]   data;
     
     function new(string name = "mem_write_read_sequence");
         super.new(name);
@@ -181,7 +167,7 @@ class mem_write_read_sequence extends mem_base_sequence;
         wr_seq = mem_write_sequence::type_id::create("wr_seq");
         wr_seq.addr = addr;
         wr_seq.data = data;
-        wr_seq.byteen = 8'hFF;
+        wr_seq.byteen = {vortex_config_pkg::VX_MEM_BYTEEN_WIDTH{1'b1}};  // FIX 5: 64-byte full-line enable
         wr_seq.start(m_sequencer);
         
         // Then: Read back same address
@@ -201,104 +187,95 @@ class mem_write_read_sequence extends mem_base_sequence;
     endtask
     
 endclass : mem_write_read_sequence
-
+ 
 //==============================================================================
 // Block Write Sequence
 // Writes multiple consecutive 64-bit words
 //==============================================================================
 class mem_block_write_sequence extends mem_base_sequence;
     `uvm_object_utils(mem_block_write_sequence)
-    
-    rand bit [31:0] start_addr;
-    rand int        num_words;
-    rand bit [63:0] data[];
-    
-    constraint addr_aligned_c {
-        start_addr[2:0] == 3'b000;       // 8-byte aligned
-    }
-    
+ 
+    // FIX 6: start_addr is a WORD (cache-line = 64-byte) address.
+    // data[] holds 512-bit cache-line values (one per word).
+    rand bit [vortex_config_pkg::VX_MEM_ADDR_WIDTH-1:0]   start_addr;
+    rand int                                                num_words;
+    rand bit [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0]   data[];
+ 
     constraint reasonable_size_c {
-        num_words inside {[4:256]};
-        num_words % 4 == 0;              // Multiple of 4 for alignment
+        num_words inside {[1:64]};
+        // FIX 6: dynamic array size constraints unreliable in QuestaSim 2021.
+        // data[] is resized in post_randomize() instead.
     }
-    
-    constraint data_size_c {
-        data.size() == num_words;
-    }
-    
+ 
+    function void post_randomize();
+        data = new[num_words];
+        foreach (data[i]) data[i] = {$urandom(), $urandom(), $urandom(), $urandom(),
+                                      $urandom(), $urandom(), $urandom(), $urandom(),
+                                      $urandom(), $urandom(), $urandom(), $urandom(),
+                                      $urandom(), $urandom(), $urandom(), $urandom()};  // 16x32=512 bits
+    endfunction
+ 
     function new(string name = "mem_block_write_sequence");
         super.new(name);
     endfunction
-    
+ 
     virtual task body();
         mem_write_sequence wr_seq;
-        
-        `uvm_info("MEM_SEQ", $sformatf(
-            "Block write: addr=0x%h, %0d words (64-bit)",
-            start_addr, num_words), UVM_LOW)
-        
-        // Write each word sequentially
+        `uvm_info("MEM_SEQ", $sformatf("Block write: word_addr=0x%h, %0d cache lines", start_addr, num_words), UVM_LOW)
+ 
         for (int i = 0; i < num_words; i++) begin
             wr_seq = mem_write_sequence::type_id::create($sformatf("wr_seq_%0d", i));
-            wr_seq.addr   = start_addr + (i * 8);  // 8 bytes per word
+            wr_seq.addr   = start_addr + i;  // FIX 6: stride=1 (next cache line word address)
             wr_seq.data   = data[i];
-            wr_seq.byteen = 8'hFF;
+            wr_seq.byteen = {vortex_config_pkg::VX_MEM_BYTEEN_WIDTH{1'b1}};  // FIX 6: 64-byte
             wr_seq.start(m_sequencer);
         end
-        
-        `uvm_info("MEM_SEQ", $sformatf(
-            "Block write complete: %0d words written", num_words), UVM_LOW)
+ 
+        `uvm_info("MEM_SEQ", $sformatf("Block write complete: %0d cache lines", num_words), UVM_LOW)
     endtask
-    
+ 
 endclass : mem_block_write_sequence
-
+ 
 //==============================================================================
 // Block Read Sequence
 // Reads multiple consecutive 64-bit words
 //==============================================================================
 class mem_block_read_sequence extends mem_base_sequence;
     `uvm_object_utils(mem_block_read_sequence)
-    
-    rand bit [31:0] start_addr;
-    rand int        num_words;
-    bit [63:0]      read_data[];     // Captured read data
-    
-    constraint addr_aligned_c {
-        start_addr[2:0] == 3'b000;
-    }
-    
+ 
+    // FIX 7: start_addr is a WORD (cache-line = 64-byte) address.
+    // read_data[] holds full 512-bit cache-line responses (one per word).
+    // Callers select sub-fields: rd_seq.read_data[0][31:0] for the first word.
+    rand bit [vortex_config_pkg::VX_MEM_ADDR_WIDTH-1:0]   start_addr;
+    rand int                                                num_words;
+    bit      [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0]   read_data[];
+ 
     constraint reasonable_size_c {
-        num_words inside {[4:256]};
+        num_words inside {[1:64]};
     }
-    
+ 
     function new(string name = "mem_block_read_sequence");
         super.new(name);
     endfunction
-    
+ 
     virtual task body();
         mem_read_sequence rd_seq;
-        
-        // Allocate read data array
         read_data = new[num_words];
-        
-        `uvm_info("MEM_SEQ", $sformatf(
-            "Block read: addr=0x%h, %0d words (64-bit)",
-            start_addr, num_words), UVM_LOW)
-        
-        // Read each word sequentially
+ 
+        `uvm_info("MEM_SEQ", $sformatf("Block read: word_addr=0x%h, %0d cache lines", start_addr, num_words), UVM_LOW)
+ 
         for (int i = 0; i < num_words; i++) begin
             rd_seq = mem_read_sequence::type_id::create($sformatf("rd_seq_%0d", i));
-            rd_seq.addr = start_addr + (i * 8);  // 8 bytes per word
+            rd_seq.addr = start_addr + i;  // FIX 7: stride=1 (next cache line word address)
             rd_seq.start(m_sequencer);
-            read_data[i] = rd_seq.read_data;
+            read_data[i] = rd_seq.read_data;  // 512-bit capture
         end
-        
-        `uvm_info("MEM_SEQ", $sformatf(
-            "Block read complete: %0d words read", num_words), UVM_LOW)
+ 
+        `uvm_info("MEM_SEQ", $sformatf("Block read complete: %0d cache lines", num_words), UVM_LOW)
     endtask
-    
+ 
 endclass : mem_block_read_sequence
-
+ 
 //==============================================================================
 // Random Memory Test Sequence
 // Generates random mix of reads and writes
@@ -337,5 +314,5 @@ class mem_random_sequence extends mem_base_sequence;
     endtask
     
 endclass : mem_random_sequence
-
+ 
 `endif // MEM_SEQUENCES_SV

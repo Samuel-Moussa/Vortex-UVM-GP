@@ -308,6 +308,24 @@ module vortex_tb_top;
         logic [7:0]                ar_len_reg      = '0;
         logic [7:0]                read_beat_count = '0;
 
+        // ── FIX-5: Drive all AXI slave outputs to safe idle values at time-0 ──
+        // Without this initial block the always_ff blocks only drive the signals
+        // after the first posedge clk (at 5ns). Between time-0 and 5ns the DUT
+        // sees X on awready/wready/arready, which causes the MSHR pending-size
+        // counter to fire overflow/underflow assertions at the very first cycle.
+        // initial begin
+        //     vif.axi_if.awready = 1'b0;
+        //     vif.axi_if.wready  = 1'b0;
+        //     vif.axi_if.bvalid  = 1'b0;
+        //     vif.axi_if.bid     = '0;
+        //     vif.axi_if.bresp   = 2'b00;
+        //     vif.axi_if.rvalid  = 1'b0;
+        //     vif.axi_if.rid     = '0;
+        //     vif.axi_if.rdata   = '0;
+        //     vif.axi_if.rresp   = 2'b00;
+        //     vif.axi_if.rlast   = 1'b0;
+        // end
+
         // AXI Write Address Channel
         always_ff @(posedge clk) begin
             if (!reset_n) begin

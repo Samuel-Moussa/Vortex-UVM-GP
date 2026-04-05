@@ -142,7 +142,7 @@ class axi_monitor extends uvm_monitor;
 
         // Get memory model for inline R-beat comparison (optional — warn if absent)
         if (!uvm_config_db#(mem_model)::get(null, "*", "mem_model", m_mem_model)) begin
-            `uvm_warning("AXI_MON", "mem_model not found in config_db — R-beat inline check disabled. D-cache bugs will not be caught at the monitor.")
+            `uvm_warning("AXI_MON", "mem_model not found in config_db — R-beat inline check disabled. D-cache correctness bugs will not be caught at the monitor.")
         end else begin
             `uvm_info("AXI_MON", "mem_model found — R-beat inline comparison enabled", UVM_MEDIUM)
         end
@@ -491,9 +491,14 @@ class axi_monitor extends uvm_monitor;
 
                         if (actual_data !== expected_data) begin
                             num_rdata_mismatches++;
-                            `uvm_error("AXI_MON_RDATA", $sformatf("R-beat DATA MISMATCH: ID=%0d beat=%0d/%0d addr=0x%016h DUT=0x%0h EXP=0x%0h", id, beat+1, trans.len+1, beat_byte_addr, actual_data, expected_data))
+                            `uvm_error("AXI_MON_RDATA", { "\n",
+                                $sformatf("R-beat DATA MISMATCH: ID=%0d beat=%0d/%0d \n", id, beat+1, trans.len+1),
+                                $sformatf("addr=0x%016h \n", beat_byte_addr),
+                                $sformatf("  DUT  rdata=0x%0h \n", actual_data),
+                                $sformatf("  MEM expected=0x%0h \n", expected_data) })
                         end else begin
-                            `uvm_info("AXI_MON_RDATA", $sformatf("R-beat MATCH: ID=%0d beat=%0d addr=0x%016h", id, beat+1, beat_byte_addr), UVM_DEBUG)
+                            `uvm_info("AXI_MON_RDATA", { "\n",
+                                $sformatf("R-beat MATCH: ID=%0d beat=%0d addr=0x%016h", id, beat+1, beat_byte_addr) }, UVM_DEBUG)
                         end
                     end
 

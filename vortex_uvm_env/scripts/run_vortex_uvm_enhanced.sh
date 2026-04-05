@@ -364,22 +364,24 @@ if [[ -f "${VORTEX_DPI_LIB}.so" ]]; then
     print_success "Vortex DPI loaded: ${VORTEX_DPI_LIB}.so"
 else
     print_warning "Vortex DPI not found (optional)"
-DPI_LIB="$FLISTS_DIR/vortex_dpi"
-DPI_FLAG=""
-if [[ -f "${DPI_LIB}.so" ]]; then
-    DPI_FLAG="-sv_lib ${DPI_LIB}"
-    print_success "DPI library: ${DPI_LIB}.so"
-else
-    print_warning "DPI library not found: ${DPI_LIB}.so"
-    print_info    "  TCU/FPU trace (dpi_trace) will be silent — vsim-3770 expected."
-    print_info    "  Build once with:"
-    print_info    "    QUESTA_INC=\$(dirname \$(which vsim))/../include"
-    print_info    "    gcc -shared -fPIC \\"
-    print_info    "        -o ${DPI_LIB}.so \\"
-    print_info    "        \$VORTEX_HOME/hw/dpi/util_dpi.cpp \\"
-    print_info    "        \$VORTEX_HOME/hw/dpi/float_dpi.cpp \\"
-    print_info    "        -I\$VORTEX_HOME/hw/dpi -I\$QUESTA_INC"
 fi
+
+# DPI_LIB="$FLISTS_DIR/vortex_dpi"
+# DPI_FLAG=""
+# if [[ -f "${DPI_LIB}.so" ]]; then
+#     DPI_FLAG="-sv_lib ${DPI_LIB}"
+#     print_success "DPI library: ${DPI_LIB}.so"
+# else
+#     print_warning "DPI library not found: ${DPI_LIB}.so"
+#     print_info    "  TCU/FPU trace (dpi_trace) will be silent — vsim-3770 expected."
+#     print_info    "  Build once with:"
+#     print_info    "    QUESTA_INC=\$(dirname \$(which vsim))/../include"
+#     print_info    "    gcc -shared -fPIC \\"
+#     print_info    "        -o ${DPI_LIB}.so \\"
+#     print_info    "        \$VORTEX_HOME/hw/dpi/util_dpi.cpp \\"
+#     print_info    "        \$VORTEX_HOME/hw/dpi/float_dpi.cpp \\"
+#     print_info    "        -I\$VORTEX_HOME/hw/dpi -I\$QUESTA_INC"
+# fi
 # ─────────────────────────────────────────────────────────────────────────────
 
 
