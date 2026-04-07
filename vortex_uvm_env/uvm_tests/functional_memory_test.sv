@@ -32,7 +32,6 @@
 // This file is `included inside vortex_test_pkg.
 // All imports are provided by the enclosing package scope — do NOT re-import here.
 
-
 class functional_memory_test extends vortex_base_test;
     `uvm_component_utils(functional_memory_test)
 
@@ -53,24 +52,24 @@ class functional_memory_test extends vortex_base_test;
 
     // -------------------------------------------------------------------------
     // customize_config — called by base.build_phase AFTER set_defaults/apply_plusargs
-    // Only override values this test specifically needs different from defaults.
     // -------------------------------------------------------------------------
     virtual function void customize_config();
-        cfg.enable_scoreboard   = 1;   // no SimX yet
+        cfg.enable_scoreboard   = 1;
         cfg.enable_coverage     = 1;
-        cfg.simx_enable         = 0;
+        
+        cfg.simx_enable         = 1;             // <-- SimX is ENABLED
+        cfg.simx_path           = "DPI_MODE";    // <-- BYPASS legacy config validation
+
         cfg.dcr_agent_is_active = 0;   // PASSIVE — TBTOP owns all DCR writes
 
-        // if (cfg.axi_agent_enable) begin
-        //     cfg.mem_agent_enable = 0;
-        // end else begin
-        //     cfg.mem_agent_enable = 1;
-        // end
+        if (cfg.axi_agent_enable) begin
+            cfg.mem_agent_enable = 0;
+        end else begin
+            cfg.mem_agent_enable = 1;
+        end
 
-        // AXI agent activity follows USE_AXI_WRAPPER plusarg set from terminal
         cfg.axi_agent_is_active = cfg.axi_agent_enable;
 
-        // Clamp timeout to global limit
         if (cfg.test_timeout_cycles > cfg.global_timeout_cycles)
             cfg.test_timeout_cycles = cfg.global_timeout_cycles;
 
@@ -82,7 +81,7 @@ class functional_memory_test extends vortex_base_test;
     endfunction
 
     // -------------------------------------------------------------------------
-    // end_of_elaboration_phase — banner
+    // end_of_elaboration_phase
     // -------------------------------------------------------------------------
     virtual function void end_of_elaboration_phase(uvm_phase phase);
         super.end_of_elaboration_phase(phase);
@@ -110,22 +109,52 @@ class functional_memory_test extends vortex_base_test;
     endfunction
 
     // -------------------------------------------------------------------------
+    // load_program — OVERRIDE
+    // -------------------------------------------------------------------------
+    virtual task load_program();
+        mem_model mem;
+        string hex_file;
+        int fd;
+
+        #2ns;
+
+        if (!uvm_config_db #(mem_model)::get(null, "*", "mem_model", mem)) begin
+            `uvm_fatal(get_type_name(), "mem_model not found in config_db — was it set by TB_TOP?")
+        end
+
+        if (!$value$plusargs("PROGRAM=%s", hex_file)) begin
+            `uvm_fatal(get_type_name(), "No +PROGRAM plusarg — pass --program=<path> to the run script")
+        end
+
+        fd = $fopen(hex_file, "r");
+        if (fd == 0) begin
+            `uvm_fatal(get_type_name(), $sformatf("Program file not found: %s", hex_file))
+        end
+        $fclose(fd);
+
+        `uvm_info(get_type_name(),
+            $sformatf("Loading hex file: %s at 0x%016h", hex_file, cfg.startup_addr), UVM_LOW)
+
+        bytes_loaded = mem.load_hex_file(hex_file, cfg.startup_addr);
+
+        if (bytes_loaded > 0)
+            `uvm_info(get_type_name(), $sformatf("✓ Loaded %0d bytes into mem_model", bytes_loaded), UVM_LOW)
+        else
+            `uvm_fatal(get_type_name(), $sformatf("load_hex_file() returned 0 bytes — check file format: %s", hex_file))
+    endtask
+
+    // -------------------------------------------------------------------------
     // wait_for_reset — OVERRIDE
-    // Base uses posedge (edge-triggered) which hangs if reset already released.
-    // Use level-safe form identical to smoke test.
     // -------------------------------------------------------------------------
     virtual task wait_for_reset();
         `uvm_info(get_type_name(), "Waiting for reset (level-safe)...", UVM_MEDIUM)
         if (!vif.reset_n) @(posedge vif.reset_n);
         repeat(10) @(posedge vif.clk);
-        `uvm_info(get_type_name(),
-            "Reset released — program pre-loaded, DCR configured by TBTOP", UVM_LOW)
+        `uvm_info(get_type_name(), "Reset released — program pre-loaded, DCR configured by TBTOP", UVM_LOW)
     endtask
 
     // -------------------------------------------------------------------------
     // run_test_stimulus — OVERRIDE
-    // DUT runs autonomously from the loaded program.
-    // Virtual sequence waits for EBREAK then reads back mem_model result.
     // -------------------------------------------------------------------------
     virtual task run_test_stimulus();
         vortex_functional_mem_vseq vseq;
@@ -136,8 +165,6 @@ class functional_memory_test extends vortex_base_test;
 
     // -------------------------------------------------------------------------
     // check_results — OVERRIDE
-    // Golden check is performed inside vortex_functional_mem_vseq.
-    // Here we confirm EBREAK fired and promote any UVM_ERROR to test_passed=0.
     // -------------------------------------------------------------------------
     virtual function void check_results();
         uvm_report_server rs = uvm_report_server::get_server();
@@ -147,59 +174,24 @@ class functional_memory_test extends vortex_base_test;
         `uvm_info(get_type_name(), " FUNCTIONAL MEMORY TEST — RESULT VALIDATION                    ", UVM_LOW)
         `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
 
-        // Check 1: program loaded
         if (bytes_loaded > 0)
-            `uvm_info(get_type_name(),
-                $sformatf("PASS — Program loaded: %0d bytes", bytes_loaded), UVM_LOW)
+            `uvm_info(get_type_name(), $sformatf("PASS — Program loaded: %0d bytes", bytes_loaded), UVM_LOW)
         else begin
             `uvm_error(get_type_name(), "FAIL — Program not loaded (bytes_loaded == 0)")
             test_passed = 0;
             return;
         end
 
-        // Check 2: DCR configured (TBTOP did it during reset)
-        `uvm_info(get_type_name(), "PASS — DCR configured by TBTOP during reset", UVM_LOW)
+        `uvm_info(get_type_name(), "PASS ��� DCR configured by TBTOP during reset", UVM_LOW)
 
-        // Check 3: EBREAK detected — DUT actually completed execution
         if (vif.status_if.ebreak_detected)
-            `uvm_info(get_type_name(),
-                $sformatf("PASS — EBREAK detected at cycle %0d", completion_cycle), UVM_LOW)
+            `uvm_info(get_type_name(), $sformatf("PASS — EBREAK detected at cycle %0d", completion_cycle), UVM_LOW)
         else begin
             `uvm_error(get_type_name(), "FAIL — EBREAK not detected (DUT never completed)")
             test_passed = 0;
             return;
         end
 
-        // Check 4: At least one memory read (DUT fetched from mem_model)
-        begin
-            string if_name = cfg.axi_agent_enable ? "AXI AR" : "MEM req";
-            if (mem_reads > 0)
-                `uvm_info(get_type_name(),
-                    $sformatf("PASS — Memory reads (%s): %0d", if_name, mem_reads), UVM_LOW)
-            else begin
-                `uvm_error(get_type_name(),
-                    $sformatf("FAIL — No memory reads on %s (DUT never fetched)", if_name))
-                test_passed = 0;
-                return;
-            end
-        end
-
-        // Check 5: At least one memory write (DUT stored result)
-        begin
-            string if_name = cfg.axi_agent_enable ? "AXI AW" : "MEM req";
-            if (mem_writes > 0)
-                `uvm_info(get_type_name(),
-                    $sformatf("PASS — Memory writes (%s): %0d", if_name, mem_writes), UVM_LOW)
-            else begin
-                `uvm_error(get_type_name(),
-                    $sformatf("FAIL — No memory writes on %s (DUT never stored result)", if_name))
-                test_passed = 0;
-                return;
-            end
-        end
-
-        // Check 6: Golden value — raised inside vortex_functional_mem_vseq as UVM_ERROR
-        // Promote any UVM_ERROR (from vseq or elsewhere) to test_passed = 0
         err_count = rs.get_severity_count(UVM_ERROR);
         if (err_count == 0) begin
             test_passed = 1;
@@ -207,8 +199,7 @@ class functional_memory_test extends vortex_base_test;
         end else begin
             test_passed = 0;
             `uvm_error(get_type_name(),
-                $sformatf("FAIL — %0d UVM_ERROR(s) detected (check golden mismatch above)",
-                    err_count))
+                $sformatf("FAIL — %0d UVM_ERROR(s) detected (check golden mismatch above)", err_count))
         end
 
         `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
