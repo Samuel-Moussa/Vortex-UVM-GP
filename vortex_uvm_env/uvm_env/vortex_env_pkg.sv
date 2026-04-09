@@ -35,23 +35,23 @@ package vortex_env_pkg;
   // SimX DPI-C imports — must be inside the package for QuestaSim 2021
   // To add: insert one line here + call site in vortex_scoreboard.sv
   // To remove: delete the line + all call sites, recompile UVM env only
-  import "DPI-C" function int  simx_init    (int cores, int warps, int threads);
-  import "DPI-C" function void simx_cleanup ();
-  import "DPI-C" function void simx_write_mem (longint unsigned addr,
-                                               int              size,
-                                               input byte unsigned data[]);
-  import "DPI-C" function void simx_read_mem  (longint unsigned addr,
-                                               int              size,
-                                               inout byte unsigned data[]);
-  import "DPI-C" function int  simx_load_bin  (string filepath,
-                                               longint unsigned load_addr);
-  import "DPI-C" function int  simx_load_hex  (string filepath);
-  import "DPI-C" function void simx_dcr_write (int addr, int value);
-  import "DPI-C" function int  simx_run       ();
-  import "DPI-C" function int  simx_step      (int cycles);
-  import "DPI-C" function int  simx_is_done   ();
-  import "DPI-C" function int  simx_get_exitcode ();
-  import "DPI-C" function void simx_init_exit_code_register ();
+  // import "DPI-C" function int  simx_init    (int cores, int warps, int threads);
+  // import "DPI-C" function void simx_cleanup ();
+  // import "DPI-C" function void simx_write_mem (longint unsigned addr,
+  //                                              int              size,
+  //                                              input byte unsigned data[]);
+  // import "DPI-C" function void simx_read_mem  (longint unsigned addr,
+  //                                              int              size,
+  //                                              inout byte unsigned data[]);
+  // import "DPI-C" function int  simx_load_bin  (string filepath,
+  //                                              longint unsigned load_addr);
+  // import "DPI-C" function int  simx_load_hex  (string filepath);
+  // import "DPI-C" function void simx_dcr_write (int addr, int value);
+  // import "DPI-C" function int  simx_run       ();
+  // import "DPI-C" function int  simx_step      (int cycles);
+  // import "DPI-C" function int  simx_is_done   ();
+  // import "DPI-C" function int  simx_get_exitcode ();
+  // import "DPI-C" function void simx_init_exit_code_register ();
 
 
   // Analysis imp macro declarations — must appear before scoreboard/coverage

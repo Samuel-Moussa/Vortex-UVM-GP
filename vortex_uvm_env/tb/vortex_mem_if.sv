@@ -33,9 +33,7 @@
 
 import vortex_config_pkg::*;
 
-interface vortex_mem_if #(
-    parameter NUM_PORTS = 1  // Match VX_MEM_PORTS
-) (
+interface vortex_mem_if (
     input logic clk,
     input logic reset_n
 );
@@ -47,6 +45,7 @@ interface vortex_mem_if #(
     localparam DATA_WIDTH   = vortex_config_pkg::VX_MEM_DATA_WIDTH;
     localparam BYTEEN_WIDTH = vortex_config_pkg::VX_MEM_BYTEEN_WIDTH;
     localparam TAG_WIDTH    = vortex_config_pkg::VX_MEM_TAG_WIDTH;
+    localparam NUM_PORTS    = vortex_config_pkg::VX_MEM_PORTS;  
 
     //==========================================================================
     // REQUEST CHANNEL SIGNALS - ARRAYS!

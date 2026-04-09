@@ -56,7 +56,8 @@ parameter VX_MEM_LINE_SIZE    = 64;                     // L3_LINE_SIZE bytes
 parameter VX_MEM_OFFSET_BITS  = 6;                      // $clog2(VX_MEM_LINE_SIZE)
 parameter VX_MEM_DATA_WIDTH   = VX_MEM_LINE_SIZE * 8;  // 512 bits — NEVER changes
 parameter VX_MEM_BYTEEN_WIDTH = VX_MEM_LINE_SIZE;       // 64 bytes  — NEVER changes
-parameter VX_MEM_TAG_WIDTH    = 8;                      // L3_MEM_TAG_WIDTH (VX_define.vh)
+parameter VX_MEM_TAG_WIDTH    = 50;                      //will be paramterized later to L3_MEM_TAG_WIDTH (VX_define.vh)
+parameter VX_MEM_PORTS        = 1;
 
 `ifdef XLEN_64
     parameter VX_MEM_ADDR_WIDTH = 42;   // 48 - 6  (word address, RV64)
@@ -229,7 +230,7 @@ class vortex_config extends uvm_object;
     //==========================================================================
 
     rand int unsigned   CLK_FREQ_MHZ;
-    rand real           CLK_PERIOD_NS;
+    real                CLK_PERIOD_NS;  // ← REMOVED 'rand' (It is a derived value)
     rand int unsigned   max_latency_cycles;
     rand int unsigned   min_inter_req_delay;
     rand int unsigned   max_inter_req_delay;
@@ -399,7 +400,7 @@ class vortex_config extends uvm_object;
 
     constraint clock_config_c {
         CLK_FREQ_MHZ         inside {[50:500]};
-        CLK_PERIOD_NS        == (1000.0 / real'(CLK_FREQ_MHZ));
+        // REMOVED: CLK_PERIOD_NS == ... (Calculated in post_randomize instead)
         max_latency_cycles   inside {[10:1000]};
         min_inter_req_delay  inside {[0:10]};
         max_inter_req_delay  inside {[min_inter_req_delay:100]};
@@ -441,6 +442,15 @@ class vortex_config extends uvm_object;
         // components that receive this config object via config_db.
         ebreak_event = new("ebreak_event");
         set_defaults_from_vx_config();
+    endfunction
+
+    //==========================================================================
+    // POST-RANDOMIZATION DERIVATIONS
+    //==========================================================================
+    function void post_randomize();
+        super.post_randomize();
+        // Safely derive floating-point period from randomized integer frequency
+        CLK_PERIOD_NS = 1000.0 / real'(CLK_FREQ_MHZ);
     endfunction
 
     //==========================================================================
