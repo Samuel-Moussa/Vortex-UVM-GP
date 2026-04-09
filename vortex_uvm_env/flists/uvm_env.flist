@@ -38,7 +38,7 @@ $VORTEX_UVM_HOME/tb/vortex_status_if.sv
 $VORTEX_UVM_HOME/tb/vortex_if.sv
 
 # 4. Memory model — included inside vortex_test_pkg, NOT standalone
-# $VORTEX_UVM_HOME/tb/mem_model.sv
+$VORTEX_UVM_HOME/tb/mem_model.sv
 
 # 5. Agent packages (each self-contained)
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent_pkg.sv
