@@ -25,6 +25,7 @@ module vortex_tb_top;
     import uvm_pkg::*;
     import vortex_config_pkg::*;
     import vortex_test_pkg::*;
+    import mem_model_pkg::*;
 
     //==========================================================================
     // PARAMETERS

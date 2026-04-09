@@ -18,7 +18,7 @@
 `include "VX_gpu_pkg.sv"
 //ADDED
 `include "VX_platform.vh"
-`include "VX_trace_pkg.sv"
+//`include "VX_trace_pkg.sv"
 
 
 package VX_tcu_pkg;

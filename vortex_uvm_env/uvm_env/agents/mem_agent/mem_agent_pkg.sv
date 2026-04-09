@@ -40,7 +40,7 @@ package mem_agent_pkg;
     `include "uvm_macros.svh"
     
     // Memory model (must come after uvm_pkg import)
-    `include "mem_model.sv"
+    import mem_model_pkg::*;
     
     // Vortex configuration package - provides vortex_config class and parameters
     import vortex_config_pkg::*;
