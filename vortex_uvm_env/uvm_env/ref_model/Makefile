@@ -3,9 +3,17 @@
 # Fixed version with proper header paths and DCR support
 ################################################################################
 
-# Paths
-VORTEX_HOME   ?= /home/stev_teto_22/vortex
-QUESTA_HOME   = /home/stev_teto_22/mgc/install.aol/intelFPGA/21.2/questa_sim/questasim
+# Paths - read from environment, fall back to system defaults (team-friendly)
+VORTEX_HOME   ?= $(VORTEX_DUT_HOME)
+ifeq ($(VORTEX_HOME),)
+  VORTEX_HOME := $(HOME)/Vortex_UVM_GP/Vortex
+endif
+
+QUESTA_HOME   ?= $(QUESTA2021_HOME)
+ifeq ($(QUESTA_HOME),)
+  QUESTA_HOME := /opt/questa_sim-2021.2_1/questasim
+endif
+
 SIMX_DIR      = $(VORTEX_HOME)/sim/simx
 COMMON_DIR    = $(VORTEX_HOME)/sim/common
 THIRD_PARTY   = $(VORTEX_HOME)/third_party
@@ -19,8 +27,13 @@ KERNEL_BIN    ?= /home/stev_teto_22/vortex_uvm/uvm_env/ref_model/program_simple.
 STEP_CYCLES   ?= 10
 TIMEOUT       ?= 100000
 
-# Compiler settings
-CXX           = g++
+# Compiler settings - MUST use GCC 11+ for GLIBCXX_3.4.29 compatibility
+CXX           = g++-11
+ifeq ($(shell which g++-11 2>/dev/null),)
+  CXX         = g++
+  $(warning Warning: g++-11 not found, falling back to g++ - may cause GLIBCXX errors)
+endif
+
 CXXFLAGS      = -std=c++17 -fPIC -shared -Wall -Wno-unused-variable
 CXXFLAGS     += -I$(QUESTA_HOME)/include
 
@@ -60,8 +73,10 @@ CXXFLAGS     += -DDEBUG_LEVEL=3
 CXXFLAGS     += -g
 CXXFLAGS     += -UNDEBUG 
 
-# Linker flags
-LDFLAGS       = $(THIRD_PARTY)/softfloat/build/Linux-x86_64-GCC/softfloat.a
+# Linker flags - KEY FIX: -static-libstdc++ -static-libgcc embed C++ runtime
+# This prevents GLIBCXX_3.4.29 errors from Questa's old GCC 7.4.0 libstdc++
+LDFLAGS       = -static-libstdc++ -static-libgcc
+LDFLAGS      += $(THIRD_PARTY)/softfloat/build/Linux-x86_64-GCC/softfloat.a
 LDFLAGS      += -L$(THIRD_PARTY)/ramulator -lramulator
 LDFLAGS      += -Wl,-rpath,$(THIRD_PARTY)/ramulator
 
