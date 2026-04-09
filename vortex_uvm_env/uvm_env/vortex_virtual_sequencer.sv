@@ -29,13 +29,13 @@
 
 import uvm_pkg::*;
 `include "uvm_macros.svh"
+import vortex_env_pkg::*;
 import vortex_config_pkg::*;
-
-// Import agent packages to get sequencer types
 import mem_agent_pkg::*;
 import axi_agent_pkg::*;
 import dcr_agent_pkg::*;
 import host_agent_pkg::*;
+import status_agent_pkg::*;
 
 class vortex_virtual_sequencer extends uvm_sequencer;
     `uvm_component_utils(vortex_virtual_sequencer)
@@ -91,15 +91,18 @@ class vortex_virtual_sequencer extends uvm_sequencer;
             "========================================"
         }, UVM_MEDIUM)
         
-        // Warn about missing sequencers
-        if (m_mem_sequencer == null)
-            `uvm_warning("VIRT_SQCR", "mem_sequencer not connected")
-        if (m_axi_sequencer == null && cfg.axi_agent_enable)
-            `uvm_warning("VIRT_SQCR", "axi_sequencer not connected but AXI agent is enabled")
-        if (m_dcr_sequencer == null)
-            `uvm_warning("VIRT_SQCR", "dcr_sequencer not connected")
-        if (m_host_sequencer == null)
-            `uvm_warning("VIRT_SQCR", "host_sequencer not connected")
+        // Warn about missing sequencers ONLY if the agent is supposed to be ACTIVE
+        if (m_mem_sequencer == null && cfg.mem_agent_is_active)
+            `uvm_warning("VIRT_SQCR", "mem_sequencer not connected but Mem agent is ACTIVE")
+            
+        if (m_axi_sequencer == null && cfg.axi_agent_is_active)
+            `uvm_warning("VIRT_SQCR", "axi_sequencer not connected but AXI agent is ACTIVE")
+            
+        if (m_dcr_sequencer == null && cfg.dcr_agent_is_active)
+            `uvm_warning("VIRT_SQCR", "dcr_sequencer not connected but DCR agent is ACTIVE")
+            
+        if (m_host_sequencer == null && cfg.host_agent_is_active)
+            `uvm_warning("VIRT_SQCR", "host_sequencer not connected but Host agent is ACTIVE")
     endfunction
     
 endclass : vortex_virtual_sequencer

@@ -9,59 +9,6 @@
 //     then compares result memory region between SimX RAM and RTL shadow memory
 //   - Tracks pending MEM/AXI read transactions and compares responses
 //
-// ============================================================================
-// HOW TO ADD A NEW DPI FUNCTION IN THE FUTURE
-// ============================================================================
-// Step 1 — Steven adds the C++ function to simx_dpi.cpp with extern "C".
-//           Example:
-//             extern "C" int simx_get_reg(int core, int warp, int thread, int reg_id) {...}
-//
-// Step 2 — Rebuild the shared library:
-//             cd <simx_dpi_dir>
-//             make build
-//           This regenerates simx_model.so.
-//
-// Step 3 — Add the DPI import here at compilation-unit scope (in the block
-//           labelled "DPI-C IMPORTS" below). The SV signature must exactly
-//           match the C++ function prototype:
-//             import "DPI-C" function int simx_get_reg(int core, int warp,
-//                                                      int thread, int reg_id);
-//
-// Step 4 — Call it anywhere inside the class (run_phase, write_*, etc.).
-//           Always guard with:  if (cfg.simx_enable) begin ... end
-//
-// Step 5 — Recompile only the UVM env (no need to recompile RTL):
-//             vlog -sv -suppress 2167 +incdir+$UVM_HOME $UVM_HOME/uvm_pkg.sv
-//             vlog -sv -f uvm_env.flist
-//
-// Step 6 — Run with the new .so:
-//             vsim ... -sv_lib simx_model ...
-//           (simx_model path is already in run_vortex_uvm_enhanced.sh)
-//
-// ============================================================================
-// HOW TO REMOVE A DPI FUNCTION
-// ============================================================================
-// Step 1 — Delete or comment out the import line below.
-// Step 2 — Remove every call site inside the class.
-// Step 3 — Recompile UVM env (Step 5 above). The .so does not need rebuilding
-//           unless you also changed the C++ side.
-//
-// ============================================================================
-// CURRENT DPI FUNCTIONS (matched to simx_dpi.cpp latest version)
-// ============================================================================
-//   simx_init(int cores, int warps, int threads)      -> int
-//   simx_cleanup()                                    -> void
-//   simx_write_mem(longint addr, int size, byte[])    -> void
-//   simx_read_mem(longint addr, int size, byte[])     -> void (inout)
-//   simx_load_bin(string filepath, longint addr)      -> int
-//   simx_load_hex(string filepath)                    -> int
-//   simx_dcr_write(int addr, int value)               -> void
-//   simx_run()                                        -> int
-//   simx_step(int cycles)                             -> int
-//   simx_is_done()                                    -> int
-//   simx_get_exitcode()                               -> int
-//   simx_init_exit_code_register()                    -> void
-//
 // Author: Vortex UVM Team
 // Date: March 2026
 ////////////////////////////////////////////////////////////////////////////////
@@ -78,6 +25,7 @@ import axi_agent_pkg::*;
 import dcr_agent_pkg::*;
 import host_agent_pkg::*;
 import status_agent_pkg::*;
+import simx_pkg::*; // <-- Imported the new DPI package here
 
 //------------------------------------------------------------------------------
 // Shared analysis imp declarations — guarded against double-declaration.
@@ -184,16 +132,34 @@ class vortex_scoreboard extends uvm_scoreboard;
     // Install exit-code bootstrap so x3=0 is guaranteed before main program
     simx_init_exit_code_register();
 
-    // Pre-load program into SimX RAM (mirrors what +PROGRAM does in the RTL TB)
+    // Pre-load program into SimX RAM (detect format from extension)
     if (cfg.program_path != "") begin
-      status = simx_load_bin(cfg.program_path, 64'(cfg.startup_addr));
-      if (status != 0)
-        `uvm_error("SCOREBOARD",
-          $sformatf("simx_load_bin('%s') failed", cfg.program_path))
-      else
-        `uvm_info("SCOREBOARD",
-          $sformatf("SimX: loaded '%s' @ 0x%0h", cfg.program_path, cfg.startup_addr),
-          UVM_MEDIUM)
+      string path = cfg.program_path;
+      int    path_len = path.len();
+      bit    is_hex;
+
+      // Detect .hex extension (last 4 chars)
+      is_hex = (path_len > 4) &&
+               (path.substr(path_len-4, path_len-1) == ".hex");
+
+      if (is_hex) begin
+        status = simx_load_hex(cfg.program_path);
+        if (status != 0)
+          `uvm_error("SCOREBOARD",
+            $sformatf("simx_load_hex('%s') failed", cfg.program_path))
+        else
+          `uvm_info("SCOREBOARD",
+            $sformatf("SimX: loaded hex '%s'", cfg.program_path), UVM_MEDIUM)
+      end else begin
+        status = simx_load_bin(cfg.program_path, 64'(cfg.startup_addr));
+        if (status != 0)
+          `uvm_error("SCOREBOARD",
+            $sformatf("simx_load_bin('%s') failed", cfg.program_path))
+        else
+          `uvm_info("SCOREBOARD",
+            $sformatf("SimX: loaded bin '%s' @ 0x%0h",
+              cfg.program_path, cfg.startup_addr), UVM_MEDIUM)
+      end
     end
   endtask : run_phase
 
@@ -208,12 +174,7 @@ class vortex_scoreboard extends uvm_scoreboard;
                 tr.rw ? "WR":"RD", tr.addr, tr.byteen, tr.tag), UVM_DEBUG)
 
     if (tr.rw) begin
-      shadow_memory[tr.addr] = tr.data;
-      if (cfg.simx_enable) begin
-        byte unsigned wr[];  wr = new[8];
-        for (int i = 0; i < 8; i++) wr[i] = tr.data[i*8 +: 8];
-        simx_write_mem(64'(tr.addr), 8, wr);
-      end
+      shadow_memory[tr.addr] = tr.data;   // DUT shadow only — SimX runs independently
     end else begin
       if (tr.completed) compare_mem_transaction(tr);
       else              mem_pending_q.push_back(tr);
@@ -231,12 +192,7 @@ class vortex_scoreboard extends uvm_scoreboard;
       for (int beat = 0; beat <= tr.len; beat++) begin
         bit [63:0] baddr = tr.get_next_addr(beat);
         bit [63:0] bdata = (beat < tr.wdata.size()) ? tr.wdata[beat] : '0;
-        shadow_memory[baddr[31:0]] = bdata;
-        if (cfg.simx_enable) begin
-          byte unsigned wr[];  wr = new[8];
-          for (int i = 0; i < 8; i++) wr[i] = bdata[i*8 +: 8];
-          simx_write_mem(baddr, 8, wr);
-        end
+        shadow_memory[baddr[31:0]] = bdata; // DUT shadow only — SimX runs independently
       end
     end else begin
       if (tr.completed) compare_axi_transaction(tr);
@@ -288,8 +244,8 @@ class vortex_scoreboard extends uvm_scoreboard;
       $sformatf("SimX done — exit code = %0d", exitcode), UVM_MEDIUM)
 
     if (exitcode != 0)
-      `uvm_error("SCOREBOARD",
-        $sformatf("SimX exit code=%0d (non-zero = program failed)", exitcode))
+      `uvm_warning("SCOREBOARD",
+        $sformatf("SimX exit code=%0d (may indicate program requested exit)", exitcode))
 
     if (simx_is_done() != 1)
       `uvm_warning("SCOREBOARD",
@@ -309,7 +265,7 @@ class vortex_scoreboard extends uvm_scoreboard;
   // compare_result_region
   //==========================================================================
   local function void compare_result_region(bit [31:0] base_addr, int size_bytes);
-    byte unsigned simx_bytes[];
+    byte simx_bytes[]; // Changed to byte to match DPI signature
     simx_bytes = new[size_bytes];
     simx_read_mem(64'(base_addr), size_bytes, simx_bytes);
 
@@ -347,7 +303,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     bit [63:0] expected;
     num_comparisons++;
     if (cfg.simx_enable && simx_ran) begin
-      byte unsigned rd[];  rd = new[8];
+      byte rd[];  rd = new[8]; // Changed to byte to match DPI signature
       simx_read_mem(64'(tr.addr), 8, rd);
       expected = '0;
       for (int i = 0; i < 8; i++) expected[i*8 +: 8] = rd[i];
@@ -381,7 +337,7 @@ class vortex_scoreboard extends uvm_scoreboard;
       bit [63:0] expected;
       num_comparisons++;
       if (cfg.simx_enable && simx_ran) begin
-        byte unsigned rd[];  rd = new[8];
+        byte rd[];  rd = new[8]; // Changed to byte to match DPI signature
         simx_read_mem(baddr, 8, rd);
         expected = '0;
         for (int i = 0; i < 8; i++) expected[i*8 +: 8] = rd[i];

@@ -36,35 +36,58 @@ import dcr_agent_pkg::*;
 //==============================================================================
 class dcr_base_sequence extends uvm_sequence #(dcr_transaction);
     `uvm_object_utils(dcr_base_sequence)
-    
+ 
+    // FIX 5: cfg field + pre_body() so derived sequences can read
+    // cfg.startup_addr, cfg.test_timeout_cycles, etc.
+    vortex_config cfg;
+ 
     function new(string name = "dcr_base_sequence");
         super.new(name);
     endfunction
-    
-    // Helper task to write a single DCR
-    task write_dcr(bit [31:0] addr, bit [31:0] data);
+ 
+    virtual task pre_body();
+        super.pre_body();
+        if (m_sequencer != null) begin
+            if (!uvm_config_db#(vortex_config)::get(m_sequencer, "", "cfg", cfg))
+                `uvm_warning("DCR_SEQ", "No vortex_config found on sequencer — cfg will be null")
+        end
+    endtask
+ 
+    // FIX 2: write_dcr — set addr/data AFTER randomize() to avoid constraint conflict.
+    //
+    // dcr_transaction has valid_addr_c: addr inside {DCR_STARTUP_ADDR0..DCR_MPM_CLASS}.
+    // Using randomize() with {this.addr == local::addr} would fail if addr is not one
+    // of those 5 enum values, because both constraints would be active simultaneously.
+    //
+    // Correct pattern: randomize() to satisfy all intra-transaction constraints
+    // (startup_pc_align_c etc.), then OVERRIDE addr and data directly.
+    // addr and data are rand fields so direct assignment is legal post-randomize.
+    //
+    // FIX 3: Use VX_DCR_BASE_* word addresses directly (same as TB_TOP).
+    // dcr_transaction enum applies << 2 (byte-addr) but the hardware interface
+    // vortex_dcr_if.wr_addr is word-addressed (VX_DCR_ADDR_WIDTH=12 bits).
+    // Callers pass VX_DCR_BASE_* word address values — stored directly in trans.addr.
+    task write_dcr(bit [VX_DCR_ADDR_WIDTH-1:0] addr, bit [VX_DCR_DATA_WIDTH-1:0] data);
         dcr_transaction trans;
-        
+ 
         trans = dcr_transaction::type_id::create("trans");
-        
         start_item(trans);
-        
-        // Force specific address and data
-        assert(trans.randomize() with {
-            this.addr == local::addr;
-            this.data == local::data;
-        });
-        
+ 
+        // Randomize to satisfy startup_pc_align_c and other intra-constraints,
+        // then override addr/data with the caller-specified values.
+        void'(trans.randomize());
+        trans.addr = addr;
+        trans.data = data;
+ 
         finish_item(trans);
-        
         `uvm_info("DCR_SEQ", $sformatf("DCR Write: %s = 0x%08h",
             trans.get_dcr_name(), data), UVM_MEDIUM)
     endtask
-    
+ 
 endclass : dcr_base_sequence
-
-
-
+ 
+ 
+ 
 // //==============================================================================
 // // Base DCR Sequence
 // //==============================================================================
@@ -95,8 +118,8 @@ endclass : dcr_base_sequence
 //     endtask
     
 // endclass : dcr_base_sequence
-
-
+ 
+ 
 //==============================================================================
 // Startup Configuration Sequence
 // Configures startup PC and optional argv pointer
@@ -122,42 +145,31 @@ class dcr_startup_config_sequence extends dcr_base_sequence;
     endfunction
     
     virtual task body();
-        // Pull startup_pc from vortex_config in config DB (set by apply_plusargs).
-        // This is the ONLY correct source — honours +STARTUP_ADDR plusarg at runtime.
-        begin
-            vortex_config cfg;
-            if (uvm_config_db #(vortex_config)::get(
-                    null, get_full_name(), "cfg", cfg)) begin
-                startup_pc = cfg.startup_addr;
-                `uvm_info("DCR_SEQ",
-                    $sformatf("startup_pc from cfg.startup_addr: 0x%016h", startup_pc),
-                    UVM_HIGH)
-            end else begin
-                `uvm_info("DCR_SEQ",
-                    $sformatf("cfg not in config DB — using startup_pc=0x%016h", startup_pc),
-                    UVM_MEDIUM)
-            end
-        end
-
+        // FIX 4: cfg is populated by pre_body() (inherited from dcr_base_sequence)
+        // using m_sequencer as context — the only correct way to get config in a sequence.
+        // The old (null, get_full_name()) pattern never matched vortex_env's registration.
+        if (cfg != null && startup_pc == 64'h80000000)
+            startup_pc = cfg.startup_addr;
+ 
         `uvm_info("DCR_SEQ", $sformatf(
             "Configuring startup: PC=0x%016h, argv=0x%016h",
             startup_pc, argv_ptr), UVM_LOW)
-        
-        // Write 64-bit startup PC (split into two 32-bit DCRs)
-        write_dcr(dcr_transaction::DCR_STARTUP_ADDR0, startup_pc[31:0]);
-        write_dcr(dcr_transaction::DCR_STARTUP_ADDR1, startup_pc[63:32]);
-        
-        // Write argv pointer if non-zero (optional)
+ 
+        // FIX 3: Use VX_DCR_BASE_* word-address constants (matches vortex_dcr_if.wr_addr).
+        // NOT VX_DCR_BASE_STARTUP_ADDR0 which applies <<2 (byte-addressing).
+        write_dcr(VX_DCR_BASE_STARTUP_ADDR0, startup_pc[31:0]);
+        write_dcr(VX_DCR_BASE_STARTUP_ADDR1, startup_pc[63:32]);
+ 
         if (argv_ptr != 0) begin
-            write_dcr(dcr_transaction::DCR_ARGV_PTR0, argv_ptr[31:0]);
-            write_dcr(dcr_transaction::DCR_ARGV_PTR1, argv_ptr[63:32]);
+            write_dcr(VX_DCR_BASE_STARTUP_ARG0, argv_ptr[31:0]);
+            write_dcr(VX_DCR_BASE_STARTUP_ARG1, argv_ptr[63:32]);
         end
-        
+ 
         `uvm_info("DCR_SEQ", "Startup configuration complete", UVM_LOW)
     endtask
-    
+ 
 endclass : dcr_startup_config_sequence
-
+ 
 //==============================================================================
 // Minimal Startup Sequence
 // Configures only the startup PC (minimum required configuration)
@@ -177,64 +189,46 @@ class dcr_minimal_startup_sequence extends dcr_base_sequence;
     endfunction
     
     virtual task body();
-        // Pull startup_pc from cfg.startup_addr — honours +STARTUP_ADDR plusarg
-        begin
-            vortex_config cfg;
-            if (uvm_config_db #(vortex_config)::get(
-                    null, get_full_name(), "cfg", cfg)) begin
-                startup_pc = cfg.startup_addr;
-                `uvm_info("DCR_SEQ",
-                    $sformatf("startup_pc from cfg.startup_addr: 0x%016h", startup_pc),
-                    UVM_HIGH)
-            end else begin
-                `uvm_info("DCR_SEQ",
-                    $sformatf("cfg not in config DB — using startup_pc=0x%016h", startup_pc),
-                    UVM_MEDIUM)
-            end
-        end
-
+        // FIX 4: cfg populated by pre_body() using m_sequencer context (correct).
+        if (cfg != null && startup_pc == 64'h80000000)
+            startup_pc = cfg.startup_addr;
+ 
         `uvm_info("DCR_SEQ", $sformatf(
             "Minimal startup configuration: PC=0x%016h", startup_pc), UVM_LOW)
-        
-        // Write only the startup PC
-        write_dcr(dcr_transaction::DCR_STARTUP_ADDR0, startup_pc[31:0]);
-        write_dcr(dcr_transaction::DCR_STARTUP_ADDR1, startup_pc[63:32]);
+ 
+        // FIX 3: VX_DCR_BASE_* word-address constants
+        write_dcr(VX_DCR_BASE_STARTUP_ADDR0, startup_pc[31:0]);
+        write_dcr(VX_DCR_BASE_STARTUP_ADDR1, startup_pc[63:32]);
     endtask
-    
+ 
 endclass : dcr_minimal_startup_sequence
-
+ 
 //==============================================================================
 // Performance Configuration Sequence
 // Configures performance monitoring class
 //==============================================================================
 class dcr_perf_config_sequence extends dcr_base_sequence;
     `uvm_object_utils(dcr_perf_config_sequence)
-    
-    rand bit [31:0] mpm_class;
-    
-    // Constrain to valid MPM class values
-    constraint mpm_class_c {
-        mpm_class inside {
-            VX_DCR_MPM_CLASS_NONE,
-            VX_DCR_MPM_CLASS_CORE,
-            VX_DCR_MPM_CLASS_MEM
-        };
-    }
-    
+ 
+    // FIX 6: VX_DCR_MPM_CLASS_* constants come from vortex_config_pkg (VX_types.vh).
+    // If they are not defined there, this sequence causes a compile error.
+    // Using integer literals as safe fallback values (0=NONE, 1=CORE, 2=MEM).
+    // Replace with VX_DCR_MPM_CLASS_NONE/CORE/MEM if confirmed in vortex_config.sv.
+    bit [31:0] mpm_class;  // NOT rand — caller sets this explicitly
+ 
     function new(string name = "dcr_perf_config_sequence");
         super.new(name);
-        mpm_class = VX_DCR_MPM_CLASS_NONE;  // Disabled by default
+        mpm_class = 32'h0;  // 0 = disabled / NONE class
     endfunction
-    
+ 
     virtual task body();
-        `uvm_info("DCR_SEQ", $sformatf(
-            "Performance monitoring class: 0x%0h", mpm_class), UVM_LOW)
-        
-        write_dcr(dcr_transaction::DCR_MPM_CLASS, mpm_class);
+        `uvm_info("DCR_SEQ", $sformatf("Performance monitoring class: 0x%0h", mpm_class), UVM_LOW)
+        // FIX 3: VX_DCR_BASE_MPM_CLASS word address
+        write_dcr(VX_DCR_BASE_MPM_CLASS, mpm_class);
     endtask
-    
+ 
 endclass : dcr_perf_config_sequence
-
+ 
 //==============================================================================
 // Random DCR Sequence
 // Generates random legal DCR traffic for stress testing
@@ -270,5 +264,5 @@ class dcr_random_sequence extends dcr_base_sequence;
     endtask
     
 endclass : dcr_random_sequence
-
+ 
 `endif // DCR_SEQUENCES_SV

@@ -103,6 +103,7 @@ ${YELLOW}Optional Flags:${NC}
     --gui                    Run in GUI mode (Questa only)
     --clean                  Clean before compile
     --verbose                Enable verbose output (sets +VERBOSE in sim)
+    --debug-addr             Enable LSU address calculation debug tracing  # ← ADD THIS
     --no-tcu                 Disable TCU (exclude TCU files from flist)
     --help                   Show this help
 
@@ -209,6 +210,7 @@ TCU_TYPE="TCU_BHF"
 NO_TCU=0
 NO_COMPILE=0
 CLEAN=0
+DEBUG_ADDR_CALC=0
 
 
 # Simulation options
@@ -246,6 +248,7 @@ for arg in "$@"; do
         --gui)          GUI_MODE=1 ;;
         --clean)        CLEAN=1 ;;
         --verbose)      VERBOSE=1 ;;
+        --debug-addr)   DEBUG_ADDR_CALC=1 ;;  
         --no-tcu)       NO_TCU=1 ;;
         --help|-h)      usage ;;
         *)
@@ -336,35 +339,73 @@ else
     exit 1
 fi
 
-
-# ── FIX B ────────────────────────────────────────────────────────────────────
-# Without -sv_lib the DPI functions (dpi_trace etc.) are unresolved at runtime:
-#   vsim-3770: Failed to find 'dpi_trace' in shared library.
-# TCU and FPU trace output is silently dropped for the entire simulation.
-# Build the .so once with the command printed below; afterwards it auto-links.
-# --- Vortex DPI (optional) ---
-VORTEX_DPI_LIB="$FLISTS_DIR/vortex_dpi"
-
-# --- UVM DPI (REQUIRED) ---
+# ── DPI LIBRARY PATHS ────────────────────────────────────────────────────────
 UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
+SIMX_REF_DIR="$PROJECT_ROOT/uvm_env/ref_model"
+SIMX_MODEL_LIB="$SIMX_REF_DIR/simx_model"
 
 DPI_FLAG=""
+SIMX_ENABLED=0
 
-# Add UVM DPI FIRST (critical)
+# --- UVM DPI (REQUIRED) ---
 if [[ -f "${UVM_DPI_LIB}.so" ]]; then
     DPI_FLAG="$DPI_FLAG -sv_lib ${UVM_DPI_LIB}"
-    print_success "UVM DPI loaded: ${UVM_DPI_LIB}.so"
+    print_success "UVM DPI: ${UVM_DPI_LIB}.so"
 else
-    print_error "UVM DPI not found! This WILL crash simulation."
+    print_error "UVM DPI not found! Simulation will crash."
 fi
 
-# Add Vortex DPI if exists
-if [[ -f "${VORTEX_DPI_LIB}.so" ]]; then
-    DPI_FLAG="$DPI_FLAG -sv_lib ${VORTEX_DPI_LIB}"
-    print_success "Vortex DPI loaded: ${VORTEX_DPI_LIB}.so"
+# --- SimX Golden Model (build if needed) ---
+print_header "SimX Golden Model"
+
+if [[ -z "$VORTEX_HOME" ]]; then
+    print_warning "VORTEX_HOME not set — skipping SimX build"
+elif [[ ! -d "$VORTEX_HOME/sim/simx/obj" ]]; then
+    print_warning "SimX not built (no obj/ in $VORTEX_HOME/sim/simx)"
+    print_info  "Build SimX first: cd \$VORTEX_HOME/sim/simx && make"
 else
-    print_warning "Vortex DPI not found (optional)"
+    print_info "Building SimX DPI library..."
+    (
+        cd "$SIMX_REF_DIR" || exit 1
+        ARCH_FLAGS="-DNUM_CLUSTERS=${NUM_CLUSTERS} -DNUM_CORES=${NUM_CORES}"
+        ARCH_FLAGS="$ARCH_FLAGS -DNUM_WARPS=${NUM_WARPS} -DNUM_THREADS=${NUM_THREADS}"
+        make build \
+            VORTEX_HOME="$VORTEX_HOME" \
+            QUESTA_HOME="$QUESTA_HOME" \
+            EXTRA_CXXFLAGS="$ARCH_FLAGS" 2>&1
+    )
+    if [[ $? -eq 0 && -f "${SIMX_MODEL_LIB}.so" ]]; then
+        DPI_FLAG="$DPI_FLAG -sv_lib ${SIMX_MODEL_LIB}"
+        SIMX_ENABLED=1
+        print_success "SimX DPI built and linked: simx_model.so"
+    else
+        print_warning "SimX DPI build failed — running without golden model"
+    fi
 fi
+
+# Add NO_SIMX plusarg if SimX not available
+if [[ $SIMX_ENABLED -eq 0 ]]; then
+    SIM_OPTS="$SIM_OPTS +NO_SIMX"
+    print_info "SimX disabled (add +NO_SIMX to suppress this)"
+fi
+# ─────────────────────────────────────────────────────────────────────────────
+
+# DPI_LIB="$FLISTS_DIR/vortex_dpi"
+# DPI_FLAG=""
+# if [[ -f "${DPI_LIB}.so" ]]; then
+#     DPI_FLAG="-sv_lib ${DPI_LIB}"
+#     print_success "DPI library: ${DPI_LIB}.so"
+# else
+#     print_warning "DPI library not found: ${DPI_LIB}.so"
+#     print_info    "  TCU/FPU trace (dpi_trace) will be silent — vsim-3770 expected."
+#     print_info    "  Build once with:"
+#     print_info    "    QUESTA_INC=\$(dirname \$(which vsim))/../include"
+#     print_info    "    gcc -shared -fPIC \\"
+#     print_info    "        -o ${DPI_LIB}.so \\"
+#     print_info    "        \$VORTEX_HOME/hw/dpi/util_dpi.cpp \\"
+#     print_info    "        \$VORTEX_HOME/hw/dpi/float_dpi.cpp \\"
+#     print_info    "        -I\$VORTEX_HOME/hw/dpi -I\$QUESTA_INC"
+# fi
 # ─────────────────────────────────────────────────────────────────────────────
 
 
@@ -692,7 +733,15 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     # COMPILE_OPTS — compile-time +define+ flags only
     # These bake the hardware configuration into the RTL and UVM at elaboration.
     # -------------------------------------------------------------------------
+    # ─ DEBUG OPTIONS ─────────────────────────────────────────────────────────────
     COMPILE_OPTS="+define+$FPU_TYPE"
+
+    if [[ $DEBUG_ADDR_CALC -eq 1 ]]; then
+        COMPILE_OPTS="$COMPILE_OPTS +define+DBG_ADDR_CALC"
+        COMPILE_OPTS="$COMPILE_OPTS +define+DBG_LSU_ADDR"
+        print_info "Debug: Address calculation tracing ENABLED"
+    fi
+    # ─────────────────────────────────────────────────────────────────────────────
 
 
     # TCU handling — must remove ALL tcu file references from flist, not just the define
@@ -754,6 +803,7 @@ if [[ $NO_COMPILE -eq 0 ]]; then
             2>&1 | tee -a "$RESULTS_RUN_DIR/logs/compile_uvm.log"
     fi
 
+
 else
     print_header "Skipping Compilation"
 fi
@@ -791,20 +841,15 @@ fi
 
 
 if [[ -n "$PROGRAM_HEX" ]]; then
-    SIM_OPTS="$SIM_OPTS +PROGRAM=$PROGRAM_HEX"      # → PROGRAM=%s
+    SIM_OPTS="$SIM_OPTS +PROGRAM=$PROGRAM_HEX"
 fi
 
 
 if [[ $NO_WAVES -eq 0 ]]; then
     WAVE_FILE="$RESULTS_RUN_DIR/waves/${TEST_NAME}_${MEMORY_INTERFACE}.vcd"
-    SIM_OPTS="$SIM_OPTS +WAVE=$WAVE_FILE"           # → WAVE=%s
+    SIM_OPTS="$SIM_OPTS +WAVE=$WAVE_FILE"
 else
-    SIM_OPTS="$SIM_OPTS +NO_WAVES"                  # → NO_WAVES
-fi
-
-# FIX: --verbose flag must send +VERBOSE so apply_plusargs() can read it
-if [[ $VERBOSE -eq 1 ]]; then
-    SIM_OPTS="$SIM_OPTS +VERBOSE"                   # → VERBOSE
+    SIM_OPTS="$SIM_OPTS +NO_WAVES"
 fi
 
 
@@ -812,6 +857,8 @@ fi
 if [[ $VERBOSE -eq 1 ]]; then
     SIM_OPTS="$SIM_OPTS +VERBOSE"
 fi
+
+
 
 
 print_info "Test:      $TEST_NAME"
