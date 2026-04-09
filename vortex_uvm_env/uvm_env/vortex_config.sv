@@ -230,7 +230,7 @@ class vortex_config extends uvm_object;
     //==========================================================================
 
     rand int unsigned   CLK_FREQ_MHZ;
-    rand real           CLK_PERIOD_NS;
+    real                CLK_PERIOD_NS;  // ← REMOVED 'rand' (It is a derived value)
     rand int unsigned   max_latency_cycles;
     rand int unsigned   min_inter_req_delay;
     rand int unsigned   max_inter_req_delay;
@@ -400,7 +400,7 @@ class vortex_config extends uvm_object;
 
     constraint clock_config_c {
         CLK_FREQ_MHZ         inside {[50:500]};
-        CLK_PERIOD_NS        == (1000.0 / real'(CLK_FREQ_MHZ));
+        // REMOVED: CLK_PERIOD_NS == ... (Calculated in post_randomize instead)
         max_latency_cycles   inside {[10:1000]};
         min_inter_req_delay  inside {[0:10]};
         max_inter_req_delay  inside {[min_inter_req_delay:100]};
@@ -442,6 +442,15 @@ class vortex_config extends uvm_object;
         // components that receive this config object via config_db.
         ebreak_event = new("ebreak_event");
         set_defaults_from_vx_config();
+    endfunction
+
+    //==========================================================================
+    // POST-RANDOMIZATION DERIVATIONS
+    //==========================================================================
+    function void post_randomize();
+        super.post_randomize();
+        // Safely derive floating-point period from randomized integer frequency
+        CLK_PERIOD_NS = 1000.0 / real'(CLK_FREQ_MHZ);
     endfunction
 
     //==========================================================================
