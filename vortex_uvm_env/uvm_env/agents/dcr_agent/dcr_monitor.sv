@@ -156,15 +156,16 @@ class dcr_monitor extends uvm_monitor;
     // Detects when critical startup DCRs are configured
     //==========================================================================
     task monitor_startup_sequence();
-
         bit [63:0] startup_pc;
+        
         forever begin
-            // Wait until both startup address DCRs are written
-            wait (current_dcr_values.exists(dcr_transaction::DCR_STARTUP_ADDR0) &&
-                  current_dcr_values.exists(dcr_transaction::DCR_STARTUP_ADDR1));
+            @(vif.monitor_cb); // Wait for the clock edge first
             
-            // Set flag and trigger event (only once)
-            if (!startup_configured) begin
+            if (!startup_configured && 
+                current_dcr_values.exists(dcr_transaction::DCR_STARTUP_ADDR0) &&
+                current_dcr_values.exists(dcr_transaction::DCR_STARTUP_ADDR1)) begin
+                
+                // Set flag and trigger event
                 startup_configured = 1;
                 -> startup_config_complete;
                 
@@ -175,8 +176,6 @@ class dcr_monitor extends uvm_monitor;
                 `uvm_info("DCR_MON", $sformatf(
                     "✓ Startup configuration complete: PC=0x%016h", startup_pc), UVM_LOW)
             end
-            
-            @(vif.monitor_cb);
         end
     endtask
     
