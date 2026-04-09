@@ -38,7 +38,7 @@ import vortex_config_pkg::*;
 import vortex_env_pkg::*;
 import dcr_agent_pkg::*;
 
-`include "mem_model.sv"
+import mem_model_pkg::*;
 `include "vortex_base_test.sv"
 
 class vortex_smoke_test extends vortex_base_test;
@@ -85,7 +85,8 @@ class vortex_smoke_test extends vortex_base_test;
         
         cfg.enable_scoreboard = 1;
         cfg.enable_coverage   = 1;
-        cfg.simx_enable       = 0;
+        cfg.simx_enable       = 1;
+        cfg.simx_path         ="DPI_MODE";
         // DO NOT override cfg.axi_agent_enable here!
         // apply_plusargs() already set it correctly from +USE_AXI_WRAPPER:
         //   +USE_AXI_WRAPPER present → axi_agent_enable = 1  (AXI path)

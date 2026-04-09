@@ -33,6 +33,11 @@ import uvm_pkg::*;
 `include "uvm_macros.svh"
 import vortex_config_pkg::*;
 import vortex_env_pkg::*;
+import mem_agent_pkg::*;
+import axi_agent_pkg::*;
+import dcr_agent_pkg::*;
+import host_agent_pkg::*;
+import status_agent_pkg::*;
 
 class vortex_virtual_sequence extends uvm_sequence;
     `uvm_object_utils(vortex_virtual_sequence)
@@ -95,9 +100,7 @@ class vortex_virtual_sequence extends uvm_sequence;
         int unsigned timeout_ns;
 
         if (cfg == null) begin
-            `uvm_fatal("VIRT_SEQ",
-                "wait_for_execution_complete() called but cfg is null — "
-                "did pre_body() run and find a config?")
+            `uvm_fatal("VIRT_SEQ", "wait_for_execution_complete() called but cfg is null — did pre_body() run and find a config?")
         end
 
         if (cfg.ebreak_event == null) begin
@@ -124,10 +127,7 @@ class vortex_virtual_sequence extends uvm_sequence;
             // Branch 2 — timeout watchdog
             begin
                 #(timeout_ns * 1ns);
-                `uvm_error("VIRT_SEQ",
-                    $sformatf("wait_for_execution_complete() timed out after "
-                              "%0d cycles (%0d ns) — DUT never signalled EBREAK",
-                              cfg.test_timeout_cycles, timeout_ns))
+                `uvm_error("VIRT_SEQ", $sformatf("wait_for_execution_complete() timed out after %0d cycles (%0d ns) — DUT never signalled EBREAK", cfg.test_timeout_cycles, timeout_ns))
             end
         join_any
         disable fork;
