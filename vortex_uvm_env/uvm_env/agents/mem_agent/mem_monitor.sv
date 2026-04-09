@@ -77,6 +77,9 @@ class mem_monitor extends uvm_monitor;
     int num_reads;              // Read transactions
     int num_writes;             // Write transactions
     int num_mismatched_tags;    // Tag errors detected
+    longint total_latency;
+    int     max_latency;
+    int     min_latency;
     
     //==========================================================================
     // Constructor
@@ -94,6 +97,9 @@ class mem_monitor extends uvm_monitor;
         num_writes = 0;
         num_mismatched_tags = 0;
         cycle_count = 0;
+        total_latency = 0;
+        max_latency = 0;
+        min_latency = -1;
     endfunction
     
     //==========================================================================
@@ -135,7 +141,6 @@ class mem_monitor extends uvm_monitor;
     
     //==========================================================================
     // Collect Memory Requests
-    // Observes req_valid && req_ready handshakes
     //==========================================================================
     virtual task collect_requests();
         mem_transaction trans;
@@ -143,129 +148,97 @@ class mem_monitor extends uvm_monitor;
         forever begin
             @(vif.monitor_cb);
             
-            // // Guard against reset and X-states
+            // Guard against reset and X-states BEFORE doing anything
             if (!vif.reset_n) continue;
-            // if ($isunknown(vif.monitor_cb.req_valid)) continue;
-            // if ($isunknown(vif.monitor_cb.req_ready)) continue;
+            if ($isunknown(vif.monitor_cb.req_valid[0])) continue;
+            if ($isunknown(vif.monitor_cb.req_ready[0])) continue;
             
-            // // Detect request handshake
-            // if (vif.monitor_cb.req_valid && vif.monitor_cb.req_ready) begin
+            // Detect request handshake
+            if (vif.monitor_cb.req_valid[0] && vif.monitor_cb.req_ready[0]) begin
                 
-                // Create new transaction object
+                // Create new transaction object ONLY when a valid handshake occurs
                 trans = mem_transaction::type_id::create("trans");
                 
-            //     // Capture all request fields from clocking block
-            //     trans.rw     = vif.monitor_cb.req_rw;
-            //     trans.addr   = vif.monitor_cb.req_addr;
-            //     trans.data   = vif.monitor_cb.req_data;
-            //     trans.byteen = vif.monitor_cb.req_byteen;
-            //     trans.tag    = vif.monitor_cb.req_tag;
-
-                            // AFTER (add [0] everywhere):
-                if ($isunknown(vif.monitor_cb.req_valid[0])) continue;
-                if ($isunknown(vif.monitor_cb.req_ready[0])) continue;
-
-                if (vif.monitor_cb.req_valid[0] && vif.monitor_cb.req_ready[0]) begin
-                    trans.rw     = vif.monitor_cb.req_rw[0];
-                    trans.addr   = vif.monitor_cb.req_addr[0];
-                    trans.data   = vif.monitor_cb.req_data[0];
-                    trans.byteen = vif.monitor_cb.req_byteen[0];
-                    trans.tag    = vif.monitor_cb.req_tag[0];
+                trans.rw     = vif.monitor_cb.req_rw[0];
+                trans.addr   = vif.monitor_cb.req_addr[0];
+                trans.data   = vif.monitor_cb.req_data[0];
+                trans.byteen = vif.monitor_cb.req_byteen[0];
+                trans.tag    = vif.monitor_cb.req_tag[0];
                 
-                // Record timing information
+                // Record timing information (Use cycle_count for precise latency!)
                 trans.req_time = $time;
+                // NOTE: Add 'longint req_cycle;' to mem_transaction.sv if you haven't already!
+                // trans.req_cycle = cycle_count; 
                 
-                // Store in outstanding transactions map
                 // If tag already exists, warn about potential protocol violation
                 if (outstanding_trans.exists(trans.tag)) begin
                     `uvm_warning("MEM_MON", $sformatf(
-                        "Overwriting outstanding transaction with tag=%0d", 
-                        trans.tag))
+                        "Overwriting outstanding transaction with tag=%0d", trans.tag))
                 end
                 
                 outstanding_trans[trans.tag] = trans;
                 
                 // Update statistics
                 num_requests++;
-                if (trans.is_read())
-                    num_reads++;
-                else
-                    num_writes++;
+                if (trans.is_read()) num_reads++;
+                else                 num_writes++;
                 
                 `uvm_info("MEM_MON", $sformatf(
                     "Request captured: %s addr=0x%h, tag=%0d, cycle=%0d",
-                    trans.is_read() ? "READ" : "WRITE", 
-                    trans.addr, trans.tag, cycle_count), UVM_HIGH)
+                    trans.is_read() ? "READ" : "WRITE", trans.addr, trans.tag, cycle_count), UVM_HIGH)
             end
         end
     endtask
     
     //==========================================================================
     // Collect Memory Responses
-    // Observes rsp_valid && rsp_ready handshakes and matches by tag
     //==========================================================================
     virtual task collect_responses();
         mem_transaction trans;
         int tag;
-        longint start_cycle;
         
         forever begin
             @(vif.monitor_cb);
             
-            // Guard against reset and X-states
             if (!vif.reset_n) continue;
             if ($isunknown(vif.monitor_cb.rsp_valid[0])) continue;
             if ($isunknown(vif.monitor_cb.rsp_ready[0])) continue;
             
-            // Detect response handshake
             if (vif.monitor_cb.rsp_valid[0] && vif.monitor_cb.rsp_ready[0]) begin
-                
-                // Capture response fields
                 tag = vif.monitor_cb.rsp_tag[0];
                 
-                // Find matching request by tag
                 if (outstanding_trans.exists(tag)) begin
                     trans = outstanding_trans[tag];
                     
-                    // Complete the transaction
                     trans.rsp_data = vif.monitor_cb.rsp_data[0];
                     trans.rsp_tag  = vif.monitor_cb.rsp_tag[0];
                     trans.rsp_time = $time;
                     
-                    // Calculate cycle-accurate latency
-                    // Count cycles from request to response
-                    trans.latency_cycles = int'(cycle_count - 
-                        (trans.req_time / (1000.0 / cfg.CLK_FREQ_MHZ)));
+                    // CYCLE ACCURATE LATENCY (Requires trans.req_cycle to be captured above)
+                    // trans.latency_cycles = int'(cycle_count - trans.req_cycle);
+                    // Fallback using time if you don't want to modify mem_transaction.sv:
+                    trans.latency_cycles = int'((trans.rsp_time - trans.req_time) / (1000.0 / cfg.CLK_FREQ_MHZ));
                     
                     trans.completed = 1;
                     
-                    // Verify tag consistency
+                    // Accumulate latency stats for Report Phase
+                    total_latency += trans.latency_cycles;
+                    if (min_latency == -1 || trans.latency_cycles < min_latency) min_latency = trans.latency_cycles;
+                    if (trans.latency_cycles > max_latency) max_latency = trans.latency_cycles;
+
                     if (trans.rsp_tag != trans.tag) begin
-                        `uvm_error("MEM_MON", $sformatf(
-                            "Tag mismatch! Request tag=%0d, Response tag=%0d",
-                            trans.tag, trans.rsp_tag))
+                        `uvm_error("MEM_MON", $sformatf("Tag mismatch! Req=%0d, Rsp=%0d", trans.tag, trans.rsp_tag))
                         trans.error = 1;
                         num_mismatched_tags++;
                     end
                     
-                    // Remove from outstanding map
                     outstanding_trans.delete(tag);
                     num_responses++;
                     
-                    `uvm_info("MEM_MON", $sformatf(
-                        "Response captured: tag=%0d, data=0x%h, latency=%0d cycles",
-                        tag, trans.rsp_data, trans.latency_cycles), UVM_HIGH)
-                    
-                    // Broadcast completed transaction to scoreboard
-                    // This is where the scoreboard receives transactions for
-                    // Option A (final state comparison after EBREAK)
                     ap.write(trans);
                     
                 end else begin
-                    // PROTOCOL VIOLATION: Response for unknown/completed tag
-                    `uvm_error("MEM_MON", $sformatf(
-                        "Response received for unknown tag: %0d (cycle=%0d)",
-                        tag, cycle_count))
+                    `uvm_error("MEM_MON", $sformatf("Response for unknown tag: %0d (cycle=%0d)", tag, cycle_count))
                 end
             end
         end
@@ -306,10 +279,14 @@ class mem_monitor extends uvm_monitor;
     
     //==========================================================================
     // Report Phase
-    // Print comprehensive statistics
     //==========================================================================
     virtual function void report_phase(uvm_phase phase);
+        real avg_lat = 0.0;
         super.report_phase(phase);
+        
+        if (num_responses > 0) begin
+            avg_lat = real'(total_latency) / real'(num_responses);
+        end
         
         `uvm_info("MEM_MON", {"\n",
             "========================================\n",
@@ -319,6 +296,11 @@ class mem_monitor extends uvm_monitor;
             $sformatf("  Total Responses:    %0d\n", num_responses),
             $sformatf("  Read Transactions:  %0d\n", num_reads),
             $sformatf("  Write Transactions: %0d\n", num_writes),
+            "----------------------------------------\n",
+            $sformatf("  Avg Latency:        %.2f cycles\n", avg_lat),
+            $sformatf("  Min Latency:        %0d cycles\n",  min_latency == -1 ? 0 : min_latency),
+            $sformatf("  Max Latency:        %0d cycles\n",  max_latency),
+            "----------------------------------------\n",
             $sformatf("  Tag Mismatches:     %0d\n", num_mismatched_tags),
             $sformatf("  Outstanding:        %0d\n", outstanding_trans.size()),
             $sformatf("  Total Cycles:       %0d\n", cycle_count),
