@@ -2,34 +2,33 @@
 // File: vortex_functional_mem_vseq.sv
 // Description: Functional Memory Virtual Sequence
 //
-// Reads the output buffer written by program_with_store.hex via the
-// custom MEM agent and compares against the golden value.
+// Waits for EBREAK (DUT execution complete) then reads the result directly
+// from mem_model and compares against the golden value.
 //
-// Requires: program_with_store.hex (sw x3, 0(t3) writes 3 to 0x80001000)
+// Golden: program_with_store.hex writes 0x00000003 to byte address 0x80001000
 //
-// Key facts from actual mem_sequences.sv:
-//   mem_block_read_sequence.start_addr  -> rand bit[31:0], [2:0]==0 (8-byte aligned)
-//   mem_block_read_sequence.num_words   -> rand int, constraint {[4:256]}
-//   mem_block_read_sequence.read_data[] -> bit[63:0] per word (64-bit)
-//   sw stores 32-bit -> result is in read_data[0][31:0]
-//
-// cfg is available from pre_body() - do NOT call super.body()
+// WHY mem_model direct read (not agent sequence):
+//   In MEM mode, mem_agent is PASSIVE — m_mem_sequencer is null.
+//   In AXI mode, axi_sequencer expects axi_transaction, not mem_transaction.
+//   mem_model IS the ground truth — TB_TOP writes every DUT store into it.
+//   Reading mem_model directly after EBREAK is correct and interface-agnostic.
 ////////////////////////////////////////////////////////////////////////////////
 
 `ifndef VORTEX_FUNCTIONAL_MEM_VSEQ_SV
-`define VORTEX_FUNCTIONAL_MEM_VSEQ_SV 
+`define VORTEX_FUNCTIONAL_MEM_VSEQ_SV
 
-`include "../agents/mem_agent/mem_sequences.sv"
+// This file is `included inside vortex_test_pkg — all imports are provided
+// by the enclosing package scope. Do NOT add standalone import statements.
 
 class vortex_functional_mem_vseq extends vortex_virtual_sequence;
     `uvm_object_utils(vortex_functional_mem_vseq)
 
-    // Output address: 0x80001000 — [2:0]==0 satisfies addr_aligned_c
-    static const bit [31:0] OUTPUT_ADDR  = 32'h8000_1000;
-    // Golden: program does 1+2=3, stores to 0x80001000
-    static const bit [31:0] GOLDEN_VALUE = 32'h0000_0003;
+    // Byte address of the result: program writes 0x3 to 0x80001000
+    static const bit [63:0] OUTPUT_BYTE_ADDR = 64'h8000_1000;
+    // Golden value: program computes 1+2=3 and stores it
+    static const bit [31:0] GOLDEN_VALUE     = 32'h0000_0003;
 
-    // Number of read-back iterations (referenced by functional_memory_test)
+    // Number of iterations (referenced by functional_memory_test banner)
     int unsigned num_iterations = 1;
 
     function new(string name = "vortex_functional_mem_vseq");
@@ -38,30 +37,56 @@ class vortex_functional_mem_vseq extends vortex_virtual_sequence;
 
     //==========================================================================
     // body()
-    // cfg already populated by pre_body() from p_sequencer.cfg.
-    // Do NOT call super.body().
+    // pre_body() already populated cfg from p_sequencer.cfg.
+    // We wait for EBREAK then read mem_model directly.
     //==========================================================================
     virtual task body();
-        mem_block_read_sequence rd_seq;
+        mem_model  m_mem;
+        bit [511:0] cache_line;
+        bit [31:0]  result;
+        bit [63:0]  cache_line_byte_addr;
 
-        `uvm_info("FUNC_MEM_VSEQ", $sformatf("Reading output buffer @ 0x%08h via MEM agent", OUTPUT_ADDR), UVM_LOW)
+        // Align to cache-line boundary (64-byte = VX_MEM_LINE_SIZE)
+        // 0x80001000 is already 64-byte aligned (0x80001000 % 64 == 0)
+        cache_line_byte_addr = OUTPUT_BYTE_ADDR &
+                               ~(64'(vortex_config_pkg::VX_MEM_LINE_SIZE) - 1);
 
-        rd_seq = mem_block_read_sequence::type_id::create("rd_seq");
+        // ── Wait for DUT to finish ───────────────────────────────────────────
+        // cfg.ebreak_event is triggered by vortex_scoreboard.write_status()
+        // the moment the status_agent monitor sees ebreak_detected == 1.
+        // This unblocks at exactly the cycle EBREAK fires — no polling.
+        `uvm_info("FUNC_MEM_VSEQ",
+            $sformatf("Waiting for EBREAK (timeout=%0d cycles)...",
+                cfg.test_timeout_cycles), UVM_MEDIUM)
+        wait_for_execution_complete();
+        `uvm_info("FUNC_MEM_VSEQ", "EBREAK received — reading result from mem_model", UVM_LOW)
 
-        // Must meet constraint addr_aligned_c: start_addr[2:0] == 3'b000
-        rd_seq.start_addr = OUTPUT_ADDR;  // 0x80001000[2:0] == 0 OK
+        // ── Read result from mem_model ───────────────────────────────────────
+        if (!uvm_config_db #(mem_model)::get(null, "*", "mem_model", m_mem)) begin
+            `uvm_fatal("FUNC_MEM_VSEQ",
+                "mem_model not found in config_db — was it set by TB_TOP?")
+        end
 
-        // Must meet constraint reasonable_size_c: num_words inside {[4:256]}
-        rd_seq.num_words = 4;  // minimum legal value; we only check [0]
+        cache_line = m_mem.read_line(cache_line_byte_addr);
 
-        // mem_block_read_sequence extends mem_base_sequence, runs on mem sequencer
-        rd_seq.start(p_sequencer.m_mem_sequencer);
+        // The sw instruction stores a 32-bit word.
+        // Byte offset within cache line = OUTPUT_BYTE_ADDR % VX_MEM_LINE_SIZE = 0
+        // so result is in bits [31:0] of the cache line.
+        result = cache_line[31:0];
 
-        // read_data[] is bit[63:0]. sw x3 stores 32-bit value -> lower word
-        if (rd_seq.read_data[0][31:0] !== GOLDEN_VALUE) begin
-            `uvm_error("FUNC_MEM_VSEQ", $sformatf("GOLDEN MISMATCH @ 0x%08h : got 0x%08h expected 0x%08h", OUTPUT_ADDR, rd_seq.read_data[0][31:0], GOLDEN_VALUE))
+        `uvm_info("FUNC_MEM_VSEQ",
+            $sformatf("mem_model[0x%016h] cache_line[31:0] = 0x%08h",
+                cache_line_byte_addr, result), UVM_LOW)
+
+        // ── Golden check ─────────────────────────────────────────────────────
+        if (result !== GOLDEN_VALUE) begin
+            `uvm_error("FUNC_MEM_VSEQ",
+                $sformatf("GOLDEN MISMATCH @ 0x%016h : got 0x%08h expected 0x%08h",
+                    OUTPUT_BYTE_ADDR, result, GOLDEN_VALUE))
         end else begin
-            `uvm_info("FUNC_MEM_VSEQ", $sformatf("GOLDEN MATCH: mem[0x%08h][31:0] = 0x%08h", OUTPUT_ADDR, rd_seq.read_data[0][31:0]), UVM_LOW)
+            `uvm_info("FUNC_MEM_VSEQ",
+                $sformatf("GOLDEN MATCH ✓  mem_model[0x%016h] = 0x%08h",
+                    OUTPUT_BYTE_ADDR, result), UVM_LOW)
         end
     endtask
 

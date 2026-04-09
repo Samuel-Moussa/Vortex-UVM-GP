@@ -56,7 +56,7 @@ parameter VX_MEM_LINE_SIZE    = 64;                     // L3_LINE_SIZE bytes
 parameter VX_MEM_OFFSET_BITS  = 6;                      // $clog2(VX_MEM_LINE_SIZE)
 parameter VX_MEM_DATA_WIDTH   = VX_MEM_LINE_SIZE * 8;  // 512 bits — NEVER changes
 parameter VX_MEM_BYTEEN_WIDTH = VX_MEM_LINE_SIZE;       // 64 bytes  — NEVER changes
-parameter VX_MEM_TAG_WIDTH    = 8;                      // L3_MEM_TAG_WIDTH (VX_define.vh)
+parameter VX_MEM_TAG_WIDTH    = 50;                      // L3_MEM_TAG_WIDTH (VX_define.vh)
 
 `ifdef XLEN_64
     parameter VX_MEM_ADDR_WIDTH = 42;   // 48 - 6  (word address, RV64)
