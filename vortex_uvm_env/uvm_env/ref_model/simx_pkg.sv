@@ -1,268 +1,130 @@
-////////////////////////////////////////////////////////////////////////////////
-// File: simx_pkg.sv
-// Description: SystemVerilog Package for SimX DPI-C Integration
-//
-// Provides:
-//   - DPI-C function imports
-//   - UVM golden model component
-//   - Utility functions for memory operations
-//
-// Author: Vortex UVM Team
-// Date: December 2025
-////////////////////////////////////////////////////////////////////////////////
-
-`ifndef SIMX_PKG_SV
-`define SIMX_PKG_SV
-
 package simx_pkg;
     import uvm_pkg::*;
     `include "uvm_macros.svh"
-    import vortex_config_pkg::*;
+    import vortex_config_pkg::*; // Import your config package
 
-    //==========================================================================
-    // DPI-C Function Imports
-    //==========================================================================
-    
-    // Initialization and cleanup
+    //---------------------------------------------------------
+    // DPI Imports
+    //---------------------------------------------------------
     import "DPI-C" context function int simx_init(
         input int num_cores,
         input int num_warps,
         input int num_threads
     );
 
-    import "DPI-C" context function void simx_cleanup();
-
-    // Program loading
-    import "DPI-C" context function int simx_load_program(
-        input string filename,
-        input longint load_addr
-    );
-
-    // Memory operations
+        // --- Raw memory access ---
     import "DPI-C" context function void simx_write_mem(
-        input longint addr,
-        input int size,
-        input byte data[]
+        input  longint addr,
+        input  int     size,
+        input  byte    data[]
     );
-
     import "DPI-C" context function void simx_read_mem(
         input longint addr,
         input int size,
-        inout byte data[]
+        inout byte data[] // Dynamic array
     );
 
-    // DCR operations
-    import "DPI-C" context function int simx_dcr_write(
+    import "DPI-C" context function void simx_cleanup();
+
+    // --- Memory loading ---
+    import "DPI-C" context function int  simx_load_bin(
+        input string filepath,
+        input longint load_addr
+    );
+    import "DPI-C" context function int  simx_load_hex(
+        input string filepath
+    );
+    import "DPI-C" function int  simx_load_hex_at (
+        string filepath, longint unsigned base_addr
+        );
+
+     // --- DCR configuration ---
+    import "DPI-C" context function void simx_dcr_write(
         input int addr,
-        input int data
+        input int value
     );
 
-    import "DPI-C" context function int simx_dcr_read(
-        input int addr
-    );
+    // --- Execution: post-mortem ---
+    import "DPI-C" context function int  simx_run();
 
-    // Execution control
-    import "DPI-C" context function int simx_run(
-        input int max_cycles
-    );
+    // --- Execution: on-the-fly ---
+    import "DPI-C" context function int  simx_step(input int cycles);
+    import "DPI-C" context function int  simx_is_done();       // returns 1 when finished
+    import "DPI-C" context function int  simx_get_exitcode();  // returns exit code after done
 
-    import "DPI-C" context function int simx_step();
+    // --- Optional bootstrap helper ---
+    import "DPI-C" context function void simx_init_exit_code_register();
 
-    import "DPI-C" context function int simx_is_busy();
-
-    // Performance monitoring
-    import "DPI-C" context function void simx_get_perf_counters(
-        output longint cycles,
-        output longint instructions
-    );
-
-    // Debug
-    import "DPI-C" context function void simx_dump_state();
-
-    //==========================================================================
+    //---------------------------------------------------------
     // UVM Golden Model Component
-    //==========================================================================
-    
+    //---------------------------------------------------------
     class simx_golden_model extends uvm_component;
         `uvm_component_utils(simx_golden_model)
 
-        // Configuration
         vortex_config cfg;
         
-        // Analysis port to send expected results
+        // Analysis port to send expected transactions to scoreboard
         uvm_analysis_port #(uvm_sequence_item) ap;
 
-        // State tracking
-        bit initialized;
-        bit execution_complete;
-        longint cycle_count;
-        longint instr_count;
-
-        //----------------------------------------------------------------------
-        // Constructor
-        //----------------------------------------------------------------------
-        function new(string name = "simx_golden_model", uvm_component parent = null);
+        function new(string name, uvm_component parent);
             super.new(name, parent);
             ap = new("ap", this);
-            initialized = 1'b0;
-            execution_complete = 1'b0;
         endfunction
 
-        //----------------------------------------------------------------------
-        // Build Phase
-        //----------------------------------------------------------------------
         function void build_phase(uvm_phase phase);
             super.build_phase(phase);
-            
-            if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg)) begin
-                `uvm_fatal("SIMX_MODEL", "Failed to get vortex_config")
-            end
+            if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg))
+                `uvm_fatal("SIMX", "Config not found!")
         endfunction
 
-        //----------------------------------------------------------------------
-        // Run Phase
-        //----------------------------------------------------------------------
         task run_phase(uvm_phase phase);
-            if (!cfg.simx_enable) begin
-                `uvm_info("SIMX_MODEL", "SimX disabled in configuration", UVM_MEDIUM)
-                return;
-            end
-
-            // Initialize SimX
-            initialize_simx();
-
-            // Load program if specified
-            if (cfg.program_path != "") begin
-                load_program();
-            end
-
-            // Run execution
-            run_execution();
-
-            // Extract results
-            extract_results();
-
-        endtask : run_phase
-
-        //----------------------------------------------------------------------
-        // Initialize SimX
-        //----------------------------------------------------------------------
-        task initialize_simx();
-            int status;
-
-            `uvm_info("SIMX_MODEL", $sformatf("Initializing SimX: %0dC %0dW %0dT",
-                      cfg.num_cores, cfg.num_warps, cfg.num_threads), UVM_MEDIUM)
-
-            status = simx_init(cfg.num_cores, cfg.num_warps, cfg.num_threads);
-
-            if (status != 0) begin
-                `uvm_fatal("SIMX_MODEL", "SimX initialization failed!")
-            end
-
-            initialized = 1'b1;
-            `uvm_info("SIMX_MODEL", "SimX initialized successfully", UVM_MEDIUM)
-        endtask : initialize_simx
-
-        //----------------------------------------------------------------------
-        // Load Program
-        //----------------------------------------------------------------------
-        task load_program();
-            int status;
-
-            `uvm_info("SIMX_MODEL", $sformatf("Loading program: %s", cfg.program_path), UVM_MEDIUM)
-
-            status = simx_load_program(cfg.program_path, cfg.program_load_addr);
-
-            if (status != 0) begin
-                `uvm_error("SIMX_MODEL", "Failed to load program")
-            end else begin
-                `uvm_info("SIMX_MODEL", "Program loaded successfully", UVM_MEDIUM)
-            end
-        endtask : load_program
-
-        //----------------------------------------------------------------------
-        // Run Execution
-        //----------------------------------------------------------------------
-        task run_execution();
-            int status;
-            int timeout_cycles;
-
-            timeout_cycles = cfg.simx_timeout_cycles;
-            `uvm_info("SIMX_MODEL", "Starting SimX execution", UVM_MEDIUM)
-
-            status = simx_run(timeout_cycles);
-
-            if (status == 1) begin
-                execution_complete = 1'b1;
-                `uvm_info("SIMX_MODEL", "Execution completed", UVM_MEDIUM)
-            end else if (status == 0) begin
-                `uvm_warning("SIMX_MODEL", "Execution timeout - still running")
-            end else begin
-                `uvm_error("SIMX_MODEL", "Execution error")
-            end
-
-            // Get performance counters
-            simx_get_perf_counters(cycle_count, instr_count);
-            `uvm_info("SIMX_MODEL", $sformatf("Cycles: %0d, Instructions: %0d",
-                      cycle_count, instr_count), UVM_MEDIUM)
-        endtask : run_execution
-
-        //----------------------------------------------------------------------
-        // Extract Results
-        //----------------------------------------------------------------------
-        task extract_results();
             byte result_data[];
+            int  ret;
+            int  exitcode;
 
-            if (!execution_complete) begin
+            phase.raise_objection(this);  // hold the UVM run phase open
+
+            if (!cfg.simx_enable) begin
+                phase.drop_objection(this);
                 return;
             end
 
-            `uvm_info("SIMX_MODEL", "Extracting results from SimX memory", UVM_MEDIUM)
+            // 1. Initialize SimX
+            ret = simx_init(cfg.num_cores, cfg.num_warps, cfg.num_threads);
+            if (ret != 0) `uvm_fatal("SIMX", "simx_init failed!")
 
+            // 2. Set startup DCR (use 0x001, NOT 0x800)
+            simx_dcr_write(32'h001, cfg.startup_addr[31:0]);
+
+            // 3. Load kernel binary
+            ret = simx_load_bin(cfg.program_path, cfg.startup_addr);
+            if (ret != 0) `uvm_fatal("SIMX", "simx_load_bin failed!")
+
+            // 4. Run to completion (post-mortem mode)
+            exitcode = simx_run();
+            if (exitcode != 0)
+                `uvm_error("SIMX", $sformatf("Non-zero exit code: %0d", exitcode))
+            else
+                `uvm_info("SIMX", "Program completed with exit code 0", UVM_MEDIUM)
+
+            // 5. Read result memory and send to scoreboard
             result_data = new[cfg.result_size_bytes];
             simx_read_mem(cfg.result_base_addr, cfg.result_size_bytes, result_data);
 
-            // Send to scoreboard via analysis port
-            // (Create appropriate transaction type based on your needs)
-            `uvm_info("SIMX_MODEL", $sformatf("Read %0d bytes from result area",
-                      cfg.result_size_bytes), UVM_HIGH)
-        endtask : extract_results
+            // 6. Build transaction and write to analysis port
+            // (scoreboard integration — fill in when transaction type is defined)
+            // my_txn txn = my_txn::type_id::create("txn");
+            // txn.data  = result_data;
+            // txn.exitcode = exitcode;
+            // ap.write(txn);
 
-        //----------------------------------------------------------------------
-        // Report Phase
-        //----------------------------------------------------------------------
+            phase.drop_objection(this);  // allow UVM run phase to end
+        endtask
+        
         function void report_phase(uvm_phase phase);
-            super.report_phase(phase);
+            simx_cleanup();
+        endfunction
 
-            if (initialized) begin
-                `uvm_info("SIMX_MODEL", {"\n",
-                    "========================================\n",
-                    " SimX Golden Model Report\n",
-                    "========================================\n",
-                    $sformatf(" Execution: %s\n", execution_complete ? "Complete" : "Incomplete"),
-                    $sformatf(" Cycles: %0d\n", cycle_count),
-                    $sformatf(" Instructions: %0d\n", instr_count),
-                    $sformatf(" IPC: %0.2f\n", cycle_count > 0 ? real'(instr_count)/real'(cycle_count) : 0.0),
-                    "========================================\n"
-                }, UVM_MEDIUM)
-            end
-        endfunction : report_phase
+    endclass
 
-        //----------------------------------------------------------------------
-        // Final Phase
-        //----------------------------------------------------------------------
-        function void final_phase(uvm_phase phase);
-            super.final_phase(phase);
-            
-            if (initialized) begin
-                `uvm_info("SIMX_MODEL", "Cleaning up SimX resources", UVM_MEDIUM)
-                simx_cleanup();
-                initialized = 1'b0;
-            end
-        endfunction : final_phase
-
-    endclass : simx_golden_model
-
-endpackage : simx_pkg
-
-`endif // SIMX_PKG_SV
+endpackage
