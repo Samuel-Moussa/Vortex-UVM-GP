@@ -292,7 +292,7 @@ class axi_monitor extends uvm_monitor;
                     end
                     
                     // Remove from AW FIFO and move to B pending queue
-                    aw_fifo.pop_front();
+                    void'(aw_fifo.pop_front()); // fixed the warning issue: (vlog-2240) Treating stand-alone use of function 'pop_front' as an implicit VOID cast.
                     pending_b_resp[trans.id] = trans;
                     
                 end else begin
