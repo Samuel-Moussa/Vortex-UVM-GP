@@ -22,7 +22,7 @@ package vortex_test_pkg;
     import host_agent_pkg::*;
     import status_agent_pkg::*;
 
-    `include "mem_model.sv"  // For testbench reference, not part of the env
+    import mem_model_pkg::*;  // For testbench reference, not part of the env
 
     //==========================================================================
     // Sequence base classes (must come before any test that uses them)

@@ -34,6 +34,7 @@ import uvm_pkg::*;
 import vortex_config_pkg::*;
 import mem_agent_pkg::*;  // For mem_model reference in R-beat checking
 import axi_agent_pkg::*;
+import mem_model_pkg::*;
 
 class axi_monitor extends uvm_monitor;
     `uvm_component_utils(axi_monitor)
