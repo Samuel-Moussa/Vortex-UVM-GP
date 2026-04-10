@@ -339,6 +339,27 @@ else
     exit 1
 fi
 
+# ── QUESTA_HOME DETECTION ───────────────────────────────────────────────────
+# Try to auto-detect QUESTA_HOME if not already set
+if [[ -z "$QUESTA_HOME" ]]; then
+    # Try standard installation paths
+    if [[ -d "/opt/questa_sim-2021.2_1/questasim" ]]; then
+        QUESTA_HOME="/opt/questa_sim-2021.2_1/questasim"
+    elif [[ -d "$HOME/intelFPGA/21.2/questa_sim/questasim" ]]; then
+        QUESTA_HOME="$HOME/intelFPGA/21.2/questa_sim/questasim"
+    elif command -v vsim &> /dev/null; then
+        # Try to derive from vsim location
+        QUESTA_HOME="$(dirname $(dirname $(which vsim)))"
+    else
+        print_warning "QUESTA_HOME not set and auto-detection failed"
+        QUESTA_HOME=""
+    fi
+fi
+
+if [[ -n "$QUESTA_HOME" ]]; then
+    print_success "QUESTA_HOME: $QUESTA_HOME"
+fi
+
 # ── DPI LIBRARY PATHS ────────────────────────────────────────────────────────
 UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
 SIMX_REF_DIR="$PROJECT_ROOT/uvm_env/ref_model"
@@ -794,7 +815,23 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     # Compile UVM
     print_info "Compiling UVM environment..."
     if [[ "$SIMULATOR" == "questa" ]]; then
-        UVM_SRC="$HOME/intelFPGA/21.2/questa_sim/questasim/verilog_src/uvm-1.2/src"
+        # Build UVM path from QUESTA_HOME or use fallback
+        if [[ -n "$QUESTA_HOME" && -d "$QUESTA_HOME/verilog_src/uvm-1.2/src" ]]; then
+            UVM_SRC="$QUESTA_HOME/verilog_src/uvm-1.2/src"
+        else
+            # Fallback to standard Questa 2021.2 path
+            UVM_SRC="${QUESTA_HOME:-/opt/questa_sim-2021.2_1/questasim}/verilog_src/uvm-1.2/src"
+        fi
+        
+        if [[ ! -f "${UVM_SRC}/uvm_pkg.sv" ]]; then
+            print_error "UVM source not found at: $UVM_SRC"
+            print_info "Checked paths:"
+            print_info "  - $QUESTA_HOME/verilog_src/uvm-1.2/src"
+            print_info "  - /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src"
+            exit 1
+        fi
+        
+        print_info "Using UVM source from: $UVM_SRC"
         vlog -sv $COMPILE_OPTS +incdir+${UVM_SRC} ${UVM_SRC}/uvm_pkg.sv \
             2>&1 | tee -a "$RESULTS_RUN_DIR/logs/compile_uvm.log"
         vlog -sv $COMPILE_OPTS \
@@ -875,7 +912,12 @@ LOG_FILE="$RESULTS_RUN_DIR/logs/simulation.log"
 # FIX: vsim must NOT have +define+ — that flag is only for vlog/vcs compile.
 #      USE_AXI_WRAPPER is now correctly passed via $SIM_OPTS as a plusarg.
 #      FIX B: $DPI_FLAG links the DPI shared library when present.
+#      FIX C: LD_PRELOAD forces system libstdc++ to avoid GLIBCXX_3.4.29 from Questa's GCC 7
+#             This ensures libramulator.so (linked by simx_model.so) finds correct symbols.
 if [[ "$SIMULATOR" == "questa" ]]; then
+    # Preload correct libstdc++ to resolve GLIBCXX_3.4.29 from ramulator.so dependency
+    export LD_PRELOAD=/lib/x86_64-linux-gnu/libstdc++.so.6
+    
     if [[ $GUI_MODE -eq 1 ]]; then
         vsim vortex_tb_top $SIM_OPTS $DPI_FLAG \
             -do "add wave -r /*; run -all"
@@ -884,6 +926,8 @@ if [[ "$SIMULATOR" == "questa" ]]; then
             -do "run -all; quit -f" \
             2>&1 | tee "$LOG_FILE"
     fi
+    
+    unset LD_PRELOAD
 elif [[ "$SIMULATOR" == "vcs" ]]; then
     ./simv $SIM_OPTS 2>&1 | tee "$LOG_FILE"
 fi
