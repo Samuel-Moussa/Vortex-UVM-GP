@@ -32,8 +32,8 @@
 import uvm_pkg::*;
 `include "uvm_macros.svh"
 import vortex_config_pkg::*;
-import mem_agent_pkg::*;  // For mem_model reference in R-beat checking
 import axi_agent_pkg::*;
+import mem_model_pkg::*;
 
 class axi_monitor extends uvm_monitor;
     `uvm_component_utils(axi_monitor)
@@ -62,6 +62,8 @@ class axi_monitor extends uvm_monitor;
     //==========================================================================
     axi_transaction aw_fifo[$];           // Queue of AW transactions (in order)
     axi_transaction pending_b_resp[int];  // ID -> write waiting for B response
+    int aw_beats_fifo[$];                 // Beat index per AW entry
+    axi_transaction pending_b_resp_q[int][$]; // ID -> queue of completed writes waiting for B
     
     //==========================================================================
     // Read Channel Tracking
@@ -163,13 +165,167 @@ class axi_monitor extends uvm_monitor;
         
         // Fork all channel observers
         fork
-            collect_write_addresses();  // AW channel
-            collect_write_data();        // W channel
-            collect_write_responses();   // B channel
+            collect_write_channels();    // AW/W/B channels
             collect_read_addresses();    // AR channel
             collect_read_data();         // R channel
             detect_timeouts();           // Watchdog
         join
+    endtask
+
+    //==========================================================================
+    // Write Channel Collector (AW/W/B)
+    // Samples the write-side AXI channels in a deterministic order each cycle.
+    // This avoids races when AW and W or WLAST and B are asserted in the same
+    // clock tick.
+    //==========================================================================
+    virtual task collect_write_channels();
+        axi_transaction trans;
+        int beat;
+        int id;
+
+        forever begin
+            @(vif.monitor_cb);
+
+            if (!vif.reset_n) continue;
+
+            if ($isunknown(vif.monitor_cb.awvalid) ||
+                $isunknown(vif.monitor_cb.awready) ||
+                $isunknown(vif.monitor_cb.wvalid)  ||
+                $isunknown(vif.monitor_cb.wready)  ||
+                $isunknown(vif.monitor_cb.bvalid)  ||
+                $isunknown(vif.monitor_cb.bready)) begin
+                continue;
+            end
+
+            if (vif.monitor_cb.awvalid && vif.monitor_cb.awready) begin
+                trans = axi_transaction::type_id::create("wr_trans");
+                trans.cfg = cfg;
+
+                trans.trans_type = axi_transaction::AXI_WRITE;
+                trans.id = vif.monitor_cb.awid;
+                trans.addr = vif.monitor_cb.awaddr;
+                trans.len = vif.monitor_cb.awlen;
+                trans.size = vif.monitor_cb.awsize;
+                trans.burst = axi_transaction::axi_burst_type_e'(vif.monitor_cb.awburst);
+                trans.addr_cycle = cycle_count;
+
+                trans.wdata = new[trans.len + 1];
+                trans.wstrb = new[trans.len + 1];
+                trans.data_cycle = new[trans.len + 1];
+
+                aw_fifo.push_back(trans);
+                aw_beats_fifo.push_back(0);
+                write_beat_count[trans.id] = 0;
+                num_write_addr++;
+
+                `uvm_info("AXI_MON", $sformatf(
+                    "AW captured: ID=%0d, addr=0x%h, len=%0d beats, cycle=%0d",
+                    trans.id, trans.addr, trans.len+1, cycle_count), UVM_HIGH)
+            end
+
+            if (vif.monitor_cb.wvalid && vif.monitor_cb.wready) begin
+                if (aw_fifo.size() == 0) begin
+                    `uvm_error("AXI_PROTOCOL", $sformatf(
+                        "W data beat without matching AW address (cycle %0d)",
+                        cycle_count))
+                    num_protocol_violations++;
+                end else begin
+                    trans = aw_fifo[0];
+                    beat = aw_beats_fifo[0];
+
+                    if (beat > trans.len) begin
+                        `uvm_error("AXI_PROTOCOL", $sformatf(
+                            "Extra W beat for ID=%0d (expected %0d beats, got beat %0d)",
+                            trans.id, trans.len+1, beat+1))
+                        num_protocol_violations++;
+                    end else begin
+                        trans.wdata[beat] = vif.monitor_cb.wdata;
+                        trans.wstrb[beat] = vif.monitor_cb.wstrb;
+                        trans.data_cycle[beat] = cycle_count;
+
+                        aw_beats_fifo[0] = beat + 1;
+                        num_write_data++;
+
+                        `uvm_info("AXI_MON", $sformatf(
+                            "W beat %0d/%0d: ID=%0d, data=0x%h, last=%0b",
+                            beat+1, trans.len+1, trans.id, trans.wdata[beat],
+                            vif.monitor_cb.wlast), UVM_DEBUG)
+
+                        if (vif.monitor_cb.wlast) begin
+                            if (beat != trans.len) begin
+                                `uvm_error("AXI_PROTOCOL", $sformatf(
+                                    "WLAST asserted at beat %0d, expected at beat %0d (ID=%0d)",
+                                    beat, trans.len, trans.id))
+                                num_protocol_violations++;
+                            end
+
+                            void'(aw_fifo.pop_front());
+                            void'(aw_beats_fifo.pop_front());
+                            pending_b_resp_q[trans.id].push_back(trans);
+                        end else begin
+                            if (beat == trans.len) begin
+                                `uvm_error("AXI_PROTOCOL", $sformatf(
+                                    "WLAST not asserted at final beat %0d (ID=%0d)",
+                                    beat, trans.id))
+                                num_protocol_violations++;
+                            end
+                        end
+                    end
+                end
+            end
+
+            if (vif.monitor_cb.bvalid && vif.monitor_cb.bready) begin
+                id = vif.monitor_cb.bid;
+
+                if (pending_b_resp_q.exists(id) && pending_b_resp_q[id].size() > 0) begin
+                    trans = pending_b_resp_q[id].pop_front();
+                    if (pending_b_resp_q[id].size() == 0)
+                        pending_b_resp_q.delete(id);
+
+                    trans.bresp = axi_transaction::axi_resp_e'(vif.monitor_cb.bresp);
+                    trans.resp_cycle = cycle_count;
+                    trans.latency_cycles = int'(trans.resp_cycle - trans.addr_cycle);
+                    trans.completed = 1;
+
+                    if (trans.bresp != axi_transaction::AXI_OKAY) begin
+                        trans.error = 1;
+                        `uvm_warning("AXI_MON", $sformatf(
+                            "Write error response: ID=%0d, resp=%s",
+                            id, trans.bresp.name()))
+                    end
+
+                    num_write_resp++;
+
+                    `uvm_info("AXI_MON", $sformatf(
+                        "Write complete: ID=%0d, resp=%s, latency=%0d cycles",
+                        id, trans.bresp.name(), trans.latency_cycles), UVM_HIGH)
+
+                    ap_write.write(trans);
+                end else begin
+                    string aw_head_desc;
+                    int pending_b_total;
+
+                    pending_b_total = 0;
+                    foreach (pending_b_resp_q[qid])
+                        pending_b_total += pending_b_resp_q[qid].size();
+
+                    if (aw_fifo.size() > 0) begin
+                        aw_head_desc = $sformatf("aw_fifo[0]=ID=%0d addr=0x%h len=%0d pending=%0d",
+                            aw_fifo[0].id, aw_fifo[0].addr, aw_fifo[0].len + 1, aw_fifo.size());
+                    end else begin
+                        aw_head_desc = "aw_fifo=empty";
+                    end
+
+                    `uvm_info("AXI_MON", $sformatf(
+                        "Unmatched B: ID=%0d cycle=%0d pending=%0d %s",
+                        id, cycle_count, pending_b_total, aw_head_desc), UVM_LOW)
+                    `uvm_error("AXI_PROTOCOL", $sformatf(
+                        "B response for unknown/completed ID=%0d (cycle %0d)",
+                        id, cycle_count))
+                    num_protocol_violations++;
+                end
+            end
+        end
     endtask
     
     //==========================================================================
