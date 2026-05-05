@@ -254,11 +254,7 @@ class vortex_scoreboard extends uvm_scoreboard;
 
     if (exitcode != 0)
       `uvm_warning("SCOREBOARD",
-<<<<<<< HEAD
         $sformatf("SimX exit code=%0d (non-zero in this flow; EBREAK and data checks still determine pass/fail)", exitcode))
-=======
-        $sformatf("SimX exit code=%0d (may indicate program requested exit)", exitcode))
->>>>>>> fca4f3976ce0e6bca6ba8d95512e3cc11a3a7555
 
     if (simx_is_done() != 1)
       `uvm_warning("SCOREBOARD",

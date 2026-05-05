@@ -8,26 +8,10 @@
 `ifndef MEM_MODEL_SV
 `define MEM_MODEL_SV
 
-<<<<<<< HEAD
 package mem_model_pkg;
 
   import uvm_pkg::*;
   `include "uvm_macros.svh"
-=======
-
-package mem_model_pkg;
-
-// ✅ ADD: Import UVM
-import uvm_pkg::*;
-`include "uvm_macros.svh"
-
-
-// ✅ CHANGE: Extend from uvm_object instead of plain class
-class mem_model extends uvm_object;
-  
-  // ✅ ADD: UVM registration macro
-  `uvm_object_utils(mem_model)
->>>>>>> fca4f3976ce0e6bca6ba8d95512e3cc11a3a7555
 
   class mem_model extends uvm_object;
     
@@ -274,7 +258,6 @@ class mem_model extends uvm_object;
       end
     endfunction
 
-<<<<<<< HEAD
     function void dump_dwords(bit [63:0] start_addr, int unsigned num_dwords);
       $display("Memory Dump @ 0x%016h (64-bit dwords):", start_addr);
       for (int unsigned i = 0; i < num_dwords; i++) begin
@@ -339,8 +322,3 @@ class mem_model extends uvm_object;
 endpackage : mem_model_pkg
 
 `endif // MEM_MODEL_SV
-=======
-endpackage : mem_model_pkg
-
-`endif // MEM_MODEL_SV
->>>>>>> fca4f3976ce0e6bca6ba8d95512e3cc11a3a7555
