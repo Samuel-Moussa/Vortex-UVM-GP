@@ -21,7 +21,12 @@ package vortex_test_pkg;
     import dcr_agent_pkg::*;
     import host_agent_pkg::*;
     import status_agent_pkg::*;
+<<<<<<< HEAD
     import mem_model_pkg::*;
+=======
+
+    import mem_model_pkg::*;  // For testbench reference, not part of the env
+>>>>>>> fca4f3976ce0e6bca6ba8d95512e3cc11a3a7555
 
     //==========================================================================
     // Sequence base classes (must come before any test that uses them)

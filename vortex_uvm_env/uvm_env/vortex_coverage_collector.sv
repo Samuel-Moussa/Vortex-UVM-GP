@@ -127,7 +127,9 @@ class vortex_coverage_collector extends uvm_component;
     cp_tag: coverpoint current_mem.tag {
       bins low[]  = {[0:3]};
       bins mid[]  = {[4:11]};
-      bins high[] = {[12:$]};
+      //bins high[] = {[12:$]};
+      bins high = default;
+
     }
 
     cross_rw_byteen: cross cp_rw, cp_byteen;
