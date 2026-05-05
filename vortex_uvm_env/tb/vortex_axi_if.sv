@@ -31,7 +31,7 @@
 interface automatic vortex_axi_if #(
     parameter ADDR_WIDTH = 32,   // byte address (32 RV32, 48 RV64)
     parameter DATA_WIDTH = 512,  // FIX: was 64 — must be VX_MEM_DATA_WIDTH = 512
-    parameter ID_WIDTH   = 8     // FIX: was 4  — must be VX_MEM_TAG_WIDTH  = 8
+    parameter ID_WIDTH   = 50     // will be parametrized later to VX_MEM_TAG_WIDTH  for now = 50 for 1CL,1C,4T,4W
 ) (
     input logic clk,
     input logic reset_n
