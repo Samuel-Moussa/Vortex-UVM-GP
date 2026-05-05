@@ -21,8 +21,7 @@ package vortex_test_pkg;
     import dcr_agent_pkg::*;
     import host_agent_pkg::*;
     import status_agent_pkg::*;
-
-    `include "mem_model.sv"  // For testbench reference, not part of the env
+    import mem_model_pkg::*;
 
     //==========================================================================
     // Sequence base classes (must come before any test that uses them)
@@ -34,6 +33,7 @@ package vortex_test_pkg;
     // Virtual sequences (must come before tests that instantiate them)
     //==========================================================================
     `include "vortex_functional_mem_vseq.sv"
+    `include "kernel_launch_vseq.sv"
 
     //==========================================================================
     // Include Test Files
@@ -42,7 +42,7 @@ package vortex_test_pkg;
     `include "vortex_sanity_test.sv"
     `include "vortex_smoke_test.sv"
     `include "functional_memory_test.sv"
-    // `include "vecadd_test.sv"      // To be added later
+    `include "kernel_launch_test.sv"
     // `include "sgemm_test.sv"       // To be added later
     // `include "riscv_dv_test.sv"    // To be added later
     
