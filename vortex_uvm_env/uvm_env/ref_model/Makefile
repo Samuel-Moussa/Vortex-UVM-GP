@@ -3,7 +3,6 @@
 # Fixed version with Auto-Path Detection and DCR support
 ################################################################################
 
-<<<<<<< HEAD
 # Paths - Auto-detect to avoid cross-user environment variable conflicts
 VORTEX_HOME   ?= $(VORTEX_DUT_HOME)
 ifeq ($(VORTEX_HOME),)
@@ -17,16 +16,6 @@ QUESTA_HOME := $(shell dirname $(shell dirname $(VSIM_PATH)))
 
 ifeq ($(QUESTA_HOME),)
   $(warning "vsim not found in PATH! Falling back to default.")
-=======
-# Paths - read from environment, fall back to system defaults (team-friendly)
-VORTEX_HOME   ?= $(VORTEX_DUT_HOME)
-ifeq ($(VORTEX_HOME),)
-  VORTEX_HOME := $(HOME)/Vortex_UVM_GP/Vortex
-endif
-
-QUESTA_HOME   ?= $(QUESTA2021_HOME)
-ifeq ($(QUESTA_HOME),)
->>>>>>> fca4f3976ce0e6bca6ba8d95512e3cc11a3a7555
   QUESTA_HOME := /opt/questa_sim-2021.2_1/questasim
 endif
 
