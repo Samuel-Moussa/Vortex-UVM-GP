@@ -33,15 +33,6 @@
 `ifndef VORTEX_COVERAGE_COLLECTOR_SV
 `define VORTEX_COVERAGE_COLLECTOR_SV
 
-import uvm_pkg::*;
-`include "uvm_macros.svh"
-import vortex_env_pkg::*;
-import vortex_config_pkg::*;
-import mem_agent_pkg::*;
-import axi_agent_pkg::*;
-import dcr_agent_pkg::*;
-import host_agent_pkg::*;
-import status_agent_pkg::*;
 
 //------------------------------------------------------------------------------
 // Shared analysis imp declarations — guarded against double-declaration.

@@ -3,13 +3,10 @@
 // Description: Production-Ready Testbench Top for Vortex GPGPU UVM Verification
 //
 // FIX LOG (this revision):
-//   FIX-1: arready is now COMBINATIONAL (assign = reset_n & ~rvalid).
-//   FIX-2: DCR startup driver writes all 5 base DCRs.
-//   FIX-3: MEM responder drives rsp_valid=0, req_ready=1 from time-0.
-//   FIX-4: Removed `assign vif.axi_if.*` for DUT-driven signals.
-//   FIX-5: X-State Protection added to Custom MEM responder READ branch.
-//   FIX-6: Disabled overly strict reset assertion (we intentionally drive DCR during reset).
-//          Fixed ebreak_detected evaluating to X when AXI is disabled.
+//   FIX-1: Removed local Custom MEM responder logic. Delegated entirely to mem_driver.
+//   FIX-2: Removed local AXI responder logic. Delegated entirely to axi_driver.
+//   FIX-3: Cleaned up top module to be purely structural wrapper.
+//   FIX-4: Kept testbench status tracking logic for virtual interface metrics.
 ////////////////////////////////////////////////////////////////////////////////
 
 `ifndef VORTEX_TB_TOP_SV
@@ -25,6 +22,7 @@ module vortex_tb_top;
     import uvm_pkg::*;
     import vortex_config_pkg::*;
     import vortex_test_pkg::*;
+    import mem_model_pkg::*;
 
     //==========================================================================
     // PARAMETERS
@@ -56,75 +54,33 @@ module vortex_tb_top;
     logic reset_n = 1'b0; 
     vortex_if vif (.clk(clk), .reset_n(reset_n));
 
-    //==========================================================================
-    // RESET + DCR STARTUP
-    //==========================================================================
+    //=========================================================================
+    // RESET GENERATION
+    //=========================================================================
 
     initial begin
-        bit [63:0] sa;
-        bit [63:0] tmp;
-
-        // FIX-6: Disable strict reset assertion because we intentionally drive DCR during reset
+        // Disable strict reset assertion because we intentionally drive DCR during reset in UVM
         $assertoff(0, vif.assert_reset_clears_valids);
 
         $display("================================================================================");
         $display("[TB_TOP @ %0t] Vortex GPGPU UVM Testbench Initialized", $time);
         $display("================================================================================");
 
-        reset_n             = 1'b0;
+        reset_n = 1'b0;
+
+        // Drive DCR bus to a known idle from time-0.
         vif.dcr_if.wr_valid = 1'b0;
         vif.dcr_if.wr_addr  = 12'h0;
         vif.dcr_if.wr_data  = 32'h0;
 
-        sa = vortex_config_pkg::STARTUP_ADDR;
-        if ($value$plusargs("STARTUP_ADDR=%h", tmp)) sa = tmp;
+        if (RESET_CYCLES > 15)
+            repeat(RESET_CYCLES - 15) @(posedge clk);
 
-        repeat(5) @(posedge clk);
-
-        $display("[TB_TOP @ %0t] DCR: writing 5 base DCRs during reset, STARTUP_ADDR=0x%016h", $time, sa);
-
-        // STARTUP_ADDR0
-        vif.dcr_if.wr_valid = 1'b1;
-        vif.dcr_if.wr_addr  = vortex_config_pkg::VX_DCR_BASE_STARTUP_ADDR0;
-        vif.dcr_if.wr_data  = sa[31:0];
-        @(posedge clk); vif.dcr_if.wr_valid = 1'b0; @(posedge clk);
-
-        // STARTUP_ADDR1
-        vif.dcr_if.wr_valid = 1'b1;
-        vif.dcr_if.wr_addr  = vortex_config_pkg::VX_DCR_BASE_STARTUP_ADDR1;
-        vif.dcr_if.wr_data  = sa[63:32];
-        @(posedge clk); vif.dcr_if.wr_valid = 1'b0; @(posedge clk);
-
-        // STARTUP_ARG0
-        vif.dcr_if.wr_valid = 1'b1;
-        vif.dcr_if.wr_addr  = vortex_config_pkg::VX_DCR_BASE_STARTUP_ARG0;
-        vif.dcr_if.wr_data  = 32'h0;
-        @(posedge clk); vif.dcr_if.wr_valid = 1'b0; @(posedge clk);
-
-        // STARTUP_ARG1
-        vif.dcr_if.wr_valid = 1'b1;
-        vif.dcr_if.wr_addr  = vortex_config_pkg::VX_DCR_BASE_STARTUP_ARG1;
-        vif.dcr_if.wr_data  = 32'h0;
-        @(posedge clk); vif.dcr_if.wr_valid = 1'b0; @(posedge clk);
-
-        // MPM_CLASS
-        vif.dcr_if.wr_valid = 1'b1;
-        vif.dcr_if.wr_addr  = vortex_config_pkg::VX_DCR_BASE_MPM_CLASS;
-        vif.dcr_if.wr_data  = 32'h0;
-        @(posedge clk);
-        vif.dcr_if.wr_valid = 1'b0;
-        vif.dcr_if.wr_addr  = 12'h0;
-        vif.dcr_if.wr_data  = 32'h0;
-
-        $display("[TB_TOP @ %0t] DCR: all 5 base DCRs written (reset still asserted)", $time);
-
-        repeat(RESET_CYCLES - 15) @(posedge clk);
-
-        $display("[TB_TOP @ %0t] Releasing reset — startup_addr=0x%016h valid", $time, sa);
         reset_n = 1'b1;
+        $display("[TB_TOP @ %0t] Releasing reset", $time);
 
         repeat(5) @(posedge clk);
-        $display("[TB_TOP @ %0t] Reset sequence complete - System ready", $time);
+        $display("[TB_TOP @ %0t] Hardware Reset Complete - System ready", $time);
     end
 
     //==========================================================================
@@ -201,64 +157,6 @@ module vortex_tb_top;
     end
 
     //==========================================================================
-    // MEMORY INTERFACE - REQUEST/RESPONSE HANDLER (SINGLE LANE)
-    //==========================================================================
-
-    logic                                            mem_rsp_valid_r = 1'b0;
-    logic [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0] mem_rsp_data_r  = '0;
-    logic [vortex_config_pkg::VX_MEM_TAG_WIDTH-1:0]  mem_rsp_tag_r   = '0;
-
-    assign vif.mem_if.req_ready[0] = (!mem_rsp_valid_r || vif.mem_if.rsp_ready[0]);
-    assign vif.mem_if.rsp_valid[0] = mem_rsp_valid_r;
-    assign vif.mem_if.rsp_data[0]  = mem_rsp_data_r;
-    assign vif.mem_if.rsp_tag[0]   = mem_rsp_tag_r;
-
-    always_ff @(posedge clk) begin
-        if (!reset_n) begin
-            mem_rsp_valid_r <= 1'b0;
-            mem_rsp_data_r  <= '0;
-            mem_rsp_tag_r   <= '0;
-        end else begin
-            if (mem_rsp_valid_r && vif.mem_if.rsp_ready[0]) begin
-                mem_rsp_valid_r <= 1'b0;
-            end
-
-            if (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0]) begin
-                automatic bit [31:0] byte_addr = vif.mem_if.req_addr[0] << 6;
-                
-                if (vif.mem_if.req_rw[0]) begin
-                    automatic bit [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0] wdata = vif.mem_if.req_data[0];
-                    automatic bit [vortex_config_pkg::VX_MEM_BYTEEN_WIDTH-1:0] byteen = vif.mem_if.req_byteen[0];
-                    
-                    for (int i = 0; i < vortex_config_pkg::VX_MEM_BYTEEN_WIDTH; i++) begin
-                        if (byteen[i]) begin
-                            memory.write_byte(byte_addr + i, wdata[i*8 +: 8]);
-                        end
-                    end
-                    
-                    $display("[TB_TOP @ %0t] MEM WRITE ACCEPTED (NO RSP): byte_addr=0x%08h tag=0x%02h",
-                            $time, byte_addr, vif.mem_if.req_tag[0]);
-                            
-                end else begin
-                    automatic logic [vortex_config_pkg::VX_MEM_DATA_WIDTH-1:0] rdata = memory.read_line(byte_addr);
-                    
-                    for (int i = 0; i < vortex_config_pkg::VX_MEM_DATA_WIDTH/32; i++) begin
-                        if ($isunknown(rdata[i*32 +: 32])) begin
-                            rdata[i*32 +: 32] = 32'h00000013;
-                        end
-                    end
-                    
-                    mem_rsp_valid_r <= 1'b1;
-                    mem_rsp_data_r  <= rdata;
-                    mem_rsp_tag_r   <= vif.mem_if.req_tag[0];
-                    $display("[TB_TOP @ %0t] MEM READ QUEUED: byte_addr=0x%08h tag=0x%02h",
-                            $time, byte_addr, vif.mem_if.req_tag[0]);
-                end
-            end
-        end
-    end
-
-    //==========================================================================
     // WAVEFORM DUMPING
     //==========================================================================
 
@@ -274,108 +172,6 @@ module vortex_tb_top;
             `endif
         end
     end
-
-    //==========================================================================
-    // AXI MEMORY SLAVE RESPONDER 
-    //==========================================================================
-
-    `ifdef USE_AXI_WRAPPER
-
-        logic [7:0]                aw_id_reg       = '0;
-        logic [MEM_ADDR_WIDTH-1:0] aw_addr_reg     = '0;
-        logic [7:0]                ar_id_reg       = '0;
-        logic [MEM_ADDR_WIDTH-1:0] ar_addr_reg     = '0;
-        logic [7:0]                ar_len_reg      = '0;
-        logic [7:0]                read_beat_count = '0;
-
-        always_ff @(posedge clk) begin
-            if (!reset_n) begin
-                vif.axi_if.awready <= 1'b0;
-                aw_id_reg          <= '0;
-                aw_addr_reg        <= '0;
-            end else begin
-                vif.axi_if.awready <= 1'b1;
-                if (vif.axi_if.awvalid && vif.axi_if.awready) begin
-                    aw_id_reg   <= vif.axi_if.awid[7:0];
-                    aw_addr_reg <= vif.axi_if.awaddr;
-                end
-            end
-        end
-
-        always_ff @(posedge clk) begin
-            if (!reset_n) begin
-                vif.axi_if.wready <= 1'b0;
-            end else begin
-                vif.axi_if.wready <= 1'b1;
-                if (vif.axi_if.wvalid && vif.axi_if.wready) begin
-                    automatic bit [MEM_ADDR_WIDTH-1:0] addr  = aw_addr_reg;
-                    automatic bit [511:0]               data  = vif.axi_if.wdata;
-                    automatic bit [63:0]                wstrb = vif.axi_if.wstrb;
-                    for (int i = 0; i < 64; i++)
-                        if (wstrb[i]) memory.write_byte(addr + i, data[i*8 +: 8]);
-                end
-            end
-        end
-
-        always_ff @(posedge clk) begin
-            if (!reset_n) begin
-                vif.axi_if.bvalid <= 1'b0;
-                vif.axi_if.bid    <= '0;
-                vif.axi_if.bresp  <= 2'b00;
-            end else begin
-                if (vif.axi_if.wvalid && vif.axi_if.wready && vif.axi_if.wlast) begin
-                    vif.axi_if.bvalid <= 1'b1;
-                    vif.axi_if.bid    <= aw_id_reg;
-                    vif.axi_if.bresp  <= 2'b00;
-                end else if (vif.axi_if.bvalid && vif.axi_if.bready) begin
-                    vif.axi_if.bvalid <= 1'b0;
-                end
-            end
-        end
-
-        assign vif.axi_if.arready = reset_n & ~vif.axi_if.rvalid;
-
-        always_ff @(posedge clk) begin
-            if (!reset_n) begin
-                vif.axi_if.rvalid   <= 1'b0;
-                vif.axi_if.rid      <= '0;
-                vif.axi_if.rdata    <= '0;
-                vif.axi_if.rresp    <= 2'b00;
-                vif.axi_if.rlast    <= 1'b0;
-                read_beat_count     <= '0;
-                ar_id_reg           <= '0;
-                ar_addr_reg         <= '0;
-                ar_len_reg          <= '0;
-            end else begin
-                if (vif.axi_if.arvalid && vif.axi_if.arready) begin
-                    ar_id_reg         <= vif.axi_if.arid[7:0];
-                    ar_addr_reg       <= vif.axi_if.araddr;
-                    ar_len_reg        <= vif.axi_if.arlen;
-                    read_beat_count   <= '0;
-                    vif.axi_if.rvalid <= 1'b1;
-                    vif.axi_if.rid    <= vif.axi_if.arid[7:0];
-                    vif.axi_if.rdata  <= memory.read_line(vif.axi_if.araddr);
-                    vif.axi_if.rresp  <= 2'b00;
-                    vif.axi_if.rlast  <= (vif.axi_if.arlen == 8'h0);
-                end else if (vif.axi_if.rvalid && vif.axi_if.rready) begin
-                    if (read_beat_count == ar_len_reg) begin
-                        vif.axi_if.rvalid <= 1'b0;
-                        vif.axi_if.rlast  <= 1'b0;
-                        read_beat_count   <= '0;
-                    end else begin
-                        automatic bit [7:0]                next_beat = read_beat_count + 1;
-                        automatic bit [MEM_ADDR_WIDTH-1:0] next_addr =
-                            ar_addr_reg + (next_beat << vortex_config_pkg::VX_MEM_OFFSET_BITS);
-                        read_beat_count   <= next_beat;
-                        vif.axi_if.rdata  <= memory.read_line(next_addr);
-                        vif.axi_if.rlast  <= (next_beat == ar_len_reg);
-                        vif.axi_if.rid    <= ar_id_reg;
-                    end
-                end
-            end
-        end
-
-    `endif // USE_AXI_WRAPPER
 
     //==========================================================================
     // DUT INSTANTIATION
@@ -544,7 +340,7 @@ module vortex_tb_top;
     `endif
 
     //==========================================================================
-    // TESTBENCH STATUS TRACKING
+    // TESTBENCH STATUS TRACKING (Required for virtual interface metrics)
     //==========================================================================
 
     logic [63:0] tb_cycle_count;
@@ -602,16 +398,16 @@ module vortex_tb_top;
         end
     end
 
-    // FIX-6: Safely handle idle channel detection regardless of wrapper
+    // Safely handle idle channel detection regardless of wrapper
     `ifdef USE_AXI_WRAPPER
         wire axi_channels_idle = !vif.axi_if.rvalid  && !vif.axi_if.arvalid &&
                                   !vif.axi_if.awvalid && !vif.axi_if.wvalid;
+        wire mem_channels_idle = 1'b1;
     `else
         wire axi_channels_idle = 1'b1;
+        wire mem_channels_idle = !vif.mem_if.req_valid[0] && !vif.mem_if.rsp_valid[0];
     `endif
     
-    wire mem_channels_idle = !vif.mem_if.req_valid[0] && !mem_rsp_valid_r;
-
     assign vif.status_if.ebreak_detected = tb_execution_complete && axi_channels_idle && mem_channels_idle;
     assign vif.status_if.cycle_count     = tb_cycle_count;
     assign vif.status_if.instr_count     = tb_instr_count;

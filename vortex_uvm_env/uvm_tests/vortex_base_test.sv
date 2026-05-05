@@ -18,8 +18,7 @@ import uvm_pkg::*;
 // Import required packages
 import vortex_config_pkg::*;
 import vortex_env_pkg::*;
-
-
+import dcr_agent_pkg::*;       // <--- ADDED: Import DCR sequences
 
 class vortex_base_test extends uvm_test;
     `uvm_component_utils(vortex_base_test)
@@ -156,7 +155,7 @@ class vortex_base_test extends uvm_test;
         // Step 3: Background memory activity monitor (non-blocking)
         fork monitor_memory_activity(); join_none
 
-        // Run test stimulus (override this)
+        // Run test stimulus (This now configures the DCRs)
         run_test_stimulus();
 
         // Wait for completion
@@ -175,8 +174,6 @@ class vortex_base_test extends uvm_test;
 
     //==========================================================================
     // Load Program (Override in derived tests)
-    // Base: reads cfg.program_path and counts bytes loaded into mem_model.
-    // The actual mem_model write is done by TB_TOP; this just tracks the count.
     //==========================================================================
     virtual task load_program();
         if (cfg.program_path != "") begin
@@ -195,8 +192,6 @@ class vortex_base_test extends uvm_test;
 
     //==========================================================================
     // Monitor Memory Activity (runs in background fork)
-    // Counts AXI/MEM read and write transactions seen on the interface.
-    // Override in derived tests for custom counting logic.
     //==========================================================================
     virtual task monitor_memory_activity();
         // Base implementation: count AXI transactions via vif signals.
@@ -224,11 +219,28 @@ class vortex_base_test extends uvm_test;
     endtask
     
     //==========================================================================
-    // Run Test Stimulus (Override in derived tests)
+    // Run Test Stimulus (UPDATED: Starts the DCR sequences)
     //==========================================================================
     virtual task run_test_stimulus();
-        `uvm_info(get_type_name(), "No test stimulus (override in derived test)", UVM_MEDIUM)
-        repeat(100) @(posedge vif.clk);
+        dcr_startup_config_sequence startup_seq;
+        dcr_perf_config_sequence    perf_seq;
+
+        `uvm_info(get_type_name(), "Configuring DCR Registers via Agent...", UVM_LOW)
+
+        // 1. Configure Startup PC
+        startup_seq = dcr_startup_config_sequence::type_id::create("startup_seq");
+        if (env.m_virtual_sequencer != null &&
+            env.m_virtual_sequencer.m_dcr_sequencer != null) begin
+            startup_seq.start(env.m_virtual_sequencer.m_dcr_sequencer);
+        end else begin
+            `uvm_fatal(get_type_name(), "DCR Sequencer is null! Cannot configure GPU.")
+        end
+
+        // 2. Configure Performance Monitoring
+        perf_seq = dcr_perf_config_sequence::type_id::create("perf_seq");
+        perf_seq.start(env.m_virtual_sequencer.m_dcr_sequencer);
+
+        `uvm_info(get_type_name(), "DCR Configuration Complete. GPU Execution Started.", UVM_LOW)
     endtask
     
     //==========================================================================
@@ -238,10 +250,16 @@ class vortex_base_test extends uvm_test;
         fork
             begin
                 fork
-                    // Wait for EBREAK
+                    // Bulletproof fix: Wait for the UVM event triggered by the scoreboard/monitor!
                     begin
-                        wait(vif.status_if.ebreak_detected == 1'b1);
-                        `uvm_info(get_type_name(), "EBREAK detected", UVM_LOW)
+                        if (cfg != null && cfg.ebreak_event != null)
+                            cfg.ebreak_event.wait_trigger();
+                        else
+                            wait(vif.status_if.ebreak_detected == 1'b1);
+                        
+                        // Small buffer to let all analysis ports flush
+                        repeat(5) @(posedge vif.clk);
+                        `uvm_info(get_type_name(), "EBREAK detected and processed", UVM_LOW)
                     end
                     // Timeout watchdog
                     begin

@@ -97,9 +97,13 @@ int simx_init(int num_cores, int num_warps, int num_threads) {
         }
         std::cout << "[SimX-DPI] Architecture created successfully" << std::endl;
         
-        // Create RAM with proper page size (CRITICAL FIX #1)
-        uint64_t capacity = 0x100000000ULL;  // 4GB capacity
-        uint32_t page_size = 4096;            // 4KB pages (not 4GB!)
+        // Keep RAM address space aligned with ISA width.
+        #if (XLEN == 32)
+            uint64_t capacity = 0x100000000ULL;         // 4GB flat space for RV32
+        #else
+            uint64_t capacity = 0;                      // Sparse/unbounded for RV64
+        #endif
+            uint32_t page_size = 4096;                  // 4KB pages
         
         std::cout << "[SimX-DPI] Creating RAM: capacity=0x" << std::hex << capacity 
                   << ", page_size=0x" << page_size << std::dec << std::endl;
@@ -302,7 +306,6 @@ int simx_load_bin(const char* filepath, uint64_t load_addr) {
     }
 }
 
-// REPLACE the entire simx_load_hex function with this:
 int simx_load_hex(const char* filepath) {
     if (!g_initialized || !g_ram) {
         std::cerr << "[SimX-DPI] Error: not initialized" << std::endl;
@@ -320,7 +323,6 @@ int simx_load_hex(const char* filepath) {
     int bytes_loaded = 0;
     bool format_detected = false;
     bool is_byte_format  = true;   // objcopy --verilog-data-width=1
-    //to_solve Samual_fatials 
     static constexpr uint64_t BASE_ADDR_OFFSET = 0x80000000ULL;
 
     while (std::getline(file, line)) {
@@ -330,11 +332,12 @@ int simx_load_hex(const char* filepath) {
         if (line.empty() || line[0] == '/' || line[0] == '#') continue;
 
         if (line[0] == '@') {
-            // Address marker
-            current_addr = std::stoull(line.substr(1), nullptr, 16);
-                // Add base offset
-                current_addr += BASE_ADDR_OFFSET;
-            if (bytes_loaded == 0) g_startup_addr = current_addr;
+            // Address marker.
+            // ALWAYS use BASE_ADDR_OFFSET for relative files (@0) so we don't accidentally
+            // apply the bootstrap address (0x7FFFFFF0) to the main program offset.
+            uint64_t raw_addr = std::stoull(line.substr(1), nullptr, 16);
+            current_addr = (raw_addr == 0) ? BASE_ADDR_OFFSET : raw_addr;
+            
             format_detected = false;   // re-detect on next data line
             continue;
         }
@@ -382,6 +385,8 @@ int simx_load_hex(const char* filepath) {
 // Load hex file with base_addr offset applied to @addresses.
 // Handles both byte format (--verilog-data-width=1) and word format.
 // Does NOT change g_startup_addr — caller controls that via bootstrap.
+// Load hex file with base_addr offset applied to @addresses ONLY IF they are relative.
+// Does NOT change g_startup_addr — caller controls that via bootstrap.
 int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
     if (!g_initialized || !g_ram) {
         std::cerr << "[SimX-DPI] Error: SimX not initialized" << std::endl;
@@ -405,11 +410,16 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
         if (line.empty() || line[0] == '/' || line[0] == '#') continue;
 
         if (line[0] == '@') {
-            // Address marker: apply base_addr offset
-            uint64_t rel = std::stoull(line.substr(1), nullptr, 16);
-            current_addr = rel + base_addr;
-            std::cout << "[SimX-DPI] hex_at: @" << std::hex << rel
-                      << " → absolute 0x" << current_addr << std::dec << std::endl;
+            // Address marker: apply base_addr ONLY if the address is relative (e.g., @00000000)
+            uint64_t raw_addr = std::stoull(line.substr(1), nullptr, 16);
+            
+            if (raw_addr >= 0x80000000ULL) {
+                // Address is already absolute (e.g., @80000000)
+                current_addr = raw_addr;
+            } else {
+                // Address is relative (e.g., @00000000), add the base offset
+                current_addr = raw_addr + base_addr;
+            }
             continue;
         }
 
@@ -438,7 +448,7 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
 
     std::cout << "[SimX-DPI] Loaded " << bytes_loaded
               << " bytes from '" << filepath
-              << "' at base=0x" << std::hex << base_addr << std::dec << std::endl;
+              << "' mapped to absolute memory" << std::endl;
     return 0;
 }
 
@@ -607,16 +617,17 @@ int simx_run() {
         std::cout << "[SimX-DPI] Running processor to completion..." << std::endl;
         std::cout << "[SimX-DPI] Startup address: 0x" << std::hex << g_startup_addr << std::dec << std::endl;
         
-        int exitcode = g_processor->run();
+        int run_status = g_processor->run();
         // Mark execution as complete so simx_is_done() returns 1
         g_done     = true;
-        g_exitcode = exitcode;
+        g_exitcode = g_processor->get_exitcode();
         
         std::cout << "[SimX-DPI] Execution finished" << std::endl;
-        std::cout << "[SimX-DPI] Exit code: " << exitcode << std::endl;
+        std::cout << "[SimX-DPI] Run status: " << run_status << std::endl;
+        std::cout << "[SimX-DPI] Exit code: " << g_exitcode << std::endl;
         std::cout << "[SimX-DPI] ========================================" << std::endl;
         
-        return exitcode;
+        return g_exitcode;
         
     } catch (const std::exception& e) {
         std::cerr << "[SimX-DPI] Error in run: " << e.what() << std::endl;

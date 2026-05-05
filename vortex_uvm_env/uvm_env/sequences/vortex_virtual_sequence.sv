@@ -29,15 +29,6 @@
 `ifndef VORTEX_VIRTUAL_SEQUENCE_SV
 `define VORTEX_VIRTUAL_SEQUENCE_SV
 
-import uvm_pkg::*;
-`include "uvm_macros.svh"
-import vortex_config_pkg::*;
-import vortex_env_pkg::*;
-import mem_agent_pkg::*;
-import axi_agent_pkg::*;
-import dcr_agent_pkg::*;
-import host_agent_pkg::*;
-import status_agent_pkg::*;
 
 class vortex_virtual_sequence extends uvm_sequence;
     `uvm_object_utils(vortex_virtual_sequence)
