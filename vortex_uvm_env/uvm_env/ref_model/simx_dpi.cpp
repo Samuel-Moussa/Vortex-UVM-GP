@@ -618,9 +618,9 @@ int simx_run() {
         std::cout << "[SimX-DPI] Startup address: 0x" << std::hex << g_startup_addr << std::dec << std::endl;
         
         int run_status = g_processor->run();
-        // Mark execution as complete so simx_is_done() returns 1
+        // Processor::run() already returns the final exit code.
         g_done     = true;
-        g_exitcode = g_processor->get_exitcode();
+        g_exitcode = run_status;
         
         std::cout << "[SimX-DPI] Execution finished" << std::endl;
         std::cout << "[SimX-DPI] Run status: " << run_status << std::endl;
@@ -660,32 +660,23 @@ int simx_step(int cycles) {
         return 1;
     }
 
-        // First step call: initialize SimPlatform (run() does this itself internally)
+    // This SimX backend only exposes run-to-completion.
+    // Keep the DPI contract by treating the first step call as a full run.
     if (!g_step_initialized) {
-        std::cout << "[SimX-DPI] simx_step: first call — initializing SimPlatform" << std::endl;
-        SimPlatform::instance().reset();
+        std::cout << "[SimX-DPI] simx_step: backend is run-to-completion; running once" << std::endl;
         g_step_initialized = true;
     }
 
     try {
-        // Processor::step() takes uint64_t — safe cast since we checked cycles > 0
-        g_processor->step(static_cast<uint64_t>(cycles));
+        int exitcode = simx_run();
+        if (exitcode < 0) {
+            return -1;
+        }
+
         g_current_cycle += cycles;
-
-        if (g_current_cycle % 10000 == 0) {
-            std::cout << "[SimX-DPI] Stepped to cycle " << g_current_cycle << std::endl;
-        }
-
-        // --- Pattern A: use Processor::is_done() directly ---
-        if (g_processor->is_done()) {
-            g_done     = true;
-            g_exitcode = g_processor->get_exitcode();  // requires Bug 2 fix above
-            std::cout << "[SimX-DPI] Program completed at cycle " << g_current_cycle
-                      << " (exitcode=" << g_exitcode << ")" << std::endl;
-            return 1;  // signal completion to SystemVerilog
-        }
-
-        return 0;  // still running
+        std::cout << "[SimX-DPI] Program completed via simx_step at cycle "
+                  << g_current_cycle << " (exitcode=" << g_exitcode << ")" << std::endl;
+        return 1;
 
     } catch (const std::exception& e) {
         std::cerr << "[SimX-DPI] Error in simx_step: " << e.what() << std::endl;
@@ -702,11 +693,6 @@ int simx_is_done() {
     if (!g_initialized || !g_processor) {
         std::cerr << "[SimX-DPI] simx_is_done: not initialized" << std::endl;
         return -1;
-    }
-    // Sync the global flag with the processor's actual state
-    if (!g_done && g_processor->is_done()) {
-        g_done     = true;
-        g_exitcode = g_processor->get_exitcode();
     }
     return g_done ? 1 : 0;
 }
