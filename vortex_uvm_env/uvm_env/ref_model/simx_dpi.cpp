@@ -76,6 +76,24 @@ void simx_cleanup() {
 // Initialize SimX processor
 int simx_init(int num_cores, int num_warps, int num_threads) {
     try {
+        // Validate requested configuration against the SimX compile-time
+        // constants. SimX is built with fixed values for some topology
+        // parameters (NUM_CLUSTERS, NUM_CORES, NUM_WARPS, NUM_THREADS).
+        // If the runtime request doesn't match the compiled model, fail
+        // early with a clear diagnostic instead of throwing an exception
+        // deep in the simulator internals.
+#if defined(NUM_CORES) && defined(NUM_WARPS) && defined(NUM_THREADS)
+        if (num_cores != NUM_CORES || num_warps != NUM_WARPS || num_threads != NUM_THREADS) {
+            std::cerr << "[SimX-DPI] Configuration mismatch: simx_model.so was built for "
+                      << "NUM_CORES=" << NUM_CORES << ", NUM_WARPS=" << NUM_WARPS
+                      << ", NUM_THREADS=" << NUM_THREADS << " but simx_init() was called with "
+                      << "num_cores=" << num_cores << ", num_warps=" << num_warps
+                      << ", num_threads=" << num_threads << std::endl;
+            std::cerr << "[SimX-DPI] Rebuild simx_model.so with matching -DNUM_* flags or "
+                      << "use matching --cores/--warps/--threads in the run script." << std::endl;
+            return -1;
+        }
+#endif
         std::cout << "[SimX-DPI] ========================================" << std::endl;
         std::cout << "[SimX-DPI] Initializing SimX Golden Model" << std::endl;
         std::cout << "[SimX-DPI] Cores=" << num_cores 

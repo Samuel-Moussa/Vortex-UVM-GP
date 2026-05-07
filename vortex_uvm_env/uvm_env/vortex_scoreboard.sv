@@ -376,7 +376,10 @@ class vortex_scoreboard extends uvm_scoreboard;
         bit [63:0] simx_addr; // DECLARATION FIRST
         
         rd = new[8];          // STATEMENT SECOND
-        simx_addr = baddr[31] ? {32'hFFFFFFFF, baddr[31:0]} : baddr;
+        // Use zero-extended 32-bit physical address when calling SimX.
+        // Previous sign-extension caused reads from invalid high addresses
+        // and produced spurious mismatches (seen as 0xfffe.... addresses).
+        simx_addr = 64'(baddr[31:0]);
         simx_read_mem(simx_addr, 8, rd);
         expected = '0;
         for (int i = 0; i < 8; i++) expected[i*8 +: 8] = rd[i];
@@ -384,19 +387,19 @@ class vortex_scoreboard extends uvm_scoreboard;
         expected = shadow_memory[baddr[31:0]];
       end else begin
         `uvm_warning("SCOREBOARD",
-          $sformatf("AXI RD beat[%0d] 0x%08h — no reference, skipping", beat, baddr))
+          $sformatf("AXI RD beat[%0d] 0x%08h — no reference, skipping", beat, baddr[31:0]))
         num_comparisons--;  continue;
       end
       if (dut_data === expected) begin
         num_passed++;
         `uvm_info("SCOREBOARD",
           $sformatf("AXI RD PASS  beat[%0d] addr=0x%08h  data=0x%016h",
-                    beat, baddr, dut_data), UVM_HIGH)
+                    beat, baddr[31:0], dut_data), UVM_HIGH)
       end else begin
         num_failed++;
         `uvm_error("SCOREBOARD",
           $sformatf("AXI RD FAIL  beat[%0d] addr=0x%08h  DUT=0x%016h  exp=0x%016h",
-                    beat, baddr, dut_data, expected))
+                    beat, baddr[31:0], dut_data, expected))
       end
     end
   endfunction : compare_axi_transaction
