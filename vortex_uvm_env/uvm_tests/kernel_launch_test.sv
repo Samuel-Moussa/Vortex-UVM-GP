@@ -38,7 +38,7 @@ class kernel_launch_test extends vortex_base_test;
 		cfg.axi_agent_is_active  = cfg.axi_agent_enable;
 
 		if (cfg.program_path == "") begin
-			default_program_path = "../Vortex/tests/kernel/vecadd/vecadd.bin";
+			default_program_path = "../Vortex/tests/kernel/vecadd/vecadd.elf";
 			cfg.program_path = default_program_path;
 		end
 
