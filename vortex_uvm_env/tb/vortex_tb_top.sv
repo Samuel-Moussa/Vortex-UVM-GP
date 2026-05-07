@@ -140,7 +140,7 @@ module vortex_tb_top;
             $value$plusargs("HEX=%s",     hex_file)) begin
             bytes = memory.load_hex_file(hex_file, sa);
             if (bytes > 0)
-                $display("[TB_TOP @ %0t] ✓ Pre-loaded %0d bytes from '%s' @ 0x%016h (before reset)",
+                $display("[TB_TOP @ %0t] Pre-loaded %0d bytes from '%s' @ 0x%016h (before reset)",
                          $time, bytes, hex_file, sa);
             else
                 $fatal(1, "[TB_TOP @ %0t] FATAL: load_hex_file('%s') returned 0 bytes", $time, hex_file);
@@ -150,9 +150,9 @@ module vortex_tb_top;
             mem_model test_get;
             #1;
             if (uvm_config_db#(mem_model)::get(null, "*", "mem_model", test_get))
-                $display("[TB_TOP @ %0t] ✓ mem_model verified in config_db", $time);
+                $display("[TB_TOP @ %0t] mem_model verified in config_db", $time);
             else
-                $error("[TB_TOP @ %0t] ✗ mem_model NOT in config_db!", $time);
+                $error("[TB_TOP @ %0t] mem_model NOT in config_db!", $time);
         end
     end
 
@@ -368,13 +368,14 @@ module vortex_tb_top;
             tb_cycle_count <= tb_cycle_count + 1;
 
             if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
+                (vif.axi_if.bvalid && vif.axi_if.bready) || 
                 (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0])) begin
                 tb_mem_ops     <= tb_mem_ops + 1;
                 tb_idle_cycles <= 0;
                 if (tb_mem_ops % 3 == 0) tb_instr_count <= tb_instr_count + 1;
                 if (!tb_execution_started) begin
                     tb_execution_started <= 1;
-                    $display("\n[TB_STATUS @ %0t] ✓ Execution STARTED", $time);
+                    $display("\n[TB_STATUS @ %0t] Execution STARTED", $time);
                 end
             end else if (tb_execution_started && !tb_execution_complete) begin
                 tb_idle_cycles <= tb_idle_cycles + 1;
@@ -383,7 +384,7 @@ module vortex_tb_top;
             if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy) begin
                 tb_execution_complete <= 1;
                 $display("\n╔═══════════════════════════════════════════════════╗");
-                $display("║  ✓ EXECUTION COMPLETE (DUT busy=0)                ║");
+                $display("║  EXECUTION COMPLETE (DUT busy=0)                  ║");
                 $display("╚═══════════════════════════════════════════════════╝");
                 $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
                          tb_cycle_count, tb_mem_ops, tb_instr_count);
@@ -391,7 +392,7 @@ module vortex_tb_top;
                          tb_idle_cycles >= idle_threshold_val) begin
                 tb_execution_complete <= 1;
                 $display("\n╔═══════════════════════════════════════════════════╗");
-                $display("║  ⚠ EXECUTION COMPLETE (idle safety net %0d cyc)  ║", idle_threshold_val);
+                $display("║  EXECUTION COMPLETE (idle safety net %0d cyc)     ║", idle_threshold_val);
                 $display("╚═══════════════════════════════════════════════════╝");
                 $display("  DUT busy=%b — may be stuck!", vif.status_if.busy);
             end
@@ -401,7 +402,8 @@ module vortex_tb_top;
     // Safely handle idle channel detection regardless of wrapper
     `ifdef USE_AXI_WRAPPER
         wire axi_channels_idle = !vif.axi_if.rvalid  && !vif.axi_if.arvalid &&
-                                  !vif.axi_if.awvalid && !vif.axi_if.wvalid;
+                                  !vif.axi_if.awvalid && !vif.axi_if.wvalid &&
+                                  !vif.axi_if.bvalid;
         wire mem_channels_idle = 1'b1;
     `else
         wire axi_channels_idle = 1'b1;
@@ -419,6 +421,174 @@ module vortex_tb_top;
             $display("[TB_STATUS @ %0t] cyc=%0d mem=%0d busy=%b idle=%0d",
                      $time, tb_cycle_count, tb_mem_ops, vif.status_if.busy, tb_idle_cycles);
     end
+
+    //==========================================================================
+    // DEBUG PROBES: Internal DUT busy and ebreak path
+    //==========================================================================
+
+    `ifdef USE_AXI_WRAPPER
+        wire [`NUM_CLUSTERS-1:0] tb_probe_per_cluster_busy;
+        assign tb_probe_per_cluster_busy = dut.vortex.per_cluster_busy;
+
+        always @(posedge clk) begin
+            if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 && tb_execution_started && !tb_execution_complete) begin
+                $display("[TB_PROBE_AXI @ %0t] cyc=%0d per_cluster_busy=%b dut_busy=%b ebreak_detect=%b axi_idle=%b mem_idle=%b",
+                         $time, tb_cycle_count, tb_probe_per_cluster_busy, vif.status_if.busy, vif.status_if.ebreak_detected,
+                         axi_channels_idle, mem_channels_idle);
+            end
+        end
+    `else
+        wire [`NUM_CLUSTERS-1:0] tb_probe_per_cluster_busy;
+        assign tb_probe_per_cluster_busy = dut.per_cluster_busy;
+
+        always @(posedge clk) begin
+            if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 && tb_execution_started && !tb_execution_complete) begin
+                $display("[TB_PROBE_MEM @ %0t] cyc=%0d per_cluster_busy=%b dut_busy=%b ebreak_detect=%b mem_idle=%b",
+                         $time, tb_cycle_count, tb_probe_per_cluster_busy, vif.status_if.busy, vif.status_if.ebreak_detected,
+                         mem_channels_idle);
+            end
+        end
+    `endif
+
+    //==========================================================================
+    // DEBUG PROBES: Deep RTL Pipeline Stage Analysis
+    //==========================================================================
+
+    `ifdef USE_AXI_WRAPPER
+        // Deep pipeline probes: Measure fetch, decode, issue, LSU stages
+        wire icache_req_valid, icache_rsp_valid, icache_req_ready, icache_rsp_ready;
+        wire dcache_req_valid, dcache_rsp_valid, dcache_req_ready, dcache_rsp_ready;
+        wire fetch_valid;
+        wire [`XLEN-1:0] fetch_pc_full;
+        wire [31:0] fetch_instr;
+
+        localparam [31:0] TB_EBREAK_PC = 32'h800008ac;
+        localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+        localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
+
+        reg tb_probe_ebreak_seen;
+        reg tb_probe_exit_addr_seen;
+
+        // Extract cache bus signals from core (1C_1S_1C config: cluster[0].socket[0].core[0])
+        assign icache_req_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
+        assign icache_req_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_ready;
+        assign icache_rsp_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_valid;
+        assign icache_rsp_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_ready;
+
+        assign fetch_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
+        assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
+        assign fetch_instr = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
+
+        // DCACHE is an array; measure the first port (0)
+        assign dcache_req_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
+        assign dcache_req_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_ready;
+        assign dcache_rsp_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_valid;
+        assign dcache_rsp_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_ready;
+
+        // Pipeline flow signals
+        reg [31:0] icache_stall_cycles, dcache_stall_cycles;
+        wire icache_stalled = icache_req_valid && !icache_req_ready;
+        wire dcache_stalled = dcache_req_valid && !dcache_req_ready;
+        wire icache_firing = icache_req_valid && icache_req_ready;
+        wire dcache_firing = dcache_req_valid && dcache_req_ready;
+
+        always @(posedge clk) begin
+            if (!reset_n) begin
+                icache_stall_cycles <= 0;
+                dcache_stall_cycles <= 0;
+                tb_probe_ebreak_seen <= 0;
+                tb_probe_exit_addr_seen <= 0;
+            end else if (tb_execution_started && !tb_execution_complete) begin
+                if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
+                if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
+
+                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_pc_full[31:0] == TB_EBREAK_PC) && (fetch_instr == TB_EBREAK_INSTR)) begin
+                    tb_probe_ebreak_seen <= 1'b1;
+                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
+                end
+
+                if (!tb_probe_exit_addr_seen && vif.axi_if.awvalid && vif.axi_if.awready && (vif.axi_if.awaddr == TB_EXIT_MMIO_ADDR)) begin
+                    tb_probe_exit_addr_seen <= 1'b1;
+                    $display("[TB_PROBE_EXIT @ %0t] observed AXI write address 0x%08h (program exit MMIO)", $time, vif.axi_if.awaddr);
+                end
+            end
+        end
+
+        always @(posedge clk) begin
+            if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 && tb_execution_started && !tb_execution_complete) begin
+                $display("[TB_PROBE_PIPELINE @ %0t] cyc=%0d | ICACHE: req=%b ready=%b rsp=%b stall_cyc=%0d | DCACHE: req=%b ready=%b rsp=%b stall_cyc=%0d | PC=0x%08h instr=0x%08h ebreak_seen=%b exit_addr_seen=%b",
+                         $time, tb_cycle_count,
+                         icache_req_valid, icache_req_ready, icache_rsp_valid, icache_stall_cycles,
+                         dcache_req_valid, dcache_req_ready, dcache_rsp_valid, dcache_stall_cycles,
+                         fetch_pc_full[31:0], fetch_instr, tb_probe_ebreak_seen, tb_probe_exit_addr_seen);
+            end
+        end
+
+    `else
+        // MEM interface version (non-AXI)
+        wire icache_req_valid, icache_rsp_valid, icache_req_ready, icache_rsp_ready;
+        wire dcache_req_valid, dcache_rsp_valid, dcache_req_ready, dcache_rsp_ready;
+        wire fetch_valid;
+        wire [`XLEN-1:0] fetch_pc_full;
+        wire [31:0] fetch_instr;
+
+        localparam [31:0] TB_EBREAK_PC = 32'h800008ac;
+        localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+        localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
+
+        reg tb_probe_ebreak_seen;
+        reg tb_probe_exit_addr_seen;
+
+        assign icache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
+        assign icache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_ready;
+        assign icache_rsp_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_valid;
+        assign icache_rsp_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_ready;
+
+        assign fetch_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
+        assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
+        assign fetch_instr = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
+
+        assign dcache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
+        assign dcache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_ready;
+        assign dcache_rsp_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_valid;
+        assign dcache_rsp_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_ready;
+
+        reg [31:0] icache_stall_cycles, dcache_stall_cycles;
+        wire icache_stalled = icache_req_valid && !icache_req_ready;
+        wire dcache_stalled = dcache_req_valid && !dcache_req_ready;
+
+        always @(posedge clk) begin
+            if (!reset_n) begin
+                icache_stall_cycles <= 0;
+                dcache_stall_cycles <= 0;
+                tb_probe_ebreak_seen <= 0;
+                tb_probe_exit_addr_seen <= 0;
+            end else if (tb_execution_started && !tb_execution_complete) begin
+                if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
+                if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
+
+                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_pc_full[31:0] == TB_EBREAK_PC) && (fetch_instr == TB_EBREAK_INSTR)) begin
+                    tb_probe_ebreak_seen <= 1'b1;
+                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
+                end
+
+                if (!tb_probe_exit_addr_seen && vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0] && vif.mem_if.req_rw[0] && (vif.mem_if.req_addr[0] == TB_EXIT_MMIO_ADDR[31:2])) begin
+                    tb_probe_exit_addr_seen <= 1'b1;
+                    $display("[TB_PROBE_EXIT @ %0t] observed MEM write address 0x%08h (program exit MMIO)", $time, TB_EXIT_MMIO_ADDR);
+                end
+            end
+        end
+
+        always @(posedge clk) begin
+            if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 && tb_execution_started && !tb_execution_complete) begin
+                $display("[TB_PROBE_PIPELINE @ %0t] cyc=%0d | ICACHE: req=%b ready=%b rsp=%b stall_cyc=%0d | DCACHE: req=%b ready=%b rsp=%b stall_cyc=%0d | PC=0x%08h instr=0x%08h ebreak_seen=%b exit_addr_seen=%b",
+                         $time, tb_cycle_count,
+                         icache_req_valid, icache_req_ready, icache_rsp_valid, icache_stall_cycles,
+                         dcache_req_valid, dcache_req_ready, dcache_rsp_valid, dcache_stall_cycles,
+                         fetch_pc_full[31:0], fetch_instr, tb_probe_ebreak_seen, tb_probe_exit_addr_seen);
+            end
+        end
+    `endif
 
     //==========================================================================
     // UVM CONFIGURATION DATABASE SETUP
@@ -448,15 +618,20 @@ module vortex_tb_top;
         wait(reset_n === 1'b1);
         fork
             begin
-                while (elapsed_cycles < timeout_cycles) begin
+                while (elapsed_cycles < timeout_cycles && !vif.status_if.ebreak_detected) begin
                     @(posedge clk); elapsed_cycles++;
                     if (elapsed_cycles % 100000 == 0)
                         $display("[TB_TOP @ %0t] Progress: %0d cycles", $time, elapsed_cycles);
                 end
-                $error("[TB_TOP @ %0t] ⏰ TIMEOUT after %0d cycles!", $time, timeout_cycles);
-                vif.print_status();
-                memory.print_statistics();
-                $finish(2);
+                if (vif.status_if.ebreak_detected) begin
+                    $display("[TB_TOP @ %0t] Watchdog disarmed after %0d cycles (EBREAK detected)",
+                             $time, elapsed_cycles);
+                end else begin
+                    $error("[TB_TOP @ %0t] TIMEOUT after %0d cycles!", $time, timeout_cycles);
+                    vif.print_status();
+                    memory.print_statistics();
+                    $finish(2);
+                end
             end
         join_none
     end
@@ -467,11 +642,11 @@ module vortex_tb_top;
 
     final begin
         $display("\n================================================================================");
-        $display("[TB_TOP @ %0t] 🏁 Simulation Complete", $time);
+        $display("[TB_TOP @ %0t] Simulation Complete", $time);
         if (vif.status_if.ebreak_detected)
-            $display("✓ Test Result:    PASS (EBREAK detected)");
+            $display("Test Result:    PASS (EBREAK detected)");
         else
-            $display("? Test Result:    UNKNOWN (check test logs)");
+            $display("Test Result:    UNKNOWN (check test logs)");
         $display("  Total Cycles: %0d  Instructions: %0d",
                  vif.status_if.cycle_count, vif.status_if.instr_count);
         memory.print_statistics();
