@@ -138,11 +138,60 @@ int ProcessorImpl::run() {
   return exitcode;
 }
 
+
+// 1. Add this new function
+void ProcessorImpl::step(uint64_t cycles) {
+  // SimPlatform::instance().reset(); // Ensure platform is ready
+  
+  for (uint64_t i = 0; i < cycles; ++i) {
+    SimPlatform::instance().tick();
+    
+    bool all_done = true;
+    int exitcode = 0;
+    
+    // Tick all clusters
+    for (auto cluster : clusters_) {
+      if (cluster->running()) {
+        all_done = false;
+        continue;
+      }
+      exitcode |= cluster->get_exitcode();
+    }
+    
+    perf_mem_latency_ += perf_mem_pending_reads_;
+
+    if (all_done) {
+      exitcode_ = exitcode;  // ADD: store so get_exitcode() can retrieve it
+      break;
+    } 
+  }
+}
+
+int ProcessorImpl::get_exitcode() const {
+  return exitcode_;
+}
+
+// 2. Add helper to check if processor finished
+bool ProcessorImpl::is_done() const {
+    for (auto cluster : clusters_) {
+        if (cluster->running()) return false;
+    }
+    return true;
+}
+
+// 3. Update the outer Processor class wrapper in processor.cpp
+// Scroll down to Processor::run namespace...
+// void Processor::step(uint64_t cycles) {
+//     impl_->step(cycles);
+// }
+
+
 void ProcessorImpl::reset() {
-  perf_mem_reads_ = 0;
-  perf_mem_writes_ = 0;
-  perf_mem_latency_ = 0;
+  perf_mem_reads_         = 0;
+  perf_mem_writes_        = 0;
+  perf_mem_latency_       = 0;
   perf_mem_pending_reads_ = 0;
+  exitcode_               = 0;  // ADD
 }
 
 void ProcessorImpl::dcr_write(uint32_t addr, uint32_t value) {
@@ -190,6 +239,39 @@ int Processor::run() {
     std::cerr << "Error: unknown exception." << std::endl;
   }
   return -1;
+}
+
+// Step function wrapper
+void Processor::step(uint64_t cycles) {
+    try {
+        impl_->step(cycles);
+    } catch (const std::exception& e) {
+        std::cerr << "Error in step: " << e.what() << std::endl;
+    } catch (...) {
+        std::cerr << "Error: unknown exception in step." << std::endl;
+    }
+}
+
+// Check if execution is done (optional but recommended)
+bool Processor::is_done() const {
+    try {
+        return impl_->is_done();
+    } catch (const std::exception& e) {
+        std::cerr << "Error checking is_done: " << e.what() << std::endl;
+        return true; // Assume done on error
+    } catch (...) {
+        std::cerr << "Error: unknown exception in is_done." << std::endl;
+        return true;
+    }
+}
+
+int Processor::get_exitcode() const {
+    try {
+        return impl_->get_exitcode();
+    } catch (const std::exception& e) {
+        std::cerr << "Error in get_exitcode: " << e.what() << std::endl;
+        return -1;
+    }
 }
 
 void Processor::dcr_write(uint32_t addr, uint32_t value) {
