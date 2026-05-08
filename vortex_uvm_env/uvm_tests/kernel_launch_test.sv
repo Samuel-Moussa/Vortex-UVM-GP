@@ -43,10 +43,15 @@ class kernel_launch_test extends vortex_base_test;
 		end
 
 		compare_results = 0;
-		if (cfg.program_path.len() >= 10) begin
+		// Detect vecadd kernel by checking the filename suffix.
+		// The run script converts vecadd.elf/.bin into vecadd.hex, so compare
+		// results for any vecadd program regardless of the final extension.
+		if (cfg.program_path.len() >= 6) begin
 			if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.bin") begin
 				compare_results = 1;
 			end else if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.elf") begin
+				compare_results = 1;
+			end else if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.hex") begin
 				compare_results = 1;
 			end
 		end
@@ -70,6 +75,10 @@ class kernel_launch_test extends vortex_base_test;
 
 		if (cfg.test_timeout_cycles > cfg.global_timeout_cycles)
 			cfg.test_timeout_cycles = cfg.global_timeout_cycles;
+
+		`uvm_info(get_type_name(),
+			$sformatf("Kernel launch compare_results=%0d for program=%s", compare_results, cfg.program_path),
+			UVM_LOW)
 
 		`uvm_info(get_type_name(),
 			$sformatf("Kernel launch cfg: startup=0x%016h result=0x%016h size=%0d timeout=%0d cycles iface=%s program=%s",
