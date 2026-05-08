@@ -27,11 +27,16 @@ class vortex_scoreboard extends uvm_scoreboard;
   //==========================================================================
   // Configuration
   //==========================================================================
+  // Final end-of-test comparison over the configured result window.
+  // This sweeps the entire 64-byte vecadd destination buffer in 8-byte
+  // chunks after SimX has run to completion.
   vortex_config cfg;
 
   //==========================================================================
   // Analysis Exports
   //==========================================================================
+  // Live AXI read-response comparison for runtime bus traffic. Only reads
+  // that land inside the configured result window are compared here.
   uvm_analysis_imp_mem    #(mem_transaction,    vortex_scoreboard) mem_export;
   uvm_analysis_imp_axi    #(axi_transaction,    vortex_scoreboard) axi_export;
   uvm_analysis_imp_dcr    #(dcr_transaction,    vortex_scoreboard) dcr_export;
@@ -183,22 +188,32 @@ class vortex_scoreboard extends uvm_scoreboard;
                 tr.id, tr.addr, tr.len), UVM_DEBUG)
 
     if (tr.trans_type == axi_transaction::AXI_WRITE) begin
+      // Mirror AXI writes byte-accurately using WSTRB, matching mem_model.
       for (int beat = 0; beat <= tr.len; beat++) begin
-        bit [63:0] baddr = tr.get_next_addr(beat);
-        bit [511:0] beat_data = (beat < tr.wdata.size()) ? tr.wdata[beat] : '0;
-        // Extract all 8 x 64-bit words from each 512-bit beat
-        for (int word = 0; word < 8; word++) begin
-          bit [63:0] waddr = baddr + (word * 8);
-          bit [63:0] wdata = beat_data[(7-word)*64 +: 64];
-          shadow_memory[waddr[31:0]] = wdata;
-          if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes)) begin
-            `uvm_info("SCOREBOARD",
-              $sformatf("AXI WR shadow  beat[%0d] word[%0d]  addr=0x%08h  data=0x%016h",
-                        beat, word, waddr[31:0], wdata), UVM_MEDIUM)
-          end else begin
-            `uvm_info("SCOREBOARD",
-              $sformatf("AXI WR shadow  beat[%0d] word[%0d]  addr=0x%08h",
-                        beat, word, waddr[31:0]), UVM_HIGH)
+        bit [63:0]  baddr      = tr.get_next_addr(beat);
+        bit [511:0] beat_data  = (beat < tr.wdata.size()) ? tr.wdata[beat] : '0;
+        bit [63:0]  beat_wstrb = (beat < tr.wstrb.size()) ? tr.wstrb[beat] : '0;
+
+        for (int i = 0; i < 64; i++) begin
+          if (beat_wstrb[i]) begin
+            bit [63:0] byte_addr = baddr + i;
+            bit [63:0] waddr     = {byte_addr[63:3], 3'b000};
+            bit [2:0]  lane      = byte_addr[2:0];
+            bit [63:0] wdata;
+
+            if (shadow_memory.exists(waddr[31:0]))
+              wdata = shadow_memory[waddr[31:0]];
+            else
+              wdata = '0;
+
+            wdata[lane*8 +: 8] = beat_data[i*8 +: 8];
+            shadow_memory[waddr[31:0]] = wdata;
+
+            if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes)) begin
+              `uvm_info("SCOREBOARD",
+                $sformatf("AXI WR shadow  beat[%0d] byte[%0d]  addr=0x%08h  data=0x%016h  wstrb=0x%016h",
+                          beat, i, waddr[31:0], wdata, beat_wstrb), UVM_MEDIUM)
+            end
           end
         end
       end
