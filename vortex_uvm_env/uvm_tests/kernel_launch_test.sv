@@ -4,10 +4,13 @@
 //
 // Purpose:
 //   Verifies that the host path can preload a Vortex kernel binary, launch it
-//   through the host agent, and compare a result window against SimX.
+//   through the host agent, and check completion plus any configured result
+//   window against SimX.
 //
 // This test defaults to the vecadd kernel binary and its destination buffer,
 // but callers can override the program path and result region via plusargs.
+// Kernels such as fibonacci may complete without enabling result comparisons,
+// while heavier programs such as conform may require a longer timeout.
 ////////////////////////////////////////////////////////////////////////////////
 
 `ifndef KERNEL_LAUNCH_TEST_SV
