@@ -30,6 +30,7 @@ modelsim.ini
 # Build directories
 build/
 obj_dir/
+core-v-verif/
 
 # Backup files
 *~
