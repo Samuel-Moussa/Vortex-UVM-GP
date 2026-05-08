@@ -26,11 +26,15 @@ modelsim.ini
 *.a
 *.dll
 *.exe
+*.d
 
 # Build directories
 build/
 obj_dir/
 core-v-verif/
+Vortex/sim/simx/obj/
+Vortex/sim/simx/simx
+Vortex/sim/simx/simx_config.stamp
 
 # Backup files
 *~
