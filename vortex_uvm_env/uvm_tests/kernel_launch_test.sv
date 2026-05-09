@@ -4,10 +4,13 @@
 //
 // Purpose:
 //   Verifies that the host path can preload a Vortex kernel binary, launch it
-//   through the host agent, and compare a result window against SimX.
+//   through the host agent, and check completion plus any configured result
+//   window against SimX.
 //
 // This test defaults to the vecadd kernel binary and its destination buffer,
 // but callers can override the program path and result region via plusargs.
+// Kernels such as fibonacci may complete without enabling result comparisons,
+// while heavier programs such as conform may require a longer timeout.
 ////////////////////////////////////////////////////////////////////////////////
 
 `ifndef KERNEL_LAUNCH_TEST_SV
@@ -43,11 +46,40 @@ class kernel_launch_test extends vortex_base_test;
 		end
 
 		compare_results = 0;
-		if (cfg.program_path.len() >= 10) begin
+		// Detect kernel by checking the filename suffix.
+		// The run script converts .elf/.bin into .hex, so compare results
+		// for any kernel program regardless of the final extension.
+		if (cfg.program_path.len() >= 6) begin
+			// vecadd: vector addition kernel with memory result window
 			if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.bin") begin
 				compare_results = 1;
 			end else if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.elf") begin
 				compare_results = 1;
+			end else if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.hex") begin
+				compare_results = 1;
+			// fibonacci: scalar recursion kernel with no memory result region
+			// (result is checked by the kernel itself via vx_printf)
+			end else if (cfg.program_path.substr(cfg.program_path.len()-12, cfg.program_path.len()-1) == "fibonacci.bin") begin
+				compare_results = 0;
+			end else if (cfg.program_path.substr(cfg.program_path.len()-12, cfg.program_path.len()-1) == "fibonacci.elf") begin
+				compare_results = 0;
+			end else if (cfg.program_path.substr(cfg.program_path.len()-12, cfg.program_path.len()-1) == "fibonacci.hex") begin
+				compare_results = 0;
+			end
+		end
+
+		// Detect heavy "conform" test and increase timeout accordingly. Conform
+		// is a suite of mixed subtests and may take much longer to complete.
+		if (cfg.program_path.len() >= 11) begin
+			if (cfg.program_path.substr(cfg.program_path.len()-11, cfg.program_path.len()-1) == "conform.bin") begin
+				cfg.test_timeout_cycles = cfg.global_timeout_cycles;
+				`uvm_info(get_type_name(), $sformatf("Conform detected: extending timeout to %0d cycles", cfg.test_timeout_cycles), UVM_LOW)
+			end else if (cfg.program_path.substr(cfg.program_path.len()-11, cfg.program_path.len()-1) == "conform.elf") begin
+				cfg.test_timeout_cycles = cfg.global_timeout_cycles;
+				`uvm_info(get_type_name(), $sformatf("Conform detected: extending timeout to %0d cycles", cfg.test_timeout_cycles), UVM_LOW)
+			end else if (cfg.program_path.substr(cfg.program_path.len()-11, cfg.program_path.len()-1) == "conform.hex") begin
+				cfg.test_timeout_cycles = cfg.global_timeout_cycles;
+				`uvm_info(get_type_name(), $sformatf("Conform detected: extending timeout to %0d cycles", cfg.test_timeout_cycles), UVM_LOW)
 			end
 		end
 
@@ -70,6 +102,10 @@ class kernel_launch_test extends vortex_base_test;
 
 		if (cfg.test_timeout_cycles > cfg.global_timeout_cycles)
 			cfg.test_timeout_cycles = cfg.global_timeout_cycles;
+
+		`uvm_info(get_type_name(),
+			$sformatf("Kernel launch compare_results=%0d for program=%s", compare_results, cfg.program_path),
+			UVM_LOW)
 
 		`uvm_info(get_type_name(),
 			$sformatf("Kernel launch cfg: startup=0x%016h result=0x%016h size=%0d timeout=%0d cycles iface=%s program=%s",

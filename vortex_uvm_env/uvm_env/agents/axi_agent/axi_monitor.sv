@@ -203,7 +203,8 @@ class axi_monitor extends uvm_monitor;
 
                 trans.trans_type = axi_transaction::AXI_WRITE;
                 trans.id = vif.monitor_cb.awid;
-                trans.addr = vif.monitor_cb.awaddr;
+                // Zero-extend 32-bit address to 64-bit to avoid sign-extension
+                trans.addr = 64'(vif.monitor_cb.awaddr);
                 trans.len = vif.monitor_cb.awlen;
                 trans.size = vif.monitor_cb.awsize;
                 trans.burst = axi_transaction::axi_burst_type_e'(vif.monitor_cb.awburst);
@@ -352,7 +353,8 @@ class axi_monitor extends uvm_monitor;
                 // Capture all AW channel fields
                 trans.trans_type = axi_transaction::AXI_WRITE;
                 trans.id = vif.monitor_cb.awid;
-                trans.addr = vif.monitor_cb.awaddr;
+                // Zero-extend 32-bit address to 64-bit to avoid sign-extension
+                trans.addr = 64'(vif.monitor_cb.awaddr);
                 trans.len = vif.monitor_cb.awlen;
                 trans.size = vif.monitor_cb.awsize;
                 trans.burst = axi_transaction::axi_burst_type_e'(vif.monitor_cb.awburst);
@@ -549,7 +551,8 @@ class axi_monitor extends uvm_monitor;
                 // Capture all AR channel fields
                 trans.trans_type = axi_transaction::AXI_READ;
                 trans.id = vif.monitor_cb.arid;
-                trans.addr = vif.monitor_cb.araddr;
+                // Zero-extend 32-bit address to 64-bit to avoid sign-extension
+                trans.addr = 64'(vif.monitor_cb.araddr);
                 trans.len = vif.monitor_cb.arlen;
                 trans.size = vif.monitor_cb.arsize;
                 trans.burst = axi_transaction::axi_burst_type_e'(vif.monitor_cb.arburst);
