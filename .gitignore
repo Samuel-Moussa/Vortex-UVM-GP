@@ -11,6 +11,7 @@ transcript
 vsim.dbg
 *.vcd
 *.fsdb
+vortex_uvm_env/results/
 
 # QuestaSim/ModelSim
 modelsim.ini
@@ -26,16 +27,23 @@ modelsim.ini
 *.a
 *.dll
 *.exe
+*.d
 
 # Build directories
 build/
 obj_dir/
+core-v-verif/
+Vortex/sim/simx/obj/
+Vortex/sim/simx/simx
+Vortex/sim/simx/simx_config.stamp
 
 # Backup files
 *~
 *.swp
 *.swo
 *.Zone.Identifier
+Vortex/sim/simx/*.old
+Vortex/sim/simx/dcr_diagnostic.sh
 
 # OS files
 .DS_Store
