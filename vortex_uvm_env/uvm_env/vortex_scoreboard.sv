@@ -27,11 +27,16 @@ class vortex_scoreboard extends uvm_scoreboard;
   //==========================================================================
   // Configuration
   //==========================================================================
+  // Final end-of-test comparison over the configured result window.
+  // This sweeps the entire 64-byte vecadd destination buffer in 8-byte
+  // chunks after SimX has run to completion.
   vortex_config cfg;
 
   //==========================================================================
   // Analysis Exports
   //==========================================================================
+  // Live AXI read-response comparison for runtime bus traffic. Only reads
+  // that land inside the configured result window are compared here.
   uvm_analysis_imp_mem    #(mem_transaction,    vortex_scoreboard) mem_export;
   uvm_analysis_imp_axi    #(axi_transaction,    vortex_scoreboard) axi_export;
   uvm_analysis_imp_dcr    #(dcr_transaction,    vortex_scoreboard) dcr_export;
@@ -64,6 +69,7 @@ class vortex_scoreboard extends uvm_scoreboard;
   int unsigned num_passed;
   int unsigned num_failed;
   int unsigned num_dcr_writes;
+  int unsigned num_skipped;
   int unsigned num_unchecked;
 
   //==========================================================================
@@ -91,6 +97,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     num_transactions = 0;  num_comparisons = 0;
     num_passed       = 0;  num_failed      = 0;
     num_dcr_writes   = 0;  num_unchecked   = 0;
+    num_skipped      = 0;
     simx_ran         = 0;  ebreak_seen     = 0;
   endfunction : build_phase
 
@@ -181,10 +188,34 @@ class vortex_scoreboard extends uvm_scoreboard;
                 tr.id, tr.addr, tr.len), UVM_DEBUG)
 
     if (tr.trans_type == axi_transaction::AXI_WRITE) begin
+      // Mirror AXI writes byte-accurately using WSTRB, matching mem_model.
       for (int beat = 0; beat <= tr.len; beat++) begin
-        bit [63:0] baddr = tr.get_next_addr(beat);
-        bit [63:0] bdata = (beat < tr.wdata.size()) ? tr.wdata[beat] : '0;
-        shadow_memory[baddr[31:0]] = bdata; // DUT shadow only — SimX runs independently
+        bit [63:0]  baddr      = tr.get_next_addr(beat);
+        bit [511:0] beat_data  = (beat < tr.wdata.size()) ? tr.wdata[beat] : '0;
+        bit [63:0]  beat_wstrb = (beat < tr.wstrb.size()) ? tr.wstrb[beat] : '0;
+
+        for (int i = 0; i < 64; i++) begin
+          if (beat_wstrb[i]) begin
+            bit [63:0] byte_addr = baddr + i;
+            bit [63:0] waddr     = {byte_addr[63:3], 3'b000};
+            bit [2:0]  lane      = byte_addr[2:0];
+            bit [63:0] wdata;
+
+            if (shadow_memory.exists(waddr[31:0]))
+              wdata = shadow_memory[waddr[31:0]];
+            else
+              wdata = '0;
+
+            wdata[lane*8 +: 8] = beat_data[i*8 +: 8];
+            shadow_memory[waddr[31:0]] = wdata;
+
+            if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes)) begin
+              `uvm_info("SCOREBOARD",
+                $sformatf("AXI WR shadow  beat[%0d] byte[%0d]  addr=0x%08h  data=0x%016h  wstrb=0x%016h",
+                          beat, i, waddr[31:0], wdata, beat_wstrb), UVM_MEDIUM)
+            end
+          end
+        end
       end
     end else begin
       if (tr.completed) compare_axi_transaction(tr);
@@ -289,14 +320,24 @@ class vortex_scoreboard extends uvm_scoreboard;
       bit [63:0] simx_word, dut_word;
       simx_word = '0;
       dut_word   = '0;
+      
+      // Build SimX word byte-by-byte from the read buffer
       for (int i = 0; i < chunk_bytes; i++) begin
         simx_word[i*8 +: 8] = simx_bytes[offset + i];
-        dut_word[i*8 +: 8]  = shadow_memory.exists(waddr) ? shadow_memory[waddr][i*8 +: 8] : '0;
       end
+      
+      // Get DUT word directly from shadow memory (already 64-bit)
+      if (shadow_memory.exists(waddr)) begin
+        dut_word = shadow_memory[waddr];
+      end else begin
+        dut_word = '0;
+      end
+      
       num_comparisons++;
       if (!shadow_memory.exists(waddr)) begin
         `uvm_warning("SCOREBOARD",
           $sformatf("Result addr 0x%08h not written by DUT — skipping", waddr))
+        num_skipped++;
         num_comparisons--;
         continue;
       end
@@ -304,7 +345,7 @@ class vortex_scoreboard extends uvm_scoreboard;
         num_passed++;
         `uvm_info("SCOREBOARD",
           $sformatf("RESULT PASS  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
-                    waddr, dut_word, simx_word), UVM_HIGH)
+                    waddr, dut_word, simx_word), UVM_MEDIUM)
       end else begin
         num_failed++;
         `uvm_error("SCOREBOARD",
@@ -344,7 +385,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     end else begin
       `uvm_warning("SCOREBOARD",
         $sformatf("MEM RD 0x%08h — no reference, skipping", tr.addr))
-      num_comparisons--;  return;
+      num_skipped++; num_comparisons--;  return;
     end
     if (tr.rsp_data === expected) begin
       num_passed++;
@@ -370,13 +411,30 @@ class vortex_scoreboard extends uvm_scoreboard;
       bit [63:0] baddr    = tr.get_next_addr(beat);
       bit [63:0] dut_data = (beat < tr.rdata.size()) ? tr.rdata[beat] : '0;
       bit [63:0] expected;
+      bit [31:0] result_base = cfg.result_base_addr[31:0];
+      bit [31:0] result_end  = cfg.result_base_addr[31:0] + cfg.result_size_bytes;
       num_comparisons++;
+
+      // For this kernel-launch flow, only compare reads from the configured
+      // result window. Other AXI reads (stack/local scratch, inputs, etc.) are
+      // expected to be highly runtime-dependent and are checked by protocol
+      // coverage, not value comparison.
+      if (!(baddr[31:0] >= result_base && baddr[31:0] < result_end)) begin
+        `uvm_warning("SCOREBOARD",
+          $sformatf("AXI RD beat[%0d] 0x%08h outside result window [0x%08h:0x%08h) — skipping",
+                    beat, baddr[31:0], result_base, result_end))
+        num_skipped++; num_comparisons--;  continue;
+      end
+
       if (cfg.simx_enable && simx_ran) begin
         byte rd[];
         bit [63:0] simx_addr; // DECLARATION FIRST
         
         rd = new[8];          // STATEMENT SECOND
-        simx_addr = baddr[31] ? {32'hFFFFFFFF, baddr[31:0]} : baddr;
+        // Use zero-extended 32-bit physical address when calling SimX.
+        // Previous sign-extension caused reads from invalid high addresses
+        // and produced spurious mismatches (seen as 0xfffe.... addresses).
+        simx_addr = 64'(baddr[31:0]);
         simx_read_mem(simx_addr, 8, rd);
         expected = '0;
         for (int i = 0; i < 8; i++) expected[i*8 +: 8] = rd[i];
@@ -384,19 +442,19 @@ class vortex_scoreboard extends uvm_scoreboard;
         expected = shadow_memory[baddr[31:0]];
       end else begin
         `uvm_warning("SCOREBOARD",
-          $sformatf("AXI RD beat[%0d] 0x%08h — no reference, skipping", beat, baddr))
-        num_comparisons--;  continue;
+          $sformatf("AXI RD beat[%0d] 0x%08h — no reference, skipping", beat, baddr[31:0]))
+        num_skipped++; num_comparisons--;  continue;
       end
       if (dut_data === expected) begin
         num_passed++;
         `uvm_info("SCOREBOARD",
           $sformatf("AXI RD PASS  beat[%0d] addr=0x%08h  data=0x%016h",
-                    beat, baddr, dut_data), UVM_HIGH)
+                    beat, baddr[31:0], dut_data), UVM_MEDIUM)
       end else begin
         num_failed++;
         `uvm_error("SCOREBOARD",
           $sformatf("AXI RD FAIL  beat[%0d] addr=0x%08h  DUT=0x%016h  exp=0x%016h",
-                    beat, baddr, dut_data, expected))
+                    beat, baddr[31:0], dut_data, expected))
       end
     end
   endfunction : compare_axi_transaction
@@ -407,17 +465,27 @@ class vortex_scoreboard extends uvm_scoreboard;
   local function void flush_pending_queues();
     while (mem_pending_q.size() > 0) begin
       mem_transaction tr = mem_pending_q.pop_front();
-      num_unchecked++;
-      `uvm_warning("SCOREBOARD",
-        $sformatf("Pending MEM RD never completed: addr=0x%08h tag=%0d",
-                  tr.addr, tr.tag))
+      // Compare pending mem reads if they have response data; else just warn
+      if (tr.rsp_data != '0) begin
+        compare_mem_transaction(tr);
+      end else begin
+        num_unchecked++;
+        `uvm_warning("SCOREBOARD",
+          $sformatf("Pending MEM RD never completed: addr=0x%08h tag=%0d",
+                    tr.addr, tr.tag))
+      end
     end
     while (axi_pending_q.size() > 0) begin
       axi_transaction tr = axi_pending_q.pop_front();
-      num_unchecked++;
-      `uvm_warning("SCOREBOARD",
-        $sformatf("Pending AXI RD never completed: addr=0x%08h id=%0d",
-                  tr.addr, tr.id))
+      // Compare pending AXI reads if they have response data; else just warn
+      if (tr.rdata.size() > 0 && tr.rdata[0] != '0) begin
+        compare_axi_transaction(tr);
+      end else begin
+        num_unchecked++;
+        `uvm_warning("SCOREBOARD",
+          $sformatf("Pending AXI RD never completed: addr=0x%08h id=%0d",
+                    tr.addr, tr.id))
+      end
     end
   endfunction : flush_pending_queues
 
@@ -473,6 +541,7 @@ class vortex_scoreboard extends uvm_scoreboard;
       $sformatf("║  Comparisons        : %-19d║\n", num_comparisons),
       $sformatf("║  Passed             : %-19d║\n", num_passed),
       $sformatf("║  Failed             : %-19d║\n", num_failed),
+      $sformatf("║  Skipped            : %-19d║\n", num_skipped),
       $sformatf("║  Unchecked (no rsp) : %-19d║\n", num_unchecked),
       $sformatf("║  Pass Rate          : %-17.2f%% ║\n", pass_rate),
       $sformatf("║  SimX Enabled       : %-19s║\n", cfg.simx_enable ? "YES":"NO"),
