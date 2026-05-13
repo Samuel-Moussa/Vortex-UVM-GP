@@ -37,7 +37,10 @@ public:
   void attach_ram(RAM* mem);
 
   int run();
-
+  void step(uint64_t cycles); // <--- ADD THIS
+  bool is_done() const;       // <--- ADD THIS to check status
+  int  get_exitcode() const;   // returns exit code after is_done() == true
+  
   void dcr_write(uint32_t addr, uint32_t value);
 
 #ifdef VM_ENABLE
@@ -59,6 +62,7 @@ private:
   uint64_t perf_mem_writes_;
   uint64_t perf_mem_latency_;
   uint64_t perf_mem_pending_reads_;
+  int      exitcode_;    // ADD: stores exit code when step() or run() finishes
 };
 
 }
