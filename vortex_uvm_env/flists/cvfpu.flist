@@ -1,33 +1,33 @@
 # CVA6 FPnew FPU - Packages first
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/common_cells/src/cf_math_pkg.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_pkg.sv
+$VORTEX_HOME/third_party/cvfpu/src/common_cells/src/cf_math_pkg.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/defs_div_sqrt_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_pkg.sv
 
 # Common cells (only what's needed)
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/common_cells/src/lzc.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/common_cells/src/rr_arb_tree.sv
+$VORTEX_HOME/third_party/cvfpu/src/common_cells/src/lzc.sv
+$VORTEX_HOME/third_party/cvfpu/src/common_cells/src/rr_arb_tree.sv
 
 # FPU div/sqrt MVP
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/preprocess_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/nrbd_nrsc_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/norm_div_sqrt_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/iteration_div_sqrt_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/div_sqrt_top_mvp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/div_sqrt_mvp_wrapper.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/preprocess_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/nrbd_nrsc_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/norm_div_sqrt_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/iteration_div_sqrt_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/div_sqrt_top_mvp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/div_sqrt_mvp_wrapper.sv
 
 # FPnew modules
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_classifier.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_rounding.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_fma.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_divsqrt_multi.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_noncomp.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_opgroup_fmt_slice.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_opgroup_block.sv
-$VORTEX_HOME/../Vortex/third_party/cvfpu/src/fpnew_top.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_classifier.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_rounding.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_fma.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_fma_multi.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_divsqrt_multi.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_noncomp.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_cast_multi.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_opgroup_fmt_slice.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_opgroup_block.sv
+$VORTEX_HOME/third_party/cvfpu/src/fpnew_top.sv
 
 # Vortex FPnew wrapper
-$VORTEX_HOME/../Vortex/hw/rtl/fpu/VX_fpu_fpnew.sv
+$VORTEX_HOME/hw/rtl/fpu/VX_fpu_fpnew.sv
