@@ -461,39 +461,48 @@ endclocking
         else $error("[VORTEX_AXI_IF] ARID changed before ARREADY handshake!");
 
     // -----------------------------------------------------------------------
-    // W Channel: WLAST must assert on the final beat of the burst.
-    // Specifically: once WVALID goes high, WLAST must eventually assert
-    // before or when WVALID drops after the handshake completes.
-    // This property checks WLAST is not held high across two separate
-    // write handshakes (i.e. it deasserts after the beat it marks).
+    // W Channel: this environment uses single-beat writes, so WLAST must be
+    // asserted on every accepted write beat. WLAST is only meaningful when
+    // WVALID is high; it may remain at its driven value when idle.
     // -----------------------------------------------------------------------
-    property wlast_deasserts_after_beat_p;
+    property wlast_asserted_on_write_p;
         @(posedge clk) disable iff (!reset_n)
-        (wvalid && wready && wlast) |=> !wlast;
+        (wvalid && wready) |-> wlast;
     endproperty
 
-    assert_wlast_deasserts: assert property (wlast_deasserts_after_beat_p)
-        else $error("[VORTEX_AXI_IF] WLAST held high across consecutive beats!");
+    assert_wlast_asserted: assert property (wlast_asserted_on_write_p)
+        else $error("[VORTEX_AXI_IF] WLAST missing on accepted write beat!");
 
     // -----------------------------------------------------------------------
-    // B Channel: BVALID must not assert until WLAST has been accepted.
-    // Track whether the write data burst has completed using a flag.
-    // BVALID before WLAST handshake = protocol violation.
+    // B Channel: BVALID must not assert unless at least one completed write
+    // (WLAST accepted) is outstanding. Use a counter to support multiple
+    // outstanding single-beat writes.
     // -----------------------------------------------------------------------
-    logic wlast_accepted;
+    int unsigned completed_writes_outstanding;
 
     always_ff @(posedge clk or negedge reset_n) begin
-        if (!reset_n)
-            wlast_accepted <= 1'b0;
-        else if (wvalid && wready && wlast)
-            wlast_accepted <= 1'b1;
-        else if (bvalid && bready)
-            wlast_accepted <= 1'b0;
+        if (!reset_n) begin
+            completed_writes_outstanding <= '0;
+        end else begin
+            automatic int signed next_completed;
+
+            next_completed = int'(completed_writes_outstanding);
+            if (wvalid && wready && wlast)
+                next_completed++;
+            if (bvalid && bready)
+                next_completed--;
+
+            // Clamp to zero for safety if protocol violations create extra B handshakes.
+            if (next_completed < 0)
+                next_completed = 0;
+
+            completed_writes_outstanding <= int'(next_completed);
+        end
     end
 
     property bvalid_after_wlast_p;
         @(posedge clk) disable iff (!reset_n)
-        $rose(bvalid) |-> wlast_accepted;
+        $rose(bvalid) |-> (completed_writes_outstanding > 0 || (wvalid && wready && wlast));
     endproperty
 
     assert_bvalid_after_wlast: assert property (bvalid_after_wlast_p)

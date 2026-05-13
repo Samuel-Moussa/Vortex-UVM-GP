@@ -17,26 +17,6 @@
 #include <vector>
 #include "types.h"
 
-//============================================================================
-#include <fstream>
-#include <string>
-#include <vector>
-#include <cstdio>
-
-// --- Add this helper ---
-static void dump_raw_dmem(const void* data, size_t size, const std::string& path) {
-    if (!data || size == 0) return;
-    FILE* f = fopen(path.c_str(), "wb");
-    if (!f) {
-        printf("[DMEM_DUMP] Failed to open %s\n", path.c_str());
-        return;
-    }
-    fwrite(data, 1, size, f);
-    fclose(f);
-    printf("[DMEM_DUMP] Wrote %zu bytes to %s\n", size, path.c_str());
-}
-
-//==========================================================================
 using namespace vortex;
 
 class LocalMem::Impl {
@@ -76,26 +56,7 @@ public:
 		}
 	}
 
-
-	virtual ~Impl() {
-#ifdef MEM_DUMP_ENABLE
-    // Dump final DMEM as raw bytes for binary comparison.
-    try {
-        // config_.capacity holds the RAM size in bytes
-        size_t sz = static_cast<size_t>(config_.capacity);
-        if (sz > 0) {
-            std::vector<uint8_t> _tmpbuf(sz);
-            // use the RAM read API to copy entire memory to _tmpbuf
-            // read(void* data, uint64_t addr, uint32_t size)
-            ram_.read(_tmpbuf.data(), 0, static_cast<uint32_t>(sz));
-            dump_raw_dmem(_tmpbuf.data(), sz, "logs/dump_mem_0_simx.bin");
-        }
-    } catch (...) {
-        fprintf(stderr, "SIMX: DMEM dump failed in destructor\n");
-    }
-#endif
-}
-
+	virtual ~Impl() {}
 
 	void reset() {
 		perf_stats_ = PerfStats();

@@ -37,7 +37,7 @@ $VORTEX_UVM_HOME/tb/vortex_dcr_if.sv
 $VORTEX_UVM_HOME/tb/vortex_status_if.sv
 $VORTEX_UVM_HOME/tb/vortex_if.sv
 
-# 4. Memory model — included inside vortex_test_pkg, NOT standalone
+# 4. Memory model package (standalone package; imported by multiple packages)
 $VORTEX_UVM_HOME/tb/mem_model.sv
 
 # 5. Agent packages (each self-contained)
@@ -81,12 +81,6 @@ $VORTEX_UVM_HOME/uvm_env/ref_model/simx_pkg.sv
 
 # 8. Env package (imports only — does NOT include any sv class files)
 $VORTEX_UVM_HOME/uvm_env/vortex_env_pkg.sv
-
-# 9. Env components (standalone — vortex_env_pkg does NOT include these)
-$VORTEX_UVM_HOME/uvm_env/vortex_virtual_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/vortex_scoreboard.sv
-$VORTEX_UVM_HOME/uvm_env/vortex_coverage_collector.sv
-$VORTEX_UVM_HOME/uvm_env/vortex_env.sv
 
 # 10. Test package — includes ALL test classes and shared sequences inside it.
 #     Do NOT add standalone entries for anything this package already includes.

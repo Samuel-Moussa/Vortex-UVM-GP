@@ -35,6 +35,10 @@ public:
 
   int run();
 
+  void step(uint64_t cycles);
+
+  bool is_done() const;
+  int  get_exitcode() const;   // valid after is_done() returns true
   void dcr_write(uint32_t addr, uint32_t value);
 #ifdef VM_ENABLE
   bool is_satp_unset();
