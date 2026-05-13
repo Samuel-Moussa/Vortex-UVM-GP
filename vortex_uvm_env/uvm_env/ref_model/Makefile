@@ -1,16 +1,21 @@
 ################################################################################
 # Makefile for Vortex SimX DPI Integration
-# Fixed version with proper header paths and DCR support
+# Fixed version with Auto-Path Detection and DCR support
 ################################################################################
 
-# Paths - read from environment, fall back to system defaults (team-friendly)
+# Paths - Auto-detect to avoid cross-user environment variable conflicts
 VORTEX_HOME   ?= $(VORTEX_DUT_HOME)
 ifeq ($(VORTEX_HOME),)
-  VORTEX_HOME := $(HOME)/Vortex_UVM_GP/Vortex
+  # FIX: Adjusted to use dash instead of underscore to match your path
+  VORTEX_HOME := $(HOME)/Vortex-UVM-GP/Vortex
 endif
 
-QUESTA_HOME   ?= $(QUESTA2021_HOME)
+# FIX: Ignore poisoned QUESTA_HOME variables. Find Questa dynamically via 'vsim' in PATH
+VSIM_PATH   := $(shell which vsim 2>/dev/null)
+QUESTA_HOME := $(shell dirname $(shell dirname $(VSIM_PATH)))
+
 ifeq ($(QUESTA_HOME),)
+  $(warning "vsim not found in PATH! Falling back to default.")
   QUESTA_HOME := /opt/questa_sim-2021.2_1/questasim
 endif
 
@@ -23,7 +28,7 @@ HW_DIR        = $(VORTEX_HOME)/hw
 TEST_MODE     ?= simple_postmortem
 # KERNEL_BIN    ?= $(VORTEX_HOME)/tests/kernel/kernel.bin
 # KERNEL_BIN    ?= $(VORTEX_HOME)/build32/verification/sim/questa/simx_dpi_3/tests/pro_1.bin
-KERNEL_BIN    ?= /home/stev_teto_22/vortex_uvm/uvm_env/ref_model/program_simple.bin
+KERNEL_BIN    ?= /home/ahmad_sudky/vortex_uvm/uvm_env/ref_model/program_simple.bin
 STEP_CYCLES   ?= 10
 TIMEOUT       ?= 100000
 
@@ -54,6 +59,22 @@ CXXFLAGS     += -I$(THIRD_PARTY)/ramulator/src
 CXXFLAGS     += -I$(THIRD_PARTY)/cvfpu/src
 
 # Architecture configuration to solve processor problems
+XLEN          ?= 32
+NUM_CLUSTERS  ?= 1
+NUM_CORES     ?= 2
+NUM_WARPS     ?= 4
+NUM_THREADS   ?= 4
+EXTRA_CXXFLAGS ?=
+
+ARCH_CONFIGS  = -DNUM_CLUSTERS=$(NUM_CLUSTERS)
+ARCH_CONFIGS += -DNUM_CORES=$(NUM_CORES)
+ARCH_CONFIGS += -DNUM_WARPS=$(NUM_WARPS)
+ARCH_CONFIGS += -DNUM_THREADS=$(NUM_THREADS)
+ifeq ($(XLEN),64)
+ARCH_CONFIGS += -DXLEN_64
+else
+ARCH_CONFIGS += -DXLEN_32
+endif
 ARCH_CONFIGS  = -DNUM_CLUSTERS=EXTRA_CXXFLAGS
 ARCH_CONFIGS += -DNUM_CORES=EXTRA_CXXFLAGS
 ARCH_CONFIGS += -DNUM_WARPS=EXTRA_CXXFLAGS
@@ -65,7 +86,7 @@ CXXFLAGS     += $(EXTRA_CXXFLAGS)
 # Architecture defines (should match your Vortex build)
 # CXXFLAGS     += -DXLEN_32
 # CXXFLAGS     += -DNUM_CORES=2
-# CXXFLAGS     += -DNUM_WARPS=4
+# CXXFLAGS     += -DNUM_WARPS=2
 # CXXFLAGS     += -DNUM_THREADS=4
 
 # Debug settings
@@ -129,6 +150,7 @@ check_simx:
 $(DPI_LIB): check_simx simx_dpi.cpp
 	@echo "=== Building DPI Shared Library ==="
 	@echo "Compiler: $(CXX)"
+	@echo "Detected Questa Include: $(QUESTA_HOME)/include"
 	@echo "Flags: $(CXXFLAGS)"
 	@echo "Objects: $(SIMX_OBJS)"
 	$(CXX) $(CXXFLAGS) simx_dpi.cpp $(SIMX_OBJS) $(LDFLAGS) -o $(DPI_LIB)

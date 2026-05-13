@@ -62,6 +62,12 @@ class functional_memory_test extends vortex_base_test;
 
         cfg.dcr_agent_is_active = 0;   // PASSIVE — TBTOP owns all DCR writes
 
+        // This program stores its result at 0x80001000, so point the generic
+        // result comparison window at the actual destination instead of the
+        // default startup+0x100000 region.
+        cfg.result_base_addr    = cfg.startup_addr + 64'h1000;
+        cfg.result_size_bytes   = 4;
+
         if (cfg.axi_agent_enable) begin
             cfg.mem_agent_enable = 0;
         end else begin

@@ -76,6 +76,24 @@ void simx_cleanup() {
 // Initialize SimX processor
 int simx_init(int num_cores, int num_warps, int num_threads) {
     try {
+        // Validate requested configuration against the SimX compile-time
+        // constants. SimX is built with fixed values for some topology
+        // parameters (NUM_CLUSTERS, NUM_CORES, NUM_WARPS, NUM_THREADS).
+        // If the runtime request doesn't match the compiled model, fail
+        // early with a clear diagnostic instead of throwing an exception
+        // deep in the simulator internals.
+#if defined(NUM_CORES) && defined(NUM_WARPS) && defined(NUM_THREADS)
+        if (num_cores != NUM_CORES || num_warps != NUM_WARPS || num_threads != NUM_THREADS) {
+            std::cerr << "[SimX-DPI] Configuration mismatch: simx_model.so was built for "
+                      << "NUM_CORES=" << NUM_CORES << ", NUM_WARPS=" << NUM_WARPS
+                      << ", NUM_THREADS=" << NUM_THREADS << " but simx_init() was called with "
+                      << "num_cores=" << num_cores << ", num_warps=" << num_warps
+                      << ", num_threads=" << num_threads << std::endl;
+            std::cerr << "[SimX-DPI] Rebuild simx_model.so with matching -DNUM_* flags or "
+                      << "use matching --cores/--warps/--threads in the run script." << std::endl;
+            return -1;
+        }
+#endif
         std::cout << "[SimX-DPI] ========================================" << std::endl;
         std::cout << "[SimX-DPI] Initializing SimX Golden Model" << std::endl;
         std::cout << "[SimX-DPI] Cores=" << num_cores 
@@ -97,9 +115,13 @@ int simx_init(int num_cores, int num_warps, int num_threads) {
         }
         std::cout << "[SimX-DPI] Architecture created successfully" << std::endl;
         
-        // Create RAM with proper page size (CRITICAL FIX #1)
-        uint64_t capacity = 0x100000000ULL;  // 4GB capacity
-        uint32_t page_size = 4096;            // 4KB pages (not 4GB!)
+        // Keep RAM address space aligned with ISA width.
+        #if (XLEN == 32)
+            uint64_t capacity = 0x100000000ULL;         // 4GB flat space for RV32
+        #else
+            uint64_t capacity = 0;                      // Sparse/unbounded for RV64
+        #endif
+            uint32_t page_size = 4096;                  // 4KB pages
         
         std::cout << "[SimX-DPI] Creating RAM: capacity=0x" << std::hex << capacity 
                   << ", page_size=0x" << page_size << std::dec << std::endl;
@@ -302,7 +324,6 @@ int simx_load_bin(const char* filepath, uint64_t load_addr) {
     }
 }
 
-// REPLACE the entire simx_load_hex function with this:
 int simx_load_hex(const char* filepath) {
     if (!g_initialized || !g_ram) {
         std::cerr << "[SimX-DPI] Error: not initialized" << std::endl;
@@ -320,7 +341,6 @@ int simx_load_hex(const char* filepath) {
     int bytes_loaded = 0;
     bool format_detected = false;
     bool is_byte_format  = true;   // objcopy --verilog-data-width=1
-    //to_solve Samual_fatials 
     static constexpr uint64_t BASE_ADDR_OFFSET = 0x80000000ULL;
 
     while (std::getline(file, line)) {
@@ -330,11 +350,12 @@ int simx_load_hex(const char* filepath) {
         if (line.empty() || line[0] == '/' || line[0] == '#') continue;
 
         if (line[0] == '@') {
-            // Address marker
-            current_addr = std::stoull(line.substr(1), nullptr, 16);
-                // Add base offset
-                current_addr += BASE_ADDR_OFFSET;
-            if (bytes_loaded == 0) g_startup_addr = current_addr;
+            // Address marker.
+            // ALWAYS use BASE_ADDR_OFFSET for relative files (@0) so we don't accidentally
+            // apply the bootstrap address (0x7FFFFFF0) to the main program offset.
+            uint64_t raw_addr = std::stoull(line.substr(1), nullptr, 16);
+            current_addr = (raw_addr == 0) ? BASE_ADDR_OFFSET : raw_addr;
+            
             format_detected = false;   // re-detect on next data line
             continue;
         }
@@ -382,6 +403,8 @@ int simx_load_hex(const char* filepath) {
 // Load hex file with base_addr offset applied to @addresses.
 // Handles both byte format (--verilog-data-width=1) and word format.
 // Does NOT change g_startup_addr — caller controls that via bootstrap.
+// Load hex file with base_addr offset applied to @addresses ONLY IF they are relative.
+// Does NOT change g_startup_addr — caller controls that via bootstrap.
 int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
     if (!g_initialized || !g_ram) {
         std::cerr << "[SimX-DPI] Error: SimX not initialized" << std::endl;
@@ -405,11 +428,16 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
         if (line.empty() || line[0] == '/' || line[0] == '#') continue;
 
         if (line[0] == '@') {
-            // Address marker: apply base_addr offset
-            uint64_t rel = std::stoull(line.substr(1), nullptr, 16);
-            current_addr = rel + base_addr;
-            std::cout << "[SimX-DPI] hex_at: @" << std::hex << rel
-                      << " → absolute 0x" << current_addr << std::dec << std::endl;
+            // Address marker: apply base_addr ONLY if the address is relative (e.g., @00000000)
+            uint64_t raw_addr = std::stoull(line.substr(1), nullptr, 16);
+            
+            if (raw_addr >= 0x80000000ULL) {
+                // Address is already absolute (e.g., @80000000)
+                current_addr = raw_addr;
+            } else {
+                // Address is relative (e.g., @00000000), add the base offset
+                current_addr = raw_addr + base_addr;
+            }
             continue;
         }
 
@@ -438,7 +466,7 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
 
     std::cout << "[SimX-DPI] Loaded " << bytes_loaded
               << " bytes from '" << filepath
-              << "' at base=0x" << std::hex << base_addr << std::dec << std::endl;
+              << "' mapped to absolute memory" << std::endl;
     return 0;
 }
 
@@ -607,16 +635,17 @@ int simx_run() {
         std::cout << "[SimX-DPI] Running processor to completion..." << std::endl;
         std::cout << "[SimX-DPI] Startup address: 0x" << std::hex << g_startup_addr << std::dec << std::endl;
         
-        int exitcode = g_processor->run();
-        // Mark execution as complete so simx_is_done() returns 1
+        int run_status = g_processor->run();
+        // Processor::run() already returns the final exit code.
         g_done     = true;
-        g_exitcode = exitcode;
+        g_exitcode = run_status;
         
         std::cout << "[SimX-DPI] Execution finished" << std::endl;
-        std::cout << "[SimX-DPI] Exit code: " << exitcode << std::endl;
+        std::cout << "[SimX-DPI] Run status: " << run_status << std::endl;
+        std::cout << "[SimX-DPI] Exit code: " << g_exitcode << std::endl;
         std::cout << "[SimX-DPI] ========================================" << std::endl;
         
-        return exitcode;
+        return g_exitcode;
         
     } catch (const std::exception& e) {
         std::cerr << "[SimX-DPI] Error in run: " << e.what() << std::endl;
@@ -649,32 +678,23 @@ int simx_step(int cycles) {
         return 1;
     }
 
-        // First step call: initialize SimPlatform (run() does this itself internally)
+    // This SimX backend only exposes run-to-completion.
+    // Keep the DPI contract by treating the first step call as a full run.
     if (!g_step_initialized) {
-        std::cout << "[SimX-DPI] simx_step: first call — initializing SimPlatform" << std::endl;
-        SimPlatform::instance().reset();
+        std::cout << "[SimX-DPI] simx_step: backend is run-to-completion; running once" << std::endl;
         g_step_initialized = true;
     }
 
     try {
-        // Processor::step() takes uint64_t — safe cast since we checked cycles > 0
-        g_processor->step(static_cast<uint64_t>(cycles));
+        int exitcode = simx_run();
+        if (exitcode < 0) {
+            return -1;
+        }
+
         g_current_cycle += cycles;
-
-        if (g_current_cycle % 10000 == 0) {
-            std::cout << "[SimX-DPI] Stepped to cycle " << g_current_cycle << std::endl;
-        }
-
-        // --- Pattern A: use Processor::is_done() directly ---
-        if (g_processor->is_done()) {
-            g_done     = true;
-            g_exitcode = g_processor->get_exitcode();  // requires Bug 2 fix above
-            std::cout << "[SimX-DPI] Program completed at cycle " << g_current_cycle
-                      << " (exitcode=" << g_exitcode << ")" << std::endl;
-            return 1;  // signal completion to SystemVerilog
-        }
-
-        return 0;  // still running
+        std::cout << "[SimX-DPI] Program completed via simx_step at cycle "
+                  << g_current_cycle << " (exitcode=" << g_exitcode << ")" << std::endl;
+        return 1;
 
     } catch (const std::exception& e) {
         std::cerr << "[SimX-DPI] Error in simx_step: " << e.what() << std::endl;
@@ -691,11 +711,6 @@ int simx_is_done() {
     if (!g_initialized || !g_processor) {
         std::cerr << "[SimX-DPI] simx_is_done: not initialized" << std::endl;
         return -1;
-    }
-    // Sync the global flag with the processor's actual state
-    if (!g_done && g_processor->is_done()) {
-        g_done     = true;
-        g_exitcode = g_processor->get_exitcode();
     }
     return g_done ? 1 : 0;
 }

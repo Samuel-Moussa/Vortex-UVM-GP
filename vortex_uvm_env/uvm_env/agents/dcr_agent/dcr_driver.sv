@@ -103,6 +103,24 @@ class dcr_driver extends uvm_driver #(dcr_transaction);
         
         // Clear shadow register map
         dcr_shadow.delete();
+
+        if (cfg != null && cfg.dcr_agent_is_active) begin
+            bit [63:0] startup_pc;
+            bit [63:0] argv_ptr;
+
+            startup_pc = cfg.startup_addr;
+            argv_ptr   = 64'h0;
+
+            `uvm_info("DCR_DRV", $sformatf(
+                "Applying bootstrap DCRs during reset: PC=0x%016h argv=0x%016h",
+                startup_pc, argv_ptr), UVM_MEDIUM)
+
+            drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_STARTUP_ADDR0, startup_pc[31:0]);
+            drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_STARTUP_ADDR1, startup_pc[63:32]);
+            drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_STARTUP_ARG0,   argv_ptr[31:0]);
+            drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_STARTUP_ARG1,   argv_ptr[63:32]);
+            drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_MPM_CLASS,      32'h0);
+        end
         
         `uvm_info("DCR_DRV", "DCR driver reset complete", UVM_MEDIUM)
         
@@ -140,15 +158,7 @@ class dcr_driver extends uvm_driver #(dcr_transaction);
         // Record write time
         trans.write_time = $time;
         
-        // Drive write signals for 1 clock cycle using clocking block
-        @(vif.master_cb);
-        vif.master_cb.wr_valid <= 1'b1;
-        vif.master_cb.wr_addr  <= trans.addr;
-        vif.master_cb.wr_data  <= trans.data;
-        
-        // Deassert valid on next cycle
-        @(vif.master_cb);
-        vif.master_cb.wr_valid <= 1'b0;
+        drive_dcr_value(trans.addr, trans.data);
         
         // Mark transaction as completed
         trans.completed = 1;
@@ -163,6 +173,31 @@ class dcr_driver extends uvm_driver #(dcr_transaction);
         
         `uvm_info("DCR_DRV", $sformatf("DCR write complete: %s = 0x%08h",
             trans.get_dcr_name(), trans.data), UVM_MEDIUM)
+    endtask
+
+    //=========================================================================
+    // Drive One DCR Write Value
+    //=========================================================================
+    virtual task drive_dcr_value(bit [31:0] addr, bit [31:0] data);
+        // Stage address/data while wr_valid is low to satisfy DCR stability assertions.
+        @(vif.master_cb);
+        vif.master_cb.wr_addr  <= addr;
+        vif.master_cb.wr_data  <= data;
+        vif.master_cb.wr_valid <= 1'b0;
+
+        // Single-cycle write pulse.
+        @(vif.master_cb);
+        vif.master_cb.wr_valid <= 1'b1;
+
+        @(vif.master_cb);
+        vif.master_cb.wr_valid <= 1'b0;
+
+        // Keep the bus idle for one full cycle so the next write cannot
+        // overlap the asserted phase and trip stability assertions.
+        @(vif.master_cb);
+
+        num_writes++;
+        dcr_shadow[addr] = data;
     endtask
     
     //==========================================================================
