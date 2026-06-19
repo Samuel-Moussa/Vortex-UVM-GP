@@ -25,7 +25,6 @@ class kernel_launch_test extends vortex_base_test;
 
 	virtual function void customize_config();
 		string default_program_path;
-		bit compare_results;
 		bit result_base_override_set;
 		bit result_size_override_set;
 		bit [63:0] result_base_override;
@@ -43,29 +42,6 @@ class kernel_launch_test extends vortex_base_test;
 		if (cfg.program_path == "") begin
 			default_program_path = "../Vortex/tests/kernel/vecadd/vecadd.elf";
 			cfg.program_path = default_program_path;
-		end
-
-		compare_results = 0;
-		// Detect kernel by checking the filename suffix.
-		// The run script converts .elf/.bin into .hex, so compare results
-		// for any kernel program regardless of the final extension.
-		if (cfg.program_path.len() >= 6) begin
-			// vecadd: vector addition kernel with memory result window
-			if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.bin") begin
-				compare_results = 1;
-			end else if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.elf") begin
-				compare_results = 1;
-			end else if (cfg.program_path.substr(cfg.program_path.len()-10, cfg.program_path.len()-1) == "vecadd.hex") begin
-				compare_results = 1;
-			// fibonacci: scalar recursion kernel with no memory result region
-			// (result is checked by the kernel itself via vx_printf)
-			end else if (cfg.program_path.substr(cfg.program_path.len()-12, cfg.program_path.len()-1) == "fibonacci.bin") begin
-				compare_results = 0;
-			end else if (cfg.program_path.substr(cfg.program_path.len()-12, cfg.program_path.len()-1) == "fibonacci.elf") begin
-				compare_results = 0;
-			end else if (cfg.program_path.substr(cfg.program_path.len()-12, cfg.program_path.len()-1) == "fibonacci.hex") begin
-				compare_results = 0;
-			end
 		end
 
 		// Detect heavy "conform" test and increase timeout accordingly. Conform
@@ -88,24 +64,16 @@ class kernel_launch_test extends vortex_base_test;
 
 		if (result_base_override_set)
 			cfg.result_base_addr = result_base_override;
-		else if (compare_results)
-			cfg.result_base_addr = 64'h80007D88;
 		else
 			cfg.result_base_addr = 64'h0;
 
 		if (result_size_override_set)
 			cfg.result_size_bytes = result_size_override;
-		else if (compare_results)
-			cfg.result_size_bytes = 64;
 		else
 			cfg.result_size_bytes = 0;
 
 		if (cfg.test_timeout_cycles > cfg.global_timeout_cycles)
 			cfg.test_timeout_cycles = cfg.global_timeout_cycles;
-
-		`uvm_info(get_type_name(),
-			$sformatf("Kernel launch compare_results=%0d for program=%s", compare_results, cfg.program_path),
-			UVM_LOW)
 
 		`uvm_info(get_type_name(),
 			$sformatf("Kernel launch cfg: startup=0x%016h result=0x%016h size=%0d timeout=%0d cycles iface=%s program=%s",
@@ -260,29 +228,29 @@ class kernel_launch_test extends vortex_base_test;
 			return;
 		end
 
-		if (cfg.result_size_bytes > 0) begin
-			if (env.m_scoreboard.num_comparisons == 0) begin
-				`uvm_error(get_type_name(), "FAIL — scoreboard performed no result comparisons")
-				test_passed = 0;
-				return;
-			end
+		// A program passes only if SOME real check ran (memory or console).
+		if (env.m_scoreboard.num_comparisons == 0 &&
+		    env.m_scoreboard.num_console_checks == 0) begin
+			`uvm_error(get_type_name(),
+				"FAIL — no functional verification performed (no memory or console comparison)")
+			test_passed = 0;
+			return;
+		end
 
-			if (env.m_scoreboard.num_failed != 0) begin
-				`uvm_error(get_type_name(),
-					$sformatf("FAIL — scoreboard reported %0d failed comparison(s)", env.m_scoreboard.num_failed))
-				test_passed = 0;
-				return;
-			end
-		end else begin
-			`uvm_info(get_type_name(), "INFO — result comparisons disabled for this program", UVM_LOW)
+		if (env.m_scoreboard.num_failed != 0) begin
+			`uvm_error(get_type_name(),
+				$sformatf("FAIL — scoreboard reported %0d failed check(s)",
+					env.m_scoreboard.num_failed))
+			test_passed = 0;
+			return;
 		end
 
 		if (err_count == 0) begin
 			test_passed = 1;
 			`uvm_info(get_type_name(),
-				$sformatf("PASS — kernel launch and result comparison succeeded (%0d comparisons, %0d passed)",
+				$sformatf("PASS — verified against SimX (mem comparisons=%0d passed, console checks=%0d passed)",
 					env.m_scoreboard.num_comparisons,
-					env.m_scoreboard.num_passed),
+					env.m_scoreboard.num_console_checks),
 				UVM_LOW)
 		end else begin
 			test_passed = 0;
