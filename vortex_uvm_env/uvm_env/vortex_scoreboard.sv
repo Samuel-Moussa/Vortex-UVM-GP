@@ -54,6 +54,15 @@ class vortex_scoreboard extends uvm_scoreboard;
   // Key = byte-aligned 32-bit address, Value = 64-bit data word.
   //==========================================================================
   bit [63:0] shadow_memory [bit [31:0]];
+  localparam bit [31:0] RAM_BASE   = 32'h8000_0000;  // program / data / heap start
+  localparam bit [31:0] DATA_LIMIT = 32'h8800_0000;  // upper bound of output region (excludes stack @0xfffd_xxxx+ and MMIO)
+  localparam bit [31:0] POISON     = 32'hBAAD_F00D;  // SimX uninitialized-memory fill
+  localparam bit [63:0] IO_COUT_ADDR = 64'h40;
+  localparam bit [63:0] IO_COUT_SIZE = 64'd64;
+
+  string       dut_console        = "";
+  int unsigned num_console_checks = 0;
+  bit          console_passed     = 0;
 
   //==========================================================================
   // State flags
@@ -71,6 +80,12 @@ class vortex_scoreboard extends uvm_scoreboard;
   int unsigned num_dcr_writes;
   int unsigned num_skipped;
   int unsigned num_unchecked;
+  int unsigned num_data_compared  = 0;
+  int unsigned num_skipped_stack  = 0;
+  int unsigned num_skipped_poison = 0;
+  // total checks = memory comparisons + console checks
+  int unsigned total_checks  = num_comparisons + num_console_checks;
+  int unsigned total_passed  = num_passed;   // already includes console passes
 
   //==========================================================================
   // Constructor
@@ -200,6 +215,12 @@ class vortex_scoreboard extends uvm_scoreboard;
             bit [63:0] waddr     = {byte_addr[63:3], 3'b000};
             bit [2:0]  lane      = byte_addr[2:0];
             bit [63:0] wdata;
+            
+            // Fix #3: assemble DUT console from IO_COUT writes
+            if (byte_addr >= IO_COUT_ADDR && byte_addr < (IO_COUT_ADDR + IO_COUT_SIZE)) begin
+              byte ch = beat_data[i*8 +: 8];
+              if (ch != 0) dut_console = {dut_console, string'(ch)};
+            end
 
             if (shadow_memory.exists(waddr[31:0]))
               wdata = shadow_memory[waddr[31:0]];
@@ -259,47 +280,16 @@ class vortex_scoreboard extends uvm_scoreboard;
   local function void run_final_comparison();
     int exitcode;
     if (!cfg.simx_enable || simx_ran) return;
-
-    if (cfg.result_size_bytes == 0) begin
-      `uvm_info("SCOREBOARD",
-        "No result window configured (result_size_bytes=0) — running SimX to capture runtime output but skipping memory comparison",
-        UVM_MEDIUM)
-
-      // Still run SimX so any runtime prints (vx_printf) produced by the
-      // golden model are visible in the simulator transcript, but do not
-      // perform the result memory comparison for smoke tests.
-      simx_ran = 1;
-      `uvm_info("SCOREBOARD", "Running SimX to completion (prints only)...", UVM_MEDIUM)
-      exitcode = simx_run();
-      `uvm_info("SCOREBOARD",
-        $sformatf("SimX done — exit code = %0d", exitcode), UVM_MEDIUM)
-      return;
-    end
-
     simx_ran = 1;
-
     `uvm_info("SCOREBOARD", "Running SimX to completion...", UVM_MEDIUM)
     exitcode = simx_run();
-    `uvm_info("SCOREBOARD",
-      $sformatf("SimX done — exit code = %0d", exitcode), UVM_MEDIUM)
-
-    if (exitcode != 0)
-      `uvm_warning("SCOREBOARD",
-        $sformatf("SimX exit code=%0d (non-zero in this flow; EBREAK and data checks still determine pass/fail)", exitcode))
-
+    `uvm_info("SCOREBOARD", $sformatf("SimX done — exit code = %0d", exitcode), UVM_MEDIUM)
     if (simx_is_done() != 1)
-      `uvm_warning("SCOREBOARD",
-        "simx_is_done() != 1 after simx_run() — unexpected state")
+      `uvm_warning("SCOREBOARD", "simx_is_done() != 1 after simx_run()")
 
-    if (cfg.result_size_bytes > 0) begin
-      `uvm_info("SCOREBOARD",
-        $sformatf("Comparing result region: base=0x%08h  size=%0d bytes",
-                  cfg.result_base_addr, cfg.result_size_bytes), UVM_MEDIUM)
-      compare_result_region(cfg.result_base_addr, cfg.result_size_bytes);
-    end else
-      `uvm_info("SCOREBOARD",
-        "result_size_bytes=0 — no result comparison performed", UVM_MEDIUM)
-  endfunction : run_final_comparison
+    compare_all_written();   // memory output — every program
+    compare_console();       // console output — every program
+  endfunction
 
   //==========================================================================
   // compare_result_region
@@ -411,20 +401,7 @@ class vortex_scoreboard extends uvm_scoreboard;
       bit [63:0] baddr    = tr.get_next_addr(beat);
       bit [63:0] dut_data = (beat < tr.rdata.size()) ? tr.rdata[beat] : '0;
       bit [63:0] expected;
-      bit [31:0] result_base = cfg.result_base_addr[31:0];
-      bit [31:0] result_end  = cfg.result_base_addr[31:0] + cfg.result_size_bytes;
       num_comparisons++;
-
-      // For this kernel-launch flow, only compare reads from the configured
-      // result window. Other AXI reads (stack/local scratch, inputs, etc.) are
-      // expected to be highly runtime-dependent and are checked by protocol
-      // coverage, not value comparison.
-      if (!(baddr[31:0] >= result_base && baddr[31:0] < result_end)) begin
-        `uvm_warning("SCOREBOARD",
-          $sformatf("AXI RD beat[%0d] 0x%08h outside result window [0x%08h:0x%08h) — skipping",
-                    beat, baddr[31:0], result_base, result_end))
-        num_skipped++; num_comparisons--;  continue;
-      end
 
       if (cfg.simx_enable && simx_ran) begin
         byte rd[];
@@ -458,6 +435,91 @@ class vortex_scoreboard extends uvm_scoreboard;
       end
     end
   endfunction : compare_axi_transaction
+
+  // Fix #2: compare every DRAM-output location the DUT wrote against SimX,
+  // with two principled gates:
+  //   (1) scope to the program/data region — stack & MMIO are not kernel outputs
+  //   (2) skip SimX-uninitialized scratch (baadf00d poison fill)
+  local function void compare_all_written();
+    bit [63:0] simx_word, dut_word, simx_base;
+    byte       simx_bytes[];
+    simx_bytes = new[8];
+
+    foreach (shadow_memory[addr]) begin
+      // ---- Gate 1: data region only (skip stack 0xfffd_xxxx+, local mem, MMIO) ----
+      if (addr < RAM_BASE || addr >= DATA_LIMIT) begin
+        num_skipped_stack++;
+        continue;
+      end
+
+      dut_word  = shadow_memory[addr];
+      simx_base = 64'(addr);
+      simx_read_mem(simx_base, 8, simx_bytes);
+      simx_word = '0;
+      for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
+
+      // ---- Gate 2: skip SimX-uninitialized poison (baadf00d in either half) ----
+      if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) begin
+        num_skipped_poison++;
+        continue;
+      end
+
+      // ---- Real comparison ----
+      num_comparisons++;
+      num_data_compared++;
+      if (dut_word === simx_word) begin
+        num_passed++;
+        `uvm_info("SCOREBOARD",
+          $sformatf("MEM MATCH     addr=0x%08h  data=0x%016h", addr, dut_word), UVM_HIGH)
+      end else begin
+        num_failed++;
+        `uvm_error("SCOREBOARD",
+          $sformatf("MEM MISMATCH  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
+                    addr, dut_word, simx_word))
+      end
+    end
+
+    `uvm_info("SCOREBOARD",
+      $sformatf("compare_all_written: data_compared=%0d  skipped_stack/MMIO=%0d  skipped_poison=%0d",
+                num_data_compared, num_skipped_stack, num_skipped_poison), UVM_MEDIUM)
+  endfunction
+
+  // Fix #3: compare DUT console output against SimX's.
+  local function void compare_console();
+    string simx_console, d, s;
+    d = normalize_console(dut_console);
+    if (d.len() == 0) return;          // DUT printed nothing → not a console program; skip
+    simx_console = simx_get_console();
+    s = normalize_console(simx_console);
+    num_console_checks++;
+    if (d == s) begin
+      console_passed = 1; num_passed++;
+      `uvm_info("SCOREBOARD", $sformatf("CONSOLE PASS  \"%s\"", d), UVM_MEDIUM)
+    end else begin
+      console_passed = 0; num_failed++;
+      `uvm_error("SCOREBOARD", $sformatf("CONSOLE FAIL  DUT=\"%s\"  SimX=\"%s\"", d, s))
+    end
+endfunction
+
+  // Canonicalize console output for semantic comparison:
+  // drop ALL whitespace and any '#N:' / 'N:' thread-id prefixes anywhere,
+  // so DUT vs SimX match when the printed *content* is identical regardless
+  // of line breaks, spacing, or per-line core/thread prefixes.
+  local function string normalize_console(string in);
+    string out = "";
+    int n = in.len();
+    for (int i = 0; i < n; i++) begin
+      byte c = in[i];
+      // skip whitespace entirely
+      if (c == " " || c == "\t" || c == "\n" || c == 8'h0d) continue;
+      // skip a digit that is immediately followed by ':' (thread-id prefix like "0:")
+      if (c >= "0" && c <= "9" && (i+1 < n) && in[i+1] == ":") continue;
+      // skip '#' and ':' used as prefix punctuation
+      if (c == "#" || c == ":") continue;
+      out = {out, string'(c)};
+    end
+    return out;
+  endfunction
 
   //==========================================================================
   // flush_pending_queues
@@ -497,7 +559,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     if (!ebreak_seen && cfg.simx_enable && cfg.result_size_bytes > 0)
       `uvm_warning("SCOREBOARD",
         "EBREAK never observed — running final comparison at extract_phase")
-    if (!ebreak_seen && cfg.result_size_bytes > 0) run_final_comparison();
+    if (!ebreak_seen && cfg.simx_enable) run_final_comparison();
     if (mem_pending_q.size() > 0 || axi_pending_q.size() > 0) begin
       `uvm_warning("SCOREBOARD",
         $sformatf("%0d MEM + %0d AXI read(s) still pending at end of sim",
@@ -529,8 +591,8 @@ class vortex_scoreboard extends uvm_scoreboard;
   // report_results
   //==========================================================================
   virtual function void report_results();
-    real pass_rate = (num_comparisons > 0)
-                     ? (real'(num_passed) / real'(num_comparisons)) * 100.0
+    real pass_rate = (total_checks > 0)
+                     ? (100.0 * total_passed / total_checks)
                      : 0.0;
     `uvm_info("SCOREBOARD", {"\n",
       "╔══════════════════════════════════════════╗\n",
@@ -539,9 +601,13 @@ class vortex_scoreboard extends uvm_scoreboard;
       $sformatf("║  Total Transactions : %-19d║\n", num_transactions),
       $sformatf("║  DCR Writes         : %-19d║\n", num_dcr_writes),
       $sformatf("║  Comparisons        : %-19d║\n", num_comparisons),
-      $sformatf("║  Passed             : %-19d║\n", num_passed),
+      $sformatf("║  Console Checks     : %-19d║\n", num_console_checks),
+      $sformatf("║  Passed             : %-19d║\n", total_passed),
       $sformatf("║  Failed             : %-19d║\n", num_failed),
       $sformatf("║  Skipped            : %-19d║\n", num_skipped),
+      $sformatf("║  Data compared      : %-19d║\n", num_data_compared),
+      $sformatf("║  Skipped (stack)    : %-19d║\n", num_skipped_stack),
+      $sformatf("║  Skipped (poison)   : %-19d║\n", num_skipped_poison),
       $sformatf("║  Unchecked (no rsp) : %-19d║\n", num_unchecked),
       $sformatf("║  Pass Rate          : %-17.2f%% ║\n", pass_rate),
       $sformatf("║  SimX Enabled       : %-19s║\n", cfg.simx_enable ? "YES":"NO"),
@@ -555,10 +621,10 @@ class vortex_scoreboard extends uvm_scoreboard;
     else if (num_unchecked > 0)
       `uvm_warning("SCOREBOARD",
         $sformatf("SIMULATION INCOMPLETE — %0d response(s) never received", num_unchecked))
-    else if (num_comparisons > 0)
-      `uvm_info("SCOREBOARD", "SIMULATION PASSED — all comparisons matched!", UVM_NONE)
+    else if (num_comparisons > 0 || num_console_checks > 0)
+      `uvm_info("SCOREBOARD", "SIMULATION PASSED — all checks matched!", UVM_NONE)
     else
-      `uvm_warning("SCOREBOARD", "No data comparisons were performed.")
+      `uvm_error("SCOREBOARD", "No checks were performed — vacuous run")
   endfunction : report_results
 
 endclass : vortex_scoreboard

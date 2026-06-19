@@ -36,6 +36,7 @@ core-v-verif/
 Vortex/sim/simx/obj/
 Vortex/sim/simx/simx
 Vortex/sim/simx/simx_config.stamp
+Vortex/tests/riscv/riscv-vector-tests/go/
 
 # Backup files
 *~

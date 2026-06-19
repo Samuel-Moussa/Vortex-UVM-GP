@@ -641,14 +641,19 @@ module vortex_tb_top;
     //==========================================================================
 
     final begin
+        uvm_report_server svr;
+        int unsigned n_err, n_fatal;
+        svr     = uvm_report_server::get_server();
+        n_err   = svr.get_severity_count(UVM_ERROR);
+        n_fatal = svr.get_severity_count(UVM_FATAL);
         $display("\n================================================================================");
         $display("[TB_TOP @ %0t] Simulation Complete", $time);
-        if (vif.status_if.ebreak_detected)
-            $display("Test Result:    PASS (EBREAK detected)");
+        if (n_err == 0 && n_fatal == 0)
+            $display("Test Result:    PASS");
         else
-            $display("Test Result:    UNKNOWN (check test logs)");
+            $display("Test Result:    FAILED (%0d error(s), %0d fatal)", n_err, n_fatal);
         $display("  Total Cycles: %0d  Instructions: %0d",
-                 vif.status_if.cycle_count, vif.status_if.instr_count);
+                vif.status_if.cycle_count, vif.status_if.instr_count);
         memory.print_statistics();
         $display("================================================================================\n");
     end
