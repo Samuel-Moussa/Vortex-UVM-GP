@@ -741,7 +741,7 @@ class vortex_config extends uvm_object;
 
         // --- simx ---
         simx_enable        = 0;
-        simx_path          = "";
+        simx_path          = "$VORTEX_UVM_HOME/uvm_env/ref_model/simx_model.so";
         simx_debug_enable  = 0;
         simx_timeout_cycles = test_timeout_cycles;
         simx_trace_file    = "simx_trace.log";

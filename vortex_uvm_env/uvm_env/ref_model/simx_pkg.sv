@@ -51,7 +51,8 @@ package simx_pkg;
     import "DPI-C" context function int  simx_step(input int cycles);
     import "DPI-C" context function int  simx_is_done();       // returns 1 when finished
     import "DPI-C" context function int  simx_get_exitcode();  // returns exit code after done
-
+    import "DPI-C" context function string simx_get_console();
+    
     // --- Optional bootstrap helper ---
     import "DPI-C" context function void simx_init_exit_code_register();
 

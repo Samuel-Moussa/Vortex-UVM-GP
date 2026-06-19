@@ -29,6 +29,8 @@ static bool       g_done        = false;
 static int        g_exitcode    = 0;
 static bool       g_step_initialized = false;  // tracks first step() call
 
+static std::string g_console;   // captured program stdout from simx_run()
+
 extern "C" {
 
 // ============================================================================
@@ -635,7 +637,12 @@ int simx_run() {
         std::cout << "[SimX-DPI] Running processor to completion..." << std::endl;
         std::cout << "[SimX-DPI] Startup address: 0x" << std::hex << g_startup_addr << std::dec << std::endl;
         
+        std::ostringstream _cap;
+        std::streambuf* _old = std::cout.rdbuf(_cap.rdbuf()); // tee program output
         int run_status = g_processor->run();
+        std::cout.rdbuf(_old);                                // restore
+        g_console += _cap.str();
+        std::cout << _cap.str();                              // still echo to transcript
         // Processor::run() already returns the final exit code.
         g_done     = true;
         g_exitcode = run_status;
@@ -722,6 +729,11 @@ int simx_get_exitcode() {
         return -1;
     }
     return g_exitcode;
+}
+
+// Returns captured program console output (valid after simx_run)
+const char* simx_get_console() {
+    return g_console.c_str();
 }
 
 } // extern "C"
