@@ -60,10 +60,10 @@ CXXFLAGS     += -I$(THIRD_PARTY)/cvfpu/src
 
 # Architecture configuration to solve processor problems
 XLEN          ?= 32
-NUM_CLUSTERS  ?= 1
-NUM_CORES     ?= 2
-NUM_WARPS     ?= 4
-NUM_THREADS   ?= 4
+# NUM_CLUSTERS  ?= 1
+# NUM_CORES     ?= 2
+# NUM_WARPS     ?= 4
+# NUM_THREADS   ?= 4
 EXTRA_CXXFLAGS ?=
 
 ARCH_CONFIGS  = -DNUM_CLUSTERS=$(NUM_CLUSTERS)
