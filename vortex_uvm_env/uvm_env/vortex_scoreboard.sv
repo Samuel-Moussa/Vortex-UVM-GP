@@ -83,9 +83,8 @@ class vortex_scoreboard extends uvm_scoreboard;
   int unsigned num_data_compared  = 0;
   int unsigned num_skipped_stack  = 0;
   int unsigned num_skipped_poison = 0;
-  // total checks = memory comparisons + console checks
-  int unsigned total_checks  = num_comparisons + num_console_checks;
-  int unsigned total_passed  = num_passed;   // already includes console passes
+  // (removed total_checks/total_passed members — they were evaluated once at
+  //  construction and never updated; totals are now computed in report_results)
 
   //==========================================================================
   // Constructor
@@ -591,37 +590,38 @@ endfunction
   // report_results
   //==========================================================================
   virtual function void report_results();
-    real pass_rate = (total_checks > 0)
-                     ? (100.0 * total_passed / total_checks)
-                     : 0.0;
+    int unsigned total_checks;
+    int unsigned total_skipped;
+    real         pass_rate;
+
+    total_checks  = num_comparisons + num_console_checks;          // memory + console
+    total_skipped = num_skipped + num_skipped_stack + num_skipped_poison;
+    pass_rate     = (total_checks > 0) ? (100.0 * num_passed / total_checks) : 0.0;
+
     `uvm_info("SCOREBOARD", {"\n",
       "╔══════════════════════════════════════════╗\n",
       "║        Vortex Scoreboard Results         ║\n",
       "╠══════════════════════════════════════════╣\n",
-      $sformatf("║  Total Transactions : %-19d║\n", num_transactions),
+      $sformatf("║  Transactions       : %-19d║\n", num_transactions),
       $sformatf("║  DCR Writes         : %-19d║\n", num_dcr_writes),
-      $sformatf("║  Comparisons        : %-19d║\n", num_comparisons),
-      $sformatf("║  Console Checks     : %-19d║\n", num_console_checks),
-      $sformatf("║  Passed             : %-19d║\n", total_passed),
+      $sformatf("║  Memory checks      : %-19d║\n", num_comparisons),
+      $sformatf("║  Console checks     : %-19d║\n", num_console_checks),
+      $sformatf("║  Passed             : %-19d║\n", num_passed),
       $sformatf("║  Failed             : %-19d║\n", num_failed),
-      $sformatf("║  Skipped            : %-19d║\n", num_skipped),
-      $sformatf("║  Data compared      : %-19d║\n", num_data_compared),
-      $sformatf("║  Skipped (stack)    : %-19d║\n", num_skipped_stack),
-      $sformatf("║  Skipped (poison)   : %-19d║\n", num_skipped_poison),
-      $sformatf("║  Unchecked (no rsp) : %-19d║\n", num_unchecked),
+      $sformatf("║  Skipped            : %-19d║\n", total_skipped),
       $sformatf("║  Pass Rate          : %-17.2f%% ║\n", pass_rate),
       $sformatf("║  SimX Enabled       : %-19s║\n", cfg.simx_enable ? "YES":"NO"),
-      $sformatf("║  SimX Ran           : %-19s║\n", simx_ran        ? "YES":"NO"),
+      $sformatf("║  SimX Ran           : %-19s║\n", simx_ran ? "YES":"NO"),
       "╚══════════════════════════════════════════╝\n"
     }, UVM_NONE)
 
     if (num_failed > 0)
       `uvm_error("SCOREBOARD",
-        $sformatf("SIMULATION FAILED — %0d comparison(s) did not match!", num_failed))
+        $sformatf("SIMULATION FAILED — %0d check(s) did not match!", num_failed))
     else if (num_unchecked > 0)
       `uvm_warning("SCOREBOARD",
         $sformatf("SIMULATION INCOMPLETE — %0d response(s) never received", num_unchecked))
-    else if (num_comparisons > 0 || num_console_checks > 0)
+    else if (total_checks > 0)
       `uvm_info("SCOREBOARD", "SIMULATION PASSED — all checks matched!", UVM_NONE)
     else
       `uvm_error("SCOREBOARD", "No checks were performed — vacuous run")
