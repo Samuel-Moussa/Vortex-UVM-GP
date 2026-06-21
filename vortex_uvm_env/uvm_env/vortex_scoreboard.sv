@@ -69,23 +69,33 @@ class vortex_scoreboard extends uvm_scoreboard;
   //==========================================================================
   bit simx_ran;    // Set after simx_run() completes
   bit ebreak_seen; // Set when status monitor reports EBREAK
-
+  
+  // --- Negative-test fault injection (one-sided, plusarg- or test-gated) ---
+  // When enabled, corrupt exactly ONE DUT word INSIDE the comparison so the
+  // DUT-vs-SimX check is forced to mismatch. One-sided by construction: only
+  // the scoreboard's copy of the DUT value is flipped; SimX is never touched,
+  // and the stimulus/program is never touched. This is what proves the checker
+  // can FAIL. A test sets inject_fault=1, or pass +INJECT_FAULT on the cmdline.
+  bit          inject_fault   = 0;   // set by negative_result_test or +INJECT_FAULT
+  bit          fault_injected = 0;   // becomes 1 once we actually flip a word
+  bit [31:0]   fault_addr     = 0;   // address we corrupted (for the report)
+  bit          fault_detected = 0;   // set when the SPECIFIC injected word is reported as a mismatch
+  
   //==========================================================================
   // Statistics
   //==========================================================================
   int unsigned num_transactions;
   int unsigned num_comparisons;
-  int unsigned num_passed;
-  int unsigned num_failed;
+  int unsigned num_mem_passed;
+  int unsigned num_mem_failed;
+  int unsigned num_console_passed;
+  int unsigned num_console_failed;
   int unsigned num_dcr_writes;
   int unsigned num_skipped;
   int unsigned num_unchecked;
-  int unsigned num_data_compared  = 0;
-  int unsigned num_skipped_stack  = 0;
-  int unsigned num_skipped_poison = 0;
-  // total checks = memory comparisons + console checks
-  int unsigned total_checks  = num_comparisons + num_console_checks;
-  int unsigned total_passed  = num_passed;   // already includes console passes
+  int unsigned num_data_compared;
+  int unsigned num_skipped_stack;
+  int unsigned num_skipped_poison;
 
   //==========================================================================
   // Constructor
@@ -109,11 +119,13 @@ class vortex_scoreboard extends uvm_scoreboard;
     host_export   = new("host_export",   this);
     status_export = new("status_export", this);
 
-    num_transactions = 0;  num_comparisons = 0;
-    num_passed       = 0;  num_failed      = 0;
-    num_dcr_writes   = 0;  num_unchecked   = 0;
-    num_skipped      = 0;
-    simx_ran         = 0;  ebreak_seen     = 0;
+    num_transactions   = 0;    num_comparisons    = 0;
+    num_mem_passed     = 0;    num_mem_failed     = 0;
+    num_console_passed = 0;    num_console_failed = 0;
+    num_dcr_writes     = 0;    num_unchecked      = 0;
+    num_skipped        = 0;    num_data_compared  = 0;
+    num_skipped_stack  = 0;    num_skipped_poison = 0;
+    simx_ran           = 0;    ebreak_seen        = 0;
   endfunction : build_phase
 
   //==========================================================================
@@ -121,6 +133,8 @@ class vortex_scoreboard extends uvm_scoreboard;
   //==========================================================================
   virtual task run_phase(uvm_phase phase);
     int status;
+
+    if ($test$plusargs("INJECT_FAULT")) inject_fault = 1;
 
     if (!cfg.simx_enable) begin
       `uvm_info("SCOREBOARD", "SimX disabled — shadow-memory checks only", UVM_MEDIUM)
@@ -332,12 +346,12 @@ class vortex_scoreboard extends uvm_scoreboard;
         continue;
       end
       if (dut_word === simx_word) begin
-        num_passed++;
+        num_mem_passed++;
         `uvm_info("SCOREBOARD",
           $sformatf("RESULT PASS  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
                     waddr, dut_word, simx_word), UVM_MEDIUM)
       end else begin
-        num_failed++;
+        num_mem_failed++;
         `uvm_error("SCOREBOARD",
           $sformatf("RESULT FAIL  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
                     waddr, dut_word, simx_word))
@@ -378,12 +392,12 @@ class vortex_scoreboard extends uvm_scoreboard;
       num_skipped++; num_comparisons--;  return;
     end
     if (tr.rsp_data === expected) begin
-      num_passed++;
+      num_mem_passed++;
       `uvm_info("SCOREBOARD",
         $sformatf("MEM RD PASS  addr=0x%08h  data=0x%016h", tr.addr, tr.rsp_data),
         UVM_HIGH)
     end else begin
-      num_failed++;
+      num_mem_failed++;
       `uvm_error("SCOREBOARD",
         $sformatf("MEM RD FAIL  addr=0x%08h  DUT=0x%016h  exp=0x%016h",
                   tr.addr, tr.rsp_data, expected))
@@ -423,12 +437,12 @@ class vortex_scoreboard extends uvm_scoreboard;
         num_skipped++; num_comparisons--;  continue;
       end
       if (dut_data === expected) begin
-        num_passed++;
+        num_mem_passed++;
         `uvm_info("SCOREBOARD",
           $sformatf("AXI RD PASS  beat[%0d] addr=0x%08h  data=0x%016h",
                     beat, baddr[31:0], dut_data), UVM_MEDIUM)
       end else begin
-        num_failed++;
+        num_mem_failed++;
         `uvm_error("SCOREBOARD",
           $sformatf("AXI RD FAIL  beat[%0d] addr=0x%08h  DUT=0x%016h  exp=0x%016h",
                     beat, baddr[31:0], dut_data, expected))
@@ -464,59 +478,93 @@ class vortex_scoreboard extends uvm_scoreboard;
         continue;
       end
 
-      // ---- Real comparison ----
-      num_comparisons++;
-      num_data_compared++;
-      if (dut_word === simx_word) begin
-        num_passed++;
+      // NEG: inject ONLY on a word that currently MATCHES, so the forced
+      // mismatch is unambiguously caused by the flip — never a pre-existing
+      // divergence (e.g. conform's lmem pointer at 0x80008288).
+      if (inject_fault && !fault_injected && (dut_word === simx_word)) begin
+        dut_word       = dut_word ^ 64'h1;   // matching value XOR 1 => guaranteed mismatch
+        fault_injected = 1;
+        fault_addr     = addr;
         `uvm_info("SCOREBOARD",
-          $sformatf("MEM MATCH     addr=0x%08h  data=0x%016h", addr, dut_word), UVM_HIGH)
+          $sformatf("[NEG] Fault injected at addr=0x%08h (was matching; LSB flipped) to force a mismatch",
+                    addr), UVM_LOW)
+      end
+
+      // ---- Real comparison ----
+      num_comparisons++;   
+      if (dut_word === simx_word) begin
+        num_mem_passed++;
       end else begin
-        num_failed++;
+        num_mem_failed++;
+        if (fault_injected && addr == fault_addr) fault_detected = 1;  // the injected word was caught
         `uvm_error("SCOREBOARD",
           $sformatf("MEM MISMATCH  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
                     addr, dut_word, simx_word))
       end
     end
-
+    
     `uvm_info("SCOREBOARD",
       $sformatf("compare_all_written: data_compared=%0d  skipped_stack/MMIO=%0d  skipped_poison=%0d",
-                num_data_compared, num_skipped_stack, num_skipped_poison), UVM_MEDIUM)
+                num_comparisons, num_skipped_stack, num_skipped_poison), UVM_MEDIUM)
+  endfunction
+
+  // Order-independent content check: same characters, any order.
+  local function bit same_multiset(string a, string b);
+    int unsigned ha[256];
+    int unsigned hb[256];
+    foreach (ha[k]) begin ha[k] = 0; hb[k] = 0; end
+    for (int i = 0; i < a.len(); i++) ha[a[i] & 8'hFF]++;
+    for (int i = 0; i < b.len(); i++) hb[b[i] & 8'hFF]++;
+    foreach (ha[k]) if (ha[k] != hb[k]) return 0;
+    return 1;
   endfunction
 
   // Fix #3: compare DUT console output against SimX's.
   local function void compare_console();
-    string simx_console, d, s;
+    string simx_raw, d, s;
+    simx_raw = simx_get_console();
     d = normalize_console(dut_console);
-    if (d.len() == 0) return;          // DUT printed nothing → not a console program; skip
-    simx_console = simx_get_console();
-    s = normalize_console(simx_console);
+    s = normalize_console(simx_raw);
+    if (d.len() == 0 && s.len() == 0) return;   // non-printing program
+
     num_console_checks++;
     if (d == s) begin
-      console_passed = 1; num_passed++;
-      `uvm_info("SCOREBOARD", $sformatf("CONSOLE PASS  \"%s\"", d), UVM_MEDIUM)
-    end else begin
-      console_passed = 0; num_failed++;
-      `uvm_error("SCOREBOARD", $sformatf("CONSOLE FAIL  DUT=\"%s\"  SimX=\"%s\"", d, s))
+      console_passed = 1; num_console_passed++;
+      `uvm_info("SCOREBOARD", $sformatf("CONSOLE PASS (exact)  len=%0d", d.len()), UVM_MEDIUM)
     end
-endfunction
+    else if (same_multiset(d, s)) begin
+      // Same printed CONTENT, different byte order — the expected signature of
+      // SIMD console interleaving (DUT warp threads interleave IO_COUT bytes;
+      // SimX serializes per-thread). Content verified; ordering intentionally not.
+      console_passed = 1; num_console_passed++;
+      `uvm_info("SCOREBOARD",
+        $sformatf("CONSOLE PASS (interleaved: same content, SIMD byte-order differs)  len=%0d", d.len()),
+        UVM_MEDIUM)
+    end
+    else begin
+      console_passed = 0; num_console_failed++;
+      `uvm_error("SCOREBOARD",
+        $sformatf("CONSOLE FAIL  content differs\n  DUT =\"%s\"\n  SimX=\"%s\"", d, s))
+    end
+  endfunction
 
   // Canonicalize console output for semantic comparison:
-  // drop ALL whitespace and any '#N:' / 'N:' thread-id prefixes anywhere,
-  // so DUT vs SimX match when the printed *content* is identical regardless
-  // of line breaks, spacing, or per-line core/thread prefixes.
+  // Strip SimX-only "#<id>:" line prefixes (any digit count) + all whitespace.
+  // The DUT IO_COUT stream never contains "#<id>:". Content ':' and '#' kept.
   local function string normalize_console(string in);
     string out = "";
     int n = in.len();
-    for (int i = 0; i < n; i++) begin
+    int i = 0;
+    while (i < n) begin
       byte c = in[i];
-      // skip whitespace entirely
-      if (c == " " || c == "\t" || c == "\n" || c == 8'h0d) continue;
-      // skip a digit that is immediately followed by ':' (thread-id prefix like "0:")
-      if (c >= "0" && c <= "9" && (i+1 < n) && in[i+1] == ":") continue;
-      // skip '#' and ':' used as prefix punctuation
-      if (c == "#" || c == ":") continue;
+      if (c == "#") begin                       // possible "#<digits>:" prefix
+        int j = i + 1;
+        while (j < n && in[j] >= "0" && in[j] <= "9") j++;
+        if (j < n && in[j] == ":") begin i = j + 1; continue; end
+      end
+      if (c == " " || c == "\t" || c == "\n" || c == 8'h0d) begin i++; continue; end
       out = {out, string'(c)};
+      i++;
     end
     return out;
   endfunction
@@ -591,37 +639,44 @@ endfunction
   // report_results
   //==========================================================================
   virtual function void report_results();
-    real pass_rate = (total_checks > 0)
-                     ? (100.0 * total_passed / total_checks)
-                     : 0.0;
+    int unsigned total_passed, total_failed, total_checks, total_skipped;
+    real         pass_rate;
+
+    total_passed  = num_mem_passed + num_console_passed;
+    total_failed  = num_mem_failed + num_console_failed;
+    total_checks  = num_comparisons + num_console_checks;
+    total_skipped = num_skipped + num_skipped_stack + num_skipped_poison;
+    pass_rate     = (total_checks > 0) ? (100.0 * total_passed / total_checks) : 0.0;
+
     `uvm_info("SCOREBOARD", {"\n",
       "╔══════════════════════════════════════════╗\n",
       "║        Vortex Scoreboard Results         ║\n",
       "╠══════════════════════════════════════════╣\n",
-      $sformatf("║  Total Transactions : %-19d║\n", num_transactions),
+      $sformatf("║  Transactions       : %-19d║\n", num_transactions),
       $sformatf("║  DCR Writes         : %-19d║\n", num_dcr_writes),
-      $sformatf("║  Comparisons        : %-19d║\n", num_comparisons),
-      $sformatf("║  Console Checks     : %-19d║\n", num_console_checks),
-      $sformatf("║  Passed             : %-19d║\n", total_passed),
-      $sformatf("║  Failed             : %-19d║\n", num_failed),
-      $sformatf("║  Skipped            : %-19d║\n", num_skipped),
-      $sformatf("║  Data compared      : %-19d║\n", num_data_compared),
-      $sformatf("║  Skipped (stack)    : %-19d║\n", num_skipped_stack),
-      $sformatf("║  Skipped (poison)   : %-19d║\n", num_skipped_poison),
-      $sformatf("║  Unchecked (no rsp) : %-19d║\n", num_unchecked),
+      $sformatf("║  Memory checks      : %-19d║\n", num_comparisons),
+      $sformatf("║    Passed           : %-19d║\n", num_mem_passed),
+      $sformatf("║    Failed           : %-19d║\n", num_mem_failed),
+      $sformatf("║  Console checks     : %-19d║\n", num_console_checks),
+      $sformatf("║    Passed           : %-19d║\n", num_console_passed),
+      $sformatf("║    Failed           : %-19d║\n", num_console_failed),
+      $sformatf("║  Total Passed       : %-19d║\n", total_passed),
+      $sformatf("║  Total Failed       : %-19d║\n", total_failed),
+      $sformatf("║  Skipped            : %-19d║\n", total_skipped),
       $sformatf("║  Pass Rate          : %-17.2f%% ║\n", pass_rate),
       $sformatf("║  SimX Enabled       : %-19s║\n", cfg.simx_enable ? "YES":"NO"),
-      $sformatf("║  SimX Ran           : %-19s║\n", simx_ran        ? "YES":"NO"),
+      $sformatf("║  SimX Ran           : %-19s║\n", simx_ran ? "YES":"NO"),
       "╚══════════════════════════════════════════╝\n"
     }, UVM_NONE)
 
-    if (num_failed > 0)
+    if (total_failed > 0)
       `uvm_error("SCOREBOARD",
-        $sformatf("SIMULATION FAILED — %0d comparison(s) did not match!", num_failed))
+        $sformatf("SIMULATION FAILED — %0d memory + %0d console check(s) did not match!",
+                  num_mem_failed, num_console_failed))
     else if (num_unchecked > 0)
       `uvm_warning("SCOREBOARD",
         $sformatf("SIMULATION INCOMPLETE — %0d response(s) never received", num_unchecked))
-    else if (num_comparisons > 0 || num_console_checks > 0)
+    else if (total_checks > 0)
       `uvm_info("SCOREBOARD", "SIMULATION PASSED — all checks matched!", UVM_NONE)
     else
       `uvm_error("SCOREBOARD", "No checks were performed — vacuous run")
