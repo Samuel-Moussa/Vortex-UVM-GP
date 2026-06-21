@@ -49,6 +49,7 @@ package vortex_test_pkg;
     `include "vortex_smoke_test.sv"
     `include "functional_memory_test.sv"
     `include "kernel_launch_test.sv"
+    `include "negative_result_test.sv"
     `include "random_instruction_stress_test.sv"    // ← NEW
     // `include "sgemm_test.sv"       // To be added later
     // `include "riscv_dv_test.sv"    // To be added later
