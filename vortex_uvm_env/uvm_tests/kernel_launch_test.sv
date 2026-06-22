@@ -237,10 +237,12 @@ class kernel_launch_test extends vortex_base_test;
 			return;
 		end
 
-		if (env.m_scoreboard.num_failed != 0) begin
+		if ((env.m_scoreboard.num_mem_failed + env.m_scoreboard.num_console_failed) != 0) begin
 			`uvm_error(get_type_name(),
-				$sformatf("FAIL — scoreboard reported %0d failed check(s)",
-					env.m_scoreboard.num_failed))
+				$sformatf("FAIL — scoreboard reported %0d failed check(s) (%0d memory, %0d console)",
+					env.m_scoreboard.num_mem_failed + env.m_scoreboard.num_console_failed,
+					env.m_scoreboard.num_mem_failed,
+					env.m_scoreboard.num_console_failed))
 			test_passed = 0;
 			return;
 		end
