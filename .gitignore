@@ -62,6 +62,8 @@ cov_work/
 # Environment files (optional - remove if you want to commit them)
 env/
 
+Vortex/sim/simx/obj/
+
 
 # Backup folders
 backup/
