@@ -278,6 +278,24 @@ void Processor::dcr_write(uint32_t addr, uint32_t value) {
   return impl_->dcr_write(addr, value);
 }
 
+// --- M1 cosim retire-record queue (Option β) -------------------------------
+
+void Processor::cosim_push_retire(const simx_retire_t& rec) {
+  impl_->cosim_push_retire(rec);
+}
+
+bool Processor::cosim_drain_retire(simx_retire_t& out) {
+  return impl_->cosim_drain_retire(out);
+}
+
+uint32_t Processor::cosim_pending() const {
+  return impl_->cosim_pending();
+}
+
+void Processor::cosim_clear() {
+  impl_->cosim_clear();
+}
+
 #ifdef VM_ENABLE
 int16_t Processor::set_satp_by_addr(uint64_t base_addr) {
   uint16_t asid = 0;
