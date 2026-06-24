@@ -1,48 +1,37 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: uvm_tests/functional_memory_test.sv
-// Description: Functional Memory Directed Test
+// File: uvm_tests/warp_scheduling_test.sv
+// Description: Warp Scheduling Directed Test
 //
-// Drives the functional_mem kernel (functional_mem.elf) against the DUT and
-// SimX. The kernel covers four memory-subsystem scenarios in one binary:
-//   T1: Word/halfword/byte access — all 4 threads, catches data-path width bugs
-//   T2: Per-thread strided access — each thread writes buf[tid*4], catches
-//       per-lane address computation bugs
-//   T3: Tight read-after-write   — store + load to same address per thread,
-//       catches LSU bypass and write-through failures
-//   T4: Cross-warp visibility    — warp 0 writes a shared buffer, vx_barrier,
-//       all warps confirm every entry is visible; catches cache coherence and
-//       barrier-ordering bugs
+// Drives the warp_test kernel (warp_test.elf) against the DUT and SimX.
+// The kernel covers four warp/thread-management scenarios in one binary:
+//   T1: Thread Mask Control (TMC)
+//   T2: Nested Warp Divergence (Split/Join / IPDOM stack)
+//   T3: Warp Spawn and Scheduling (wspawn, asymmetric workloads)
+//   T4: Thread Local Storage / warp context isolation
 //
-// This test exercises the custom-mem memory path by default (no
-// +USE_AXI_WRAPPER). It also runs cleanly under the AXI path
-// (+USE_AXI_WRAPPER) for secondary coverage — the kernel is interface-
-// agnostic, so the same binary can stress both paths.
-//
-// Check model: black-box end-state equivalence vs SimX (Gate 1) plus an
-// absolute sentinel check at RESULT_ADDR=0x80010000 (Gate 2).
+// Each sub-test writes position-unique sentinels to the result region.
+// Any DUT scheduling or divergence bug manifests as a memory or console
+// mismatch caught by the scoreboard. No new scoreboard fields are added;
+// the check is pure black-box end-state equivalence vs SimX.
 //
 // Minimum config: num_warps >= 4, num_threads >= 4.
 // The test fatals (does not silently adjust) if these minimums are not met.
 //
-// Run (custom-mem path, default):
-//   make sim TEST=functional_memory_test PROGRAM_NAME=functional_mem \
-//            INTERFACE=mem TIMEOUT=5000000
-//
-// Run (AXI path, secondary):
-//   make sim TEST=functional_memory_test PROGRAM_NAME=functional_mem \
+// Run:
+//   make sim TEST=warp_scheduling_test PROGRAM_NAME=warp_test \
 //            INTERFACE=axi TIMEOUT=5000000
 ////////////////////////////////////////////////////////////////////////////////
 
-`ifndef FUNCTIONAL_MEMORY_TEST_SV
-`define FUNCTIONAL_MEMORY_TEST_SV
+`ifndef WARP_SCHEDULING_TEST_SV
+`define WARP_SCHEDULING_TEST_SV
 
-class functional_memory_test extends kernel_launch_test;
-    `uvm_component_utils(functional_memory_test)
+class warp_scheduling_test extends kernel_launch_test;
+    `uvm_component_utils(warp_scheduling_test)
 
     localparam int MIN_WARPS   = 4;
     localparam int MIN_THREADS = 4;
 
-    function new(string name = "functional_memory_test", uvm_component parent = null);
+    function new(string name = "warp_scheduling_test", uvm_component parent = null);
         super.new(name, parent);
     endfunction
 
@@ -52,7 +41,7 @@ class functional_memory_test extends kernel_launch_test;
         // If +PROGRAM was passed via plusarg, apply_plusargs() already set
         // cfg.program_path before this method runs — we do not overwrite that.
         if (cfg.program_path == "")
-            cfg.program_path = "../Vortex/tests/kernel/functional_mem/functional_mem.elf";
+            cfg.program_path = "../Vortex/tests/kernel/warp_test/warp_test.elf";
 
         // Delegate to kernel_launch_test for scoreboard/coverage/SimX enable,
         // conform-timeout detection, and RESULT_BASE_ADDR / RESULT_SIZE_BYTES
@@ -70,12 +59,12 @@ class functional_memory_test extends kernel_launch_test;
         // Policy: fatal-and-refuse — never silently bump the operator's config.
         if (cfg.num_warps < MIN_WARPS) begin
             `uvm_fatal(get_type_name(),
-                $sformatf("functional_memory_test requires num_warps >= %0d (configured: %0d). Pass +NUM_WARPS=%0d or higher.",
+                $sformatf("warp_scheduling_test requires num_warps >= %0d (configured: %0d). Pass +NUM_WARPS=%0d or higher.",
                     MIN_WARPS, cfg.num_warps, MIN_WARPS))
         end
         if (cfg.num_threads < MIN_THREADS) begin
             `uvm_fatal(get_type_name(),
-                $sformatf("functional_memory_test requires num_threads >= %0d (configured: %0d). Pass +NUM_THREADS=%0d or higher.",
+                $sformatf("warp_scheduling_test requires num_threads >= %0d (configured: %0d). Pass +NUM_THREADS=%0d or higher.",
                     MIN_THREADS, cfg.num_threads, MIN_THREADS))
         end
     endfunction
@@ -84,16 +73,13 @@ class functional_memory_test extends kernel_launch_test;
         super.end_of_elaboration_phase(phase);
         `uvm_info(get_type_name(), {"\n",
             "----------------------------------------------------------------\n",
-            " FUNCTIONAL MEMORY TEST                                        \n",
+            " WARP SCHEDULING TEST                                          \n",
             "----------------------------------------------------------------\n",
             "  Scenarios:                                                   \n",
-            "    T1: Word/Halfword/Byte access (data-path width)            \n",
-            "    T2: Per-thread strided access (address computation)        \n",
-            "    T3: Tight Read-After-Write (LSU bypass/write-through)      \n",
-            "    T4: Cross-warp memory visibility (barrier + cache)         \n",
-            "  Interface: ",
-            cfg.axi_agent_enable ? "AXI4 (secondary coverage)\n" :
-                                   "Custom-MEM (primary)\n",
+            "    T1: Thread Mask Control (TMC)                              \n",
+            "    T2: Nested Divergence — Split/Join (IPDOM stack)           \n",
+            "    T3: Warp Spawn + Scheduling (asymmetric workloads)         \n",
+            "    T4: Thread Local Storage / warp context isolation          \n",
             "  Check model: black-box end-state vs SimX                    \n",
             "    Sentinel memory window: 0x80010000 (4 bytes)               \n",
             "    Console compare:        vx_printf output streams           \n",
@@ -142,6 +128,6 @@ class functional_memory_test extends kernel_launch_test;
         end
     endfunction
 
-endclass : functional_memory_test
+endclass : warp_scheduling_test
 
-`endif // FUNCTIONAL_MEMORY_TEST_SV
+`endif // WARP_SCHEDULING_TEST_SV

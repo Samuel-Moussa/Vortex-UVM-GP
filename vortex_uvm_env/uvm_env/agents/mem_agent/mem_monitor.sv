@@ -170,19 +170,31 @@ class mem_monitor extends uvm_monitor;
                 // NOTE: Add 'longint req_cycle;' to mem_transaction.sv if you haven't already!
                 // trans.req_cycle = cycle_count; 
                 
-                // If tag already exists, warn about potential protocol violation
-                if (outstanding_trans.exists(trans.tag)) begin
-                    `uvm_warning("MEM_MON", $sformatf(
-                        "Overwriting outstanding transaction with tag=%0d", trans.tag))
-                end
-                
-                outstanding_trans[trans.tag] = trans;
-                
                 // Update statistics
                 num_requests++;
                 if (trans.is_read()) num_reads++;
                 else                 num_writes++;
-                
+
+                if (trans.is_read()) begin
+                    // Reads need response matching for latency + data — park
+                    // the request and wait for collect_responses() to complete it.
+                    if (outstanding_trans.exists(trans.tag)) begin
+                        `uvm_warning("MEM_MON", $sformatf(
+                            "Overwriting outstanding transaction with tag=%0d", trans.tag))
+                    end
+                    outstanding_trans[trans.tag] = trans;
+                end else begin
+                    // Custom-mem writes are fire-and-forget — mem_driver commits
+                    // to mem_model on the request handshake and generates no
+                    // response. Forward to the scoreboard immediately, marked
+                    // completed. Do NOT park in outstanding_trans (no response
+                    // will ever match, and the tag namespace gets reused for
+                    // subsequent writes, producing spurious overwrite warnings).
+                    trans.completed = 1;
+                    trans.rsp_time  = trans.req_time;
+                    ap.write(trans);
+                end
+
                 `uvm_info("MEM_MON", $sformatf(
                     "Request captured: %s addr=0x%h, tag=%0d, cycle=%0d",
                     trans.is_read() ? "READ" : "WRITE", trans.addr, trans.tag, cycle_count), UVM_HIGH)

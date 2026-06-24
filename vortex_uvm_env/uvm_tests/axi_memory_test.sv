@@ -1,48 +1,58 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: uvm_tests/functional_memory_test.sv
-// Description: Functional Memory Directed Test
+// File: uvm_tests/axi_memory_test.sv
+// Description: AXI Memory Interface Directed Test
 //
-// Drives the functional_mem kernel (functional_mem.elf) against the DUT and
-// SimX. The kernel covers four memory-subsystem scenarios in one binary:
-//   T1: Word/halfword/byte access — all 4 threads, catches data-path width bugs
-//   T2: Per-thread strided access — each thread writes buf[tid*4], catches
-//       per-lane address computation bugs
-//   T3: Tight read-after-write   — store + load to same address per thread,
-//       catches LSU bypass and write-through failures
-//   T4: Cross-warp visibility    — warp 0 writes a shared buffer, vx_barrier,
-//       all warps confirm every entry is visible; catches cache coherence and
-//       barrier-ordering bugs
+// Drives the axi_traffic kernel (axi_traffic.elf) against the DUT and SimX
+// specifically on the AXI4 memory path (+USE_AXI_WRAPPER required). The kernel
+// covers four AXI-specific traffic patterns in one binary:
+//   T1: Multi-line sequential R/W — 4 threads write+read 4 cache lines in
+//       parallel; exercises multiple sequential AW/W and AR/R transactions
+//       and the B-channel response pipeline
+//   T2: Byte-granularity writes   — 4 threads write individual bytes across
+//       one cache line via char* stores; exercises non-trivial wstrb patterns
+//       in the AXI W channel
+//   T3: Write-then-read ordering  — per-thread store immediately followed by
+//       load to the same address; exercises correct AXI W→AR/R ordering
+//   T4: Dense back-to-back writes — 4 cache lines written sequentially by
+//       thread 0, then read back in parallel; stresses the AW/W pipeline
+//       depth and B-channel ID matching in the AXI wrapper
 //
-// This test exercises the custom-mem memory path by default (no
-// +USE_AXI_WRAPPER). It also runs cleanly under the AXI path
-// (+USE_AXI_WRAPPER) for secondary coverage — the kernel is interface-
-// agnostic, so the same binary can stress both paths.
+// AXI configuration verified:
+//   DATA_WIDTH = 512 bits (64 bytes = one cache line per AXI beat)
+//   ADDR_WIDTH = 32 bits (RV32)
+//   ID_WIDTH   = 8 bits (1 cluster / 1 core configuration)
+//   AXI_NUM_BANKS = 1 (single AXI port)
+//
+// Note on ID_WIDTH: vortex_axi_if.sv declares a generous upper-bound of
+// ID_WIDTH=50 for interface compatibility across configs, but the DUT drives
+// only the low 8 bits for this 1c/1c config. No test code interprets the ID
+// directly; this is a known-harmless oversize in the interface declaration.
+//
+// This test REQUIRES the AXI path. It fatals if +USE_AXI_WRAPPER was not
+// passed (cfg.axi_agent_enable == 0). Do not run it under custom-mem — use
+// functional_memory_test for that.
 //
 // Check model: black-box end-state equivalence vs SimX (Gate 1) plus an
 // absolute sentinel check at RESULT_ADDR=0x80010000 (Gate 2).
 //
-// Minimum config: num_warps >= 4, num_threads >= 4.
-// The test fatals (does not silently adjust) if these minimums are not met.
+// Minimum config: num_warps >= 4, num_threads >= 4, +USE_AXI_WRAPPER.
+// The test fatals (does not silently adjust) if these requirements are not met.
 //
-// Run (custom-mem path, default):
-//   make sim TEST=functional_memory_test PROGRAM_NAME=functional_mem \
-//            INTERFACE=mem TIMEOUT=5000000
-//
-// Run (AXI path, secondary):
-//   make sim TEST=functional_memory_test PROGRAM_NAME=functional_mem \
+// Run:
+//   make sim TEST=axi_memory_test PROGRAM_NAME=axi_traffic \
 //            INTERFACE=axi TIMEOUT=5000000
 ////////////////////////////////////////////////////////////////////////////////
 
-`ifndef FUNCTIONAL_MEMORY_TEST_SV
-`define FUNCTIONAL_MEMORY_TEST_SV
+`ifndef AXI_MEMORY_TEST_SV
+`define AXI_MEMORY_TEST_SV
 
-class functional_memory_test extends kernel_launch_test;
-    `uvm_component_utils(functional_memory_test)
+class axi_memory_test extends kernel_launch_test;
+    `uvm_component_utils(axi_memory_test)
 
     localparam int MIN_WARPS   = 4;
     localparam int MIN_THREADS = 4;
 
-    function new(string name = "functional_memory_test", uvm_component parent = null);
+    function new(string name = "axi_memory_test", uvm_component parent = null);
         super.new(name, parent);
     endfunction
 
@@ -52,7 +62,7 @@ class functional_memory_test extends kernel_launch_test;
         // If +PROGRAM was passed via plusarg, apply_plusargs() already set
         // cfg.program_path before this method runs — we do not overwrite that.
         if (cfg.program_path == "")
-            cfg.program_path = "../Vortex/tests/kernel/functional_mem/functional_mem.elf";
+            cfg.program_path = "../Vortex/tests/kernel/axi_traffic/axi_traffic.elf";
 
         // Delegate to kernel_launch_test for scoreboard/coverage/SimX enable,
         // conform-timeout detection, and RESULT_BASE_ADDR / RESULT_SIZE_BYTES
@@ -70,13 +80,22 @@ class functional_memory_test extends kernel_launch_test;
         // Policy: fatal-and-refuse — never silently bump the operator's config.
         if (cfg.num_warps < MIN_WARPS) begin
             `uvm_fatal(get_type_name(),
-                $sformatf("functional_memory_test requires num_warps >= %0d (configured: %0d). Pass +NUM_WARPS=%0d or higher.",
+                $sformatf("axi_memory_test requires num_warps >= %0d (configured: %0d). Pass +NUM_WARPS=%0d or higher.",
                     MIN_WARPS, cfg.num_warps, MIN_WARPS))
         end
         if (cfg.num_threads < MIN_THREADS) begin
             `uvm_fatal(get_type_name(),
-                $sformatf("functional_memory_test requires num_threads >= %0d (configured: %0d). Pass +NUM_THREADS=%0d or higher.",
+                $sformatf("axi_memory_test requires num_threads >= %0d (configured: %0d). Pass +NUM_THREADS=%0d or higher.",
                     MIN_THREADS, cfg.num_threads, MIN_THREADS))
+        end
+
+        // This test by name targets the AXI memory path. Running it under
+        // custom-mem would defeat its purpose. apply_plusargs() sets
+        // axi_agent_enable=1 when +USE_AXI_WRAPPER is present; if it is still
+        // 0 here, the operator forgot the flag.
+        if (!cfg.axi_agent_enable) begin
+            `uvm_fatal(get_type_name(),
+                "axi_memory_test requires the AXI interface (Vortex_axi wrapper). Add +USE_AXI_WRAPPER to the simulation command, or use INTERFACE=axi in the make invocation.")
         end
     endfunction
 
@@ -84,16 +103,14 @@ class functional_memory_test extends kernel_launch_test;
         super.end_of_elaboration_phase(phase);
         `uvm_info(get_type_name(), {"\n",
             "----------------------------------------------------------------\n",
-            " FUNCTIONAL MEMORY TEST                                        \n",
+            " AXI MEMORY TEST                                               \n",
             "----------------------------------------------------------------\n",
             "  Scenarios:                                                   \n",
-            "    T1: Word/Halfword/Byte access (data-path width)            \n",
-            "    T2: Per-thread strided access (address computation)        \n",
-            "    T3: Tight Read-After-Write (LSU bypass/write-through)      \n",
-            "    T4: Cross-warp memory visibility (barrier + cache)         \n",
-            "  Interface: ",
-            cfg.axi_agent_enable ? "AXI4 (secondary coverage)\n" :
-                                   "Custom-MEM (primary)\n",
+            "    T1: Multi-line sequential R/W (AW/W + AR/R pipeline)      \n",
+            "    T2: Byte-granularity writes (AXI wstrb coverage)          \n",
+            "    T3: Write-then-read ordering (AXI W → AR/R)               \n",
+            "    T4: Dense back-to-back writes (B-channel ID matching)     \n",
+            "  AXI config: DATA=512b  ADDR=32b  ID=8b  BANKS=1             \n",
             "  Check model: black-box end-state vs SimX                    \n",
             "    Sentinel memory window: 0x80010000 (4 bytes)               \n",
             "    Console compare:        vx_printf output streams           \n",
@@ -142,6 +159,6 @@ class functional_memory_test extends kernel_launch_test;
         end
     endfunction
 
-endclass : functional_memory_test
+endclass : axi_memory_test
 
-`endif // FUNCTIONAL_MEMORY_TEST_SV
+`endif // AXI_MEMORY_TEST_SV
