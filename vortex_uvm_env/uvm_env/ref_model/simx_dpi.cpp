@@ -12,6 +12,7 @@
 #include "mem.h"
 #include <VX_config.h>
 #include <VX_types.h>
+#include "simx_cosim_record.h"
 
 using namespace vortex;
 
@@ -42,6 +43,7 @@ void simx_cleanup() {
     std::cout << "[SimX-DPI] Cleaning up SimX..." << std::endl;
     
     if (g_processor) {
+        g_processor->cosim_clear();  // M1: drop any unread retire records
         delete g_processor;
         g_processor = nullptr;
         std::cout << "[SimX-DPI] Processor deleted" << std::endl;
@@ -734,6 +736,69 @@ int simx_get_exitcode() {
 // Returns captured program console output (valid after simx_run)
 const char* simx_get_console() {
     return g_console.c_str();
+}
+
+// ============================================================================
+// M1 COSIM RETIRE-RECORD INTERFACE (Option β)
+// ============================================================================
+// SimX cores push one record per writeback-bearing Emulator::step() into a
+// queue owned by Processor. SV-side scoreboard polls simx_cosim_pop() in a
+// drain loop to match against DUT VX_commit_if events.
+
+// Pop one record into scalar output args (DPI-portable; no struct alignment
+// dependency between C and SV). The result[] open array must be sized to
+// at least num_threads on the SV side; we write exactly that many entries.
+// Returns: 1 on success, 0 if queue is empty, -1 on error.
+int simx_cosim_pop(
+    uint64_t* uuid,
+    unsigned* cid,
+    unsigned* wid,
+    uint64_t* pc,
+    unsigned* tmask,
+    unsigned char* wb,
+    unsigned char* is_fp,
+    unsigned char* rd,
+    unsigned char* sop,
+    unsigned char* eop,
+    const svOpenArrayHandle result
+) {
+    if (!g_processor) {
+        std::cerr << "[SimX-DPI] simx_cosim_pop: processor not initialized" << std::endl;
+        return -1;
+    }
+    vortex::simx_retire_t rec{};
+    if (!g_processor->cosim_drain_retire(rec)) return 0;
+
+    *uuid  = rec.uuid;
+    *cid   = rec.cid;
+    *wid   = rec.wid;
+    *pc    = rec.pc;
+    *tmask = rec.tmask;
+    *wb    = rec.wb;
+    *is_fp = rec.is_fp;
+    *rd    = rec.rd;
+    *sop   = rec.sop;
+    *eop   = rec.eop;
+
+    const int lo = svLow(result, 1);
+    const int hi = svHigh(result, 1);
+    const int n  = hi - lo + 1;
+    for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(result, lo + i));
+        if (slot) *slot = rec.result[i];
+    }
+    return 1;
+}
+
+// Number of retire records currently queued.
+unsigned simx_cosim_pending() {
+    if (!g_processor) return 0;
+    return g_processor->cosim_pending();
+}
+
+// Drop all queued records without consuming them.
+void simx_cosim_clear() {
+    if (g_processor) g_processor->cosim_clear();
 }
 
 } // extern "C"
