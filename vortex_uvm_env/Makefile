@@ -8,13 +8,17 @@
 #   make gui       TEST=vortex_smoke_test PROGRAM=rv32ui-p-add
 #   make sim-only  TEST=vortex_smoke_test PROGRAM=vecadd     # skip recompile
 #   make compile   TEST=vortex_smoke_test                    # compile only
+#   make cov-fresh                                           # clear coverage staging
+#   make cov-merge                                           # merge staged UCDBs -> report
+#   make cov-list                                            # show staged UCDBs
 #   make clean
 #   make help
 ################################################################################
 
 SHELL := /usr/bin/env bash
 
-RUNNER := scripts/run.sh
+RUNNER     := scripts/run.sh
+COV_MERGE  := scripts/merge_coverage.sh
 
 # ── Optional per-developer local overrides (not tracked by git) ───────────────
 -include local.mk
@@ -31,6 +35,17 @@ WARPS         ?= 4
 THREADS       ?= 4
 TIMEOUT       ?= 1000000
 STARTUP_ADDR  ?= 0x80000000
+
+# ── Coverage merge selection (override on command line) ───────────────────────
+# RUNS  = explicit run dirs under results/ to stage, space-separated, e.g.
+#         make cov-merge RUNS="20260620/run_A_kernel_launch_test 20260620/run_B_..."
+# LAST  = if RUNS empty, stage the N most-recent run_*$(TEST_GLOB) dirs (default 4)
+RUNS          ?=
+LAST          ?= 4
+TEST_GLOB     ?= kernel_launch_test
+
+COV_REPORT      ?= 0
+COV_REPORT_FLAG := $(if $(filter 1,$(COV_REPORT)),--cov-report,)
 
 # ── Feature flags (1 = enable) ────────────────────────────────────────────────
 VERBOSE       ?= 0
@@ -72,7 +87,8 @@ endif
 # Targets
 ################################################################################
 
-.PHONY: help sim compile sim-only gui clean clean-results
+.PHONY: help sim compile sim-only gui clean clean-results \
+        cov-fresh cov-merge cov-list
 
 help:
 	@bash $(RUNNER) --help
@@ -92,6 +108,19 @@ sim-only: _need-test
 ## Open Questa GUI with waveforms
 gui: _need-test
 	@bash $(RUNNER) $(_FLAGS) --gui
+
+## Coverage: clear the staging set to start a clean report
+cov-fresh:
+	@bash $(COV_MERGE) --fresh
+
+## Coverage: show what is currently staged
+cov-list:
+	@bash $(COV_MERGE) --list
+
+## Coverage: stage selected runs (RUNS=... or newest LAST=N matching TEST_GLOB),
+## then merge into one report. cvfpu/third-party waived via coverage_exclude.do.
+cov-merge:
+	@bash $(COV_MERGE)
 
 ## Remove ModelSim work library
 clean:

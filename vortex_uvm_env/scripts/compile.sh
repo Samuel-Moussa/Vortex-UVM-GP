@@ -76,10 +76,10 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     fi
 
 
-    # Compile RTL
+    # Compile RTL  (＋cover instruments ONLY the Vortex RTL — UVM stays uninstrumented)
     print_info "Compiling Vortex RTL..."
     if [[ "$SIMULATOR" == "questa" ]]; then
-        vlog -sv $COMPILE_OPTS \
+        vlog -sv -cover bcst $COMPILE_OPTS \
             +incdir+"$VORTEX_HOME/third_party/cvfpu/src/common_cells/include" \
             -f "$RTL_FLIST" \
             2>&1 | tee "$RESULTS_RUN_DIR/logs/compile_rtl.log"

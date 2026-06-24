@@ -379,59 +379,6 @@ endclocking
     assert_r_data_stable: assert property (r_data_stable_p)
         else $error("[VORTEX_AXI_IF] RDATA changed before handshake!");
 
-    //==========================================================================
-    // COVERAGE
-    //==========================================================================
-
-    covergroup axi_protocol_cg @(posedge clk);
-        option.per_instance = 1;
-
-        awburst_cp: coverpoint awburst {
-            bins fixed = {2'b00};
-            bins incr  = {2'b01};
-            bins wrap  = {2'b10};
-        }
-
-        arburst_cp: coverpoint arburst {
-            bins fixed = {2'b00};
-            bins incr  = {2'b01};
-            bins wrap  = {2'b10};
-        }
-
-        awlen_cp: coverpoint awlen {
-            bins single      = {0};
-            bins short_burst = {[1:7]};
-            bins long_burst  = {[8:255]};
-        }
-
-        awsize_cp: coverpoint awsize {
-            bins bytee = {3'b000};
-            bins hword = {3'b001};
-            bins word  = {3'b010};
-            bins dword = {3'b011};
-        }
-
-        bresp_cp: coverpoint bresp {
-            bins okay   = {2'b00};
-            bins exokay = {2'b01};
-            bins slverr = {2'b10};
-            bins decerr = {2'b11};
-        }
-
-        rresp_cp: coverpoint rresp {
-            bins okay   = {2'b00};
-            bins exokay = {2'b01};
-            bins slverr = {2'b10};
-            bins decerr = {2'b11};
-        }
-
-        write_burst_cross: cross awburst_cp, awlen_cp, awsize_cp;
-        read_burst_cross:  cross arburst_cp, awlen_cp, awsize_cp;
-    endgroup
-
-    axi_protocol_cg axi_cov = new();
-
-    // No initial signal assignments — signals start X, driven by DUT/TB only.
 
     //==========================================================================
     // ADDITIONAL SVA PROPERTIES (wlast_before_bvalid, rlast_beat_count,

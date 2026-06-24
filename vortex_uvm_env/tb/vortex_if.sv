@@ -213,7 +213,24 @@ interface vortex_if (
     endgroup
 
     system_cg sys_cov = new();
-
+    // ---- NEW: drop idle-interface coverpoints from the % calculation --------
+    // The data interface is chosen by the USE_AXI_WRAPPER plusarg (set by the
+    // run script's --interface flag). The unused interface sits idle, so its
+    // coverpoints would pin at 0% and drag system_cg down. Setting weight = 0
+    // removes them from the coverage percentage but KEEPS the bins in the UCDB,
+    // so a later vcover merge across axi+mem runs still recovers full coverage.
+    initial begin
+        int use_axi;
+        if (!$value$plusargs("USE_AXI_WRAPPER=%d", use_axi))
+            use_axi = 1;                // default to AXI when plusarg absent
+        if (use_axi) begin
+            sys_cov.mem_usage_cp.option.weight     = 0;   // idle on AXI runs
+            sys_cov.system_mem_cross.option.weight = 0;
+        end else begin
+            sys_cov.axi_usage_cp.option.weight     = 0;   // idle on MEM runs
+            sys_cov.system_axi_cross.option.weight = 0;
+        end
+    end
     //==========================================================================
     // DEBUG: Interface Status Display
     //==========================================================================
