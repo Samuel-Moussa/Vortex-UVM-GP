@@ -63,6 +63,8 @@ vortex_uvm_env/cov/report/html/
 # Environment files (optional - remove if you want to commit them)
 env/
 
+Vortex/sim/simx/obj/
+
 
 # Backup folders
 backup/
