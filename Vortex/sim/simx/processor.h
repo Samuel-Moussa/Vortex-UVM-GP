@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <VX_config.h>
 #include <mem.h>
+#include "simx_cosim_record.h"
 
 namespace vortex {
 
@@ -40,6 +41,15 @@ public:
   bool is_done() const;
   int  get_exitcode() const;   // valid after is_done() returns true
   void dcr_write(uint32_t addr, uint32_t value);
+
+  // --- M1 cosim retire-record queue (Option β) ---------------------------
+  // Cores push one record per Emulator::step() that produced a trace;
+  // the DPI bridge drains via simx_cosim_pop().
+  void     cosim_push_retire(const simx_retire_t& rec);
+  bool     cosim_drain_retire(simx_retire_t& out);
+  uint32_t cosim_pending() const;
+  void     cosim_clear();
+
 #ifdef VM_ENABLE
   bool is_satp_unset();
   uint8_t get_satp_mode();

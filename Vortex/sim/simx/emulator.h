@@ -104,6 +104,8 @@ public:
 
   int get_exitcode() const;
 
+  std::vector<uint64_t> read_dst_reg(uint32_t wid, const RegOpd& dst) const;
+
   void dcache_read(void* data, uint64_t addr, uint32_t size);
 
   void dcache_write(const void* data, uint64_t addr, uint32_t size);
