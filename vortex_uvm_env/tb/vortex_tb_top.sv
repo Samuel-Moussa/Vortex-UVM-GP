@@ -636,6 +636,30 @@ module vortex_tb_top;
         join_none
     end
 
+
+    // Bind warp/scheduler-state coverage probe into every VX_schedule instance
+    bind VX_schedule vx_sched_probe #(.CORE_ID(0)) u_sched_probe (
+        .clk          (clk),
+        .reset        (reset),
+        .warp_ctl_if  (warp_ctl_if),
+        .schedule_if  (schedule_if),
+        .active_warps (active_warps),
+        .stalled_warps(stalled_warps),
+        .barrier_ctrs (barrier_ctrs),
+        .join_valid   (join_valid),
+        .join_is_dvg  (join_is_dvg),
+        .join_is_else (join_is_else),
+        .join_tmask   (join_tmask)
+    );
+
+    // Bind white-box instruction probe into every VX_dispatch instance
+    bind VX_dispatch vx_instr_probe #(.CORE_ID(0)) u_instr_probe (
+        .clk        (clk),
+        .reset      (reset),
+        .dispatch_if(dispatch_if)
+    );
+    
+
     //==========================================================================
     // SIMULATION COMPLETION
     //==========================================================================

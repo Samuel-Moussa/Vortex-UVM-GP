@@ -96,6 +96,7 @@ ${YELLOW}Optional Flags:${NC}
     --debug-addr             Enable LSU address calculation debug tracing
     --no-tcu                 Disable TCU (exclude TCU files from flist)
     --help                   Show this help
+    --cov-report             Also write per-run coverage .txt reports (slow; off by default — use merge_coverage.sh for the real number)
 
 ${YELLOW}Program Type Examples:${NC}
 
@@ -164,6 +165,7 @@ DEBUG_ADDR_CALC=0
 NO_WAVES=0
 GUI_MODE=0
 VERBOSE=0
+PER_RUN_COV_REPORT=0
 
 # Simulator (auto-detected in prepare.sh)
 SIMULATOR=""
@@ -193,6 +195,7 @@ for arg in "$@"; do
         --startup-addr=*) STARTUP_ADDR="${arg#*=}" ;;
         --no-compile)     NO_COMPILE=1 ;;
         --no-waves)       NO_WAVES=1 ;;
+        --cov-report)     PER_RUN_COV_REPORT=1 ;;
         --gui)            GUI_MODE=1 ;;
         --clean)          CLEAN=1 ;;
         --verbose)        VERBOSE=1 ;;
