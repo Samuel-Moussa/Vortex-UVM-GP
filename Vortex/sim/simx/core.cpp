@@ -22,6 +22,11 @@
 #include "core.h"
 #include "debug.h"
 #include "constants.h"
+#include "socket.h"
+#include "cluster.h"
+#include "processor_impl.h"
+#include "instr_trace.h"
+#include "simx_cosim_record.h"
 
 using namespace vortex;
 
@@ -219,6 +224,32 @@ void Core::schedule() {
   if (trace == nullptr) {
     ++perf_stats_.sched_idle;
     return;
+  }
+
+  // --- M1 cosim retire-record export (Option β) ---
+  // SimX commits the destination register inside Emulator::step(), so the
+  // register file holds the post-retire value here. Only emit records for
+  // writeback instructions; branches/stores/etc. are out of scope for M1.
+  if (trace->wb) {
+    simx_retire_t rec{};
+    rec.uuid  = trace->uuid;
+    rec.cid   = trace->cid;
+    rec.wid   = trace->wid;
+    rec.pc    = static_cast<uint64_t>(trace->PC);
+    rec.tmask = 0;
+    for (uint32_t t = 0, n = arch_.num_threads(); t < n && t < 32; ++t) {
+      if (trace->tmask.test(t)) rec.tmask |= (1u << t);
+    }
+    rec.wb    = 1;
+    rec.is_fp = (trace->dst_reg.type == RegType::Float) ? 1 : 0;
+    rec.rd    = static_cast<uint8_t>(trace->dst_reg.idx);
+    rec.sop   = trace->sop ? 1 : 0;
+    rec.eop   = trace->eop ? 1 : 0;
+    auto vals = emulator_.read_dst_reg(trace->wid, trace->dst_reg);
+    for (uint32_t t = 0, n = vals.size(); t < n && t < SIMX_COSIM_MAX_THREADS; ++t) {
+      rec.result[t] = vals[t];
+    }
+    socket_->cluster()->processor()->cosim_push_retire(rec);
   }
 
   // suspend warp until decode
