@@ -58,6 +58,7 @@ Thumbs.db
 # Coverage files
 *.ucdb
 cov_work/
+vortex_uvm_env/cov/report/html/
 
 # Environment files (optional - remove if you want to commit them)
 env/

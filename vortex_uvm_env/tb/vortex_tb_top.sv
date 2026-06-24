@@ -636,6 +636,15 @@ module vortex_tb_top;
         join_none
     end
 
+
+    // Bind white-box instruction probe into every VX_dispatch instance
+    bind VX_dispatch vx_instr_probe #(.CORE_ID(0)) u_instr_probe (
+        .clk        (clk),
+        .reset      (reset),
+        .dispatch_if(dispatch_if)
+    );
+    
+
     //==========================================================================
     // SIMULATION COMPLETION
     //==========================================================================
