@@ -223,6 +223,26 @@ int Emulator::get_exitcode() const {
   return warps_.at(0).ireg_file.at(3).at(0);
 }
 
+std::vector<uint64_t> Emulator::read_dst_reg(uint32_t wid, const RegOpd& dst) const {
+  const auto& warp = warps_.at(wid);
+  std::vector<uint64_t> values(arch_.num_threads(), 0);
+  switch (dst.type) {
+  case RegType::Integer:
+    for (uint32_t t = 0, n = arch_.num_threads(); t < n; ++t) {
+      values[t] = static_cast<uint64_t>(warp.ireg_file.at(dst.idx).at(t));
+    }
+    break;
+  case RegType::Float:
+    for (uint32_t t = 0, n = arch_.num_threads(); t < n; ++t) {
+      values[t] = warp.freg_file.at(dst.idx).at(t);
+    }
+    break;
+  default:
+    break;
+  }
+  return values;
+}
+
 void Emulator::suspend(uint32_t wid) {
   assert(!stalled_warps_.test(wid));
   stalled_warps_.set(wid);
