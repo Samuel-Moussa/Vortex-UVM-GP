@@ -91,8 +91,8 @@ CXXFLAGS     += $(EXTRA_CXXFLAGS)
 
 # Debug settings
 CXXFLAGS     += -DDEBUG_LEVEL=3
-CXXFLAGS     += -g
-CXXFLAGS     += -UNDEBUG 
+# CXXFLAGS     += -g
+# CXXFLAGS     += -UNDEBUG 
 
 # Linker flags - KEY FIX: -static-libstdc++ -static-libgcc embed C++ runtime
 # This prevents GLIBCXX_3.4.29 errors from Questa's old GCC 7.4.0 libstdc++
