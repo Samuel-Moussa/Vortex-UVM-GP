@@ -69,3 +69,4 @@ backup/
 # Windows Zone Identifier files
 *:Zone.Identifier
 
+vortex_uvm_env/flists/trace/
