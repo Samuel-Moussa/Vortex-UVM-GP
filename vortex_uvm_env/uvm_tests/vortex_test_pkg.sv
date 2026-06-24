@@ -6,6 +6,12 @@
 //   Added two lines only:
 //     `include "random_instr_stress_vseq.sv"         (after kernel_launch_vseq)
 //     `include "random_instruction_stress_test.sv"    (after kernel_launch_test)
+//
+// Subsequent additions (T-fmem / T-axi):
+//   Removed `include "functional_memory_test.sv" from its original position
+//   (which was before kernel_launch_test — wrong order since the new class
+//   extends kernel_launch_test). Added both new tests at the end of the test
+//   include block, after barrier_sync_test.sv.
 ////////////////////////////////////////////////////////////////////////////////
 
 `ifndef VORTEX_TEST_PKG_SV
@@ -47,10 +53,13 @@ package vortex_test_pkg;
     `include "vortex_base_test.sv"
     `include "vortex_sanity_test.sv"
     `include "vortex_smoke_test.sv"
-    `include "functional_memory_test.sv"
     `include "kernel_launch_test.sv"
     `include "negative_result_test.sv"
     `include "random_instruction_stress_test.sv"    // ← NEW
+    `include "warp_scheduling_test.sv"
+    `include "barrier_sync_test.sv"
+    `include "functional_memory_test.sv"            // ← NEW (extends kernel_launch_test; must follow it)
+    `include "axi_memory_test.sv"                   // ← NEW (extends kernel_launch_test; AXI path only)
     // `include "sgemm_test.sv"       // To be added later
     // `include "riscv_dv_test.sv"    // To be added later
 
