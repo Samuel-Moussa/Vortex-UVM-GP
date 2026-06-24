@@ -653,22 +653,30 @@ class vortex_coverage_collector extends uvm_component;
 
     `uvm_info("COVERAGE", {"\n",
       "╔══════════════════════════════════════════╗\n",
-      "║    Vortex Functional Coverage Report     ║\n",
+      "║   Vortex Interface (Bus) Coverage        ║\n",
+      "║   — sanity check only, NOT sign-off —    ║\n",
       "╠══════════════════════════════════════════╣\n",
       $sformatf("║  %-18s: %6.2f%%             ║\n", data_if_name, data_if_cov),
       $sformatf("║  DCR Configuration  : %6.2f%%             ║\n", dcr_cov),
       $sformatf("║  Host Operations    : %6.2f%%             ║\n", host_cov),
       $sformatf("║  Status/Performance : %6.2f%%             ║\n", status_cov),
       "╠══════════════════════════════════════════╣\n",
-      $sformatf("║  TOTAL COVERAGE     : %6.2f%%             ║\n", total_cov),
+      $sformatf("║  INTERFACE SUBTOTAL : %6.2f%%             ║\n", total_cov),
       "╚══════════════════════════════════════════╝\n"
     }, UVM_NONE)
 
-    if (total_cov < 90.0)
-      `uvm_warning("COVERAGE",
-        $sformatf("Total coverage %.2f%% is below 90%% goal", total_cov))
-    else
-      `uvm_info("COVERAGE", "Coverage goal of 90%% met!", UVM_NONE)
+    // This banner reflects ONLY the transaction/interface covergroups in this
+    // collector. It does NOT include architectural coverage (instr_class_cg in
+    // the bound vx_instr_probe) or code coverage — both live in the UCDB, not in
+    // this class. The authoritative sign-off number is the MERGED UCDB produced
+    // by scripts/merge_coverage.sh (vcover report).
+    `uvm_info("COVERAGE",
+      "Interface-only subtotal above. Authoritative coverage = merged UCDB via merge_coverage.sh (adds instr_class_cg + code coverage).",
+      UVM_NONE)
+
+    // No pass/fail verdict here: the 90% goal is evaluated on the merged UCDB,
+    // not on this interface subset (which cannot reach it alone). Issuing a
+    // warning on a partial number was misleading, so it is removed.
   endfunction : report_phase
 
 endclass : vortex_coverage_collector
