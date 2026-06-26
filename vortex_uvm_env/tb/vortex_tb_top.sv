@@ -349,6 +349,7 @@ module vortex_tb_top;
     logic        tb_execution_started;
     logic        tb_execution_complete;
     int          tb_idle_cycles;
+    int          tb_busy_low_cycles;     // Issue 2: consecutive cycles with busy==0
     logic        tb_probe_ebreak_seen;   // C3: registered — set when ebreak first seen at fetch
     wire         tb_ebreak_fetch;        // C3: combinational — OR across all cores
 
@@ -375,9 +376,13 @@ module vortex_tb_top;
     assign tb_ebreak_fetch = |tb_ebreak_fetch_all;
 
     int idle_threshold_val = 5000;
+    // Issue 2 fix: busy=0 completion must be SUSTAINED, not a single-cycle glitch.
+    // A transient busy de-assertion between kernel phases must NOT end the test.
+    int busy_low_threshold_val = 100;
     initial begin
         int tmp;
-        if ($value$plusargs("IDLE_THRESHOLD=%d", tmp)) idle_threshold_val = tmp;
+        if ($value$plusargs("IDLE_THRESHOLD=%d", tmp))     idle_threshold_val     = tmp;
+        if ($value$plusargs("BUSY_LOW_THRESHOLD=%d", tmp)) busy_low_threshold_val = tmp;
     end
 
     always_ff @(posedge clk) begin
@@ -388,11 +393,19 @@ module vortex_tb_top;
             tb_execution_started  <= 0;
             tb_execution_complete <= 0;
             tb_idle_cycles        <= 0;
+            tb_busy_low_cycles    <= 0;
         end else begin
             tb_cycle_count <= tb_cycle_count + 1;
 
             // I1/C2: real retired count — sum all commit lanes across all cores
             tb_instr_count <= tb_instr_count + 64'(tb_commit_count_cyc);
+
+            // Issue 2: track SUSTAINED busy de-assertion. Reset on any busy-high
+            // cycle so a transient gap can never accumulate to the threshold.
+            if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy)
+                tb_busy_low_cycles <= tb_busy_low_cycles + 1;
+            else
+                tb_busy_low_cycles <= 0;
 
             if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
                 (vif.axi_if.bvalid && vif.axi_if.bready) ||
@@ -417,10 +430,14 @@ module vortex_tb_top;
                 $display("╚═══════════════════════════════════════════════════╝");
                 $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
                          tb_cycle_count, tb_mem_ops, tb_instr_count);
-            // C3 FALLBACK 1: busy=0 without ebreak — should not happen in a correct run
-            end else if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy) begin
+            // C3 FALLBACK 1: SUSTAINED busy=0 without ebreak — should not happen in a
+            // correct run. Issue 2 fix: require busy low for busy_low_threshold_val
+            // consecutive cycles so a transient mid-kernel gap can't end the test early.
+            end else if (tb_execution_started && !tb_execution_complete &&
+                         tb_busy_low_cycles >= busy_low_threshold_val) begin
                 tb_execution_complete <= 1;
-                $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via busy=0 fallback — ebreak not decoded", $time);
+                $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via sustained busy=0 fallback (%0d cyc) — ebreak not decoded",
+                         $time, busy_low_threshold_val);
                 $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
                          tb_cycle_count, tb_mem_ops, tb_instr_count);
             // C3 FALLBACK 2: idle threshold — program may be hung
@@ -722,10 +739,17 @@ module vortex_tb_top;
         chk_warps    = `NUM_WARPS;
         chk_threads  = `NUM_THREADS;
 
-        void'($value$plusargs("NUM_CLUSTERS=%d", chk_clusters));
-        void'($value$plusargs("NUM_CORES=%d",    chk_cores));
-        void'($value$plusargs("NUM_WARPS=%d",    chk_warps));
-        void'($value$plusargs("NUM_THREADS=%d",  chk_threads));
+        // Issue 3: accept both the NUM_* form and the short aliases the config
+        // object reads (vortex_config.sv apply_plusargs). Check NUM_* first; if
+        // absent, fall back to the alias so an alias-form override is also caught.
+        if (!$value$plusargs("NUM_CLUSTERS=%d", chk_clusters))
+            void'($value$plusargs("CLUSTERS=%d", chk_clusters));
+        if (!$value$plusargs("NUM_CORES=%d", chk_cores))
+            void'($value$plusargs("CORES=%d", chk_cores));
+        if (!$value$plusargs("NUM_WARPS=%d", chk_warps))
+            void'($value$plusargs("WARPS=%d", chk_warps));
+        if (!$value$plusargs("NUM_THREADS=%d", chk_threads))
+            void'($value$plusargs("THREADS=%d", chk_threads));
 
         assert (chk_clusters == TB_NUM_CLUSTERS)
             else $fatal(1,
