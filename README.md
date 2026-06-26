@@ -210,9 +210,9 @@ shared-file changes.
 
 | Owner | Lane |
 | :--- | :--- |
-| **Samuel** | infrastructure correctness + full configurability (TB, config, scripts, asserts) |
+| **Samuel** | infrastructure correctness + full configurability (TB, config, scripts, asserts) · constrained-random (riscv-dv) testing |
 | **Ahmad** | functional & code coverage + scoreboard |
-| **Steven** | directed / random tests, AXI SVA, SimX / DPI |
+| **Steven** | directed tests, AXI SVA, SimX / DPI |
 
 Cross-lane edits and handovers are documented per issue in
 [`docs/fixes/`](vortex_uvm_env/docs/fixes/) — including a CRITICAL scoreboard
@@ -224,25 +224,27 @@ and the engineering
 
 ## 📊 Status
 
-> Snapshot — the authoritative live checklist is in [`CLAUDE.md`](CLAUDE.md).
+A snapshot of the environment's current capabilities. Detailed per-task tracking
+lives in the [rolling plan](vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md).
 
-**Bench-trust (Gate 0) — infrastructure items complete**
+**Operational**
 
-| ✔ | Item |
+| ✔ | Capability |
 | :---: | :--- |
-| ✅ | Tag/ID width derived from RTL + elaboration `$bits` assert *(C1)* |
-| ✅ | Real retired instruction count + IPC from commit handshake *(C2 / I1)* |
-| ✅ | `ebreak`-decode completion, multi-core *(C3 / I1)* |
-| ✅ | Honest `UVM_ERROR` gate, no subtraction *(T4)* |
-| ✅ | Topology elaboration asserts incl. plusarg aliases *(I2)* |
-| ✅ | riscv-dv `random_instruction_stress_test` end-to-end |
+| ✅ | End-to-end kernel execution compared against the SimX golden model |
+| ✅ | Constrained-random instruction stress testing (riscv-dv pipeline) |
+| ✅ | 5-agent UVM architecture over AXI4 and custom memory interfaces |
+| ✅ | Functional + code coverage collection with cross-run merge |
+| ✅ | Full parameterization with elaboration-time validation against the DUT |
+| ✅ | Trustworthy results: real retirement counts, honest error gating, decoded completion |
 
-**Open before Gate-0 sign-off**
+**In progress**
 
-| ⛔ | Blocker | Lane |
-| :---: | :--- | :--- |
-| ⛔ | Scoreboard cannot yet detect *dropped* stores (DUT-write-driven compare) | Ahmad |
-| ⛔ | INV-1: vecadd `busy` never idles (completion blocked for that kernel) | open |
+| 🔄 | Item |
+| :---: | :--- |
+| 🔄 | Scoreboard detection of *dropped* stores (currently DUT-write-driven) |
+| 🔄 | Completion path for long-running kernels (e.g. vecadd) |
+| 🔄 | Multi-config matrix run and merged sign-off report |
 
 ---
 
