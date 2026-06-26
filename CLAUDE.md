@@ -49,6 +49,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 - [x] **C2 — real instruction count.** Remove the `tb_mem_ops % 3` fabrication; wire the **real retired count** from the P1 commit probe into `status_if`/`status_transaction`; restore real IPC. *(Couples with Ahmad's P1 sampling — coordinate.)*
   *Accept:* `instr_count` ≠ mem_ops/3; IPC derived from real count.
   *[DONE pending commit 2026-06-26]:* Direct hierarchy tap `VX_commit.commit.commit_arb_if[0].valid&&ready` → `tb_commit_fire` → `tb_instr_count`. Fabrication removed. vecadd 100k cycles: Instructions=12798, IPC=0.128 (real, scales linearly). SimX RAM verification PASSED. P1-bind (commit probe module for Ahmad) remains a separate Tier-1 item.
+  *Known limitation (multi-core):* Tap hardcoded to cluster[0]/core[0]/lane[0]. Under-counts by `NUM_CLUSTERS×NUM_CORES` for >1 core; misses lanes 1+ when `ISSUE_WIDTH>1` (NUM_WARPS>16). Correct for primary Gate-0 config (1CL/1C/4W/4T). Fix requires P1-bind generate loop.
 - [ ] **T4 — honest error gate.** `simulate.sh` (~line 117): reclassify banner lines to `UVM_INFO`; gate on the true `UVM_ERROR` count; remove the `-2` subtraction.
   *Accept:* a deliberately injected error fails the run; clean run = 0 errors with no subtraction.
   *[sync 0d5bd080]:* OPEN — `simulate.sh:118` `-2` subtraction still present.
