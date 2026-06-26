@@ -706,6 +706,52 @@ module vortex_tb_top;
     end
 
     //==========================================================================
+    // I2 — ELABORATION ASSERTS: UVM plusarg topology == RTL compile-time params
+    // These fire at time=0 before any UVM phase runs. If +NUM_CLUSTERS=2 but
+    // the RTL was compiled with `NUM_CLUSTERS=1, the bench is meaningless.
+    // Pattern: read the plusarg (default = RTL value so single-config runs
+    // always pass); fatal if the override disagrees with the compiled DUT.
+    //==========================================================================
+    initial begin : u_i2_topology_asserts
+        int unsigned chk_clusters, chk_cores, chk_warps, chk_threads;
+
+        // Default to the RTL compile-time values so the assert is a no-op
+        // when the plusarg is not supplied (single-config baseline run).
+        chk_clusters = TB_NUM_CLUSTERS;
+        chk_cores    = `NUM_CORES;
+        chk_warps    = `NUM_WARPS;
+        chk_threads  = `NUM_THREADS;
+
+        void'($value$plusargs("NUM_CLUSTERS=%d", chk_clusters));
+        void'($value$plusargs("NUM_CORES=%d",    chk_cores));
+        void'($value$plusargs("NUM_WARPS=%d",    chk_warps));
+        void'($value$plusargs("NUM_THREADS=%d",  chk_threads));
+
+        assert (chk_clusters == TB_NUM_CLUSTERS)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_CLUSTERS: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_CLUSTERS",
+                chk_clusters, TB_NUM_CLUSTERS);
+
+        assert (chk_cores == `NUM_CORES)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_CORES: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_CORES",
+                chk_cores, `NUM_CORES);
+
+        assert (chk_warps == `NUM_WARPS)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_WARPS: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_WARPS",
+                chk_warps, `NUM_WARPS);
+
+        assert (chk_threads == `NUM_THREADS)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_THREADS: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_THREADS",
+                chk_threads, `NUM_THREADS);
+
+        $display("[I2-ASSERT] Topology OK: %0dCL %0dC %0dW %0dT (RTL == UVM plusargs)",
+                 TB_NUM_CLUSTERS, `NUM_CORES, `NUM_WARPS, `NUM_THREADS);
+    end
+
+    //==========================================================================
     // TIMEOUT WATCHDOG
     //==========================================================================
 
