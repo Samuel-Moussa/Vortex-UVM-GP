@@ -7,9 +7,9 @@
 // //   - Response: Slave → Master (data or ack)
 // //
 // // Clocking Blocks:
-// //   - master_cb:  For drivers (active agents)
-// //   - slave_cb:   For memory responders
-// //   - monitor_cb: For passive monitoring
+// //   - mem_responder_cb: For slave-side responder (drives req_ready, rsp_valid, rsp_data, rsp_tag)
+// //   - monitor_cb:       For passive monitoring
+// //   Note: master_cb was removed — see inline comment at former declaration site.
 // //
 // // Author: Vortex UVM Team
 // // Date: 2025-01-XX
@@ -66,27 +66,16 @@ interface vortex_mem_if (
     logic [DATA_WIDTH-1:0]      rsp_data    [NUM_PORTS];
     logic [TAG_WIDTH-1:0]       rsp_tag     [NUM_PORTS];
 
-    //==========================================================================
-    // CLOCKING BLOCK: MASTER (For UVM Drivers)
-    //==========================================================================
-    clocking master_cb @(posedge clk);
-        default input #1step output #0;
-        
-        // Request outputs (master drives these)
-        output  req_valid;
-        output  req_rw;
-        output  req_addr;
-        output  req_data;
-        output  req_byteen;
-        output  req_tag;
-        input   req_ready;
-        
-        // Response inputs/outputs
-        input   rsp_valid;
-        input   rsp_data;
-        input   rsp_tag;
-        output  rsp_ready;
-    endclocking
+    // NOTE: master_cb was removed. The Vortex DUT is RTL, not a UVM driver,
+    // so it never consumed master_cb. Its `output` declarations on
+    // req_valid/req_rw/req_addr/req_data/req_byteen/req_tag/rsp_ready
+    // conflicted with the DUT's `output wire` ports driving the same
+    // interface signals via the direct port connection in vortex_tb_top.sv,
+    // producing vsim-3839 multiply-driven errors at elaboration on the
+    // custom-mem path. The AXI path avoided this only because intermediate
+    // `wire` arrays + explicit `assign` statements decouple the DUT output
+    // from the interface signal there. The slave-side responder and monitor
+    // clocking blocks below are preserved.
 
     //==========================================================================
     // CLOCKING BLOCK: MEMORY RESPONDER (For tb_top)

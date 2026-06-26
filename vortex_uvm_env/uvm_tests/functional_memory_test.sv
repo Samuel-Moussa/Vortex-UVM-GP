@@ -1,214 +1,145 @@
-// ============================================================================
+////////////////////////////////////////////////////////////////////////////////
 // File: uvm_tests/functional_memory_test.sv
-// Description: Functional Memory Test — MOD-1 architecture
+// Description: Functional Memory Directed Test
 //
-// Purpose:
-//   Verifies that the DUT can fetch instructions from mem_model, execute a
-//   program that writes a known value to a known address, and that the result
-//   is readable back from mem_model via the MEM/AXI agent.
+// Drives the functional_mem kernel (functional_mem.elf) against the DUT and
+// SimX. The kernel covers four memory-subsystem scenarios in one binary:
+//   T1: Word/halfword/byte access — all 4 threads, catches data-path width bugs
+//   T2: Per-thread strided access — each thread writes buf[tid*4], catches
+//       per-lane address computation bugs
+//   T3: Tight read-after-write   — store + load to same address per thread,
+//       catches LSU bypass and write-through failures
+//   T4: Cross-warp visibility    — warp 0 writes a shared buffer, vx_barrier,
+//       all warps confirm every entry is visible; catches cache coherence and
+//       barrier-ordering bugs
 //
-// Flow (all inherited from vortex_base_test.run_phase):
-//   STEP 1 — load_program()            : loads program_with_store.hex into mem_model
-//   STEP 2 — wait_for_reset()          : level-safe override below
-//   STEP 3 — monitor_memory_activity() : background (base)
-//   STEP 4 — run_test_stimulus()       : OVERRIDE — launches vortex_functional_mem_vseq
-//   STEP 5 — wait_for_completion()     : waits for EBREAK (base)
-//   STEP 6 — check_results()           : OVERRIDE — golden value check
+// This test exercises the custom-mem memory path by default (no
+// +USE_AXI_WRAPPER). It also runs cleanly under the AXI path
+// (+USE_AXI_WRAPPER) for secondary coverage — the kernel is interface-
+// agnostic, so the same binary can stress both paths.
 //
-// Required program: program_with_store.hex
-//   RISC-V program that writes value 0x00000003 to address 0x80001000
-//   then executes EBREAK.
-//   File starts with @00000000 (NOT @80000000 — mem_model adds base_addr).
+// Check model: black-box end-state equivalence vs SimX (Gate 1) plus an
+// absolute sentinel check at RESULT_ADDR=0x80010000 (Gate 2).
 //
-// Golden check (inside vortex_functional_mem_vseq):
-//   mem_model[0x80001000][31:0] == 32'h00000003
+// Minimum config: num_warps >= 4, num_threads >= 4.
+// The test fatals (does not silently adjust) if these minimums are not met.
 //
-// Author: Vortex UVM Team — MOD-1 March 2026
-// ============================================================================
+// Run (custom-mem path, default):
+//   make sim TEST=functional_memory_test PROGRAM_NAME=functional_mem \
+//            INTERFACE=mem TIMEOUT=5000000
+//
+// Run (AXI path, secondary):
+//   make sim TEST=functional_memory_test PROGRAM_NAME=functional_mem \
+//            INTERFACE=axi TIMEOUT=5000000
+////////////////////////////////////////////////////////////////////////////////
 
 `ifndef FUNCTIONAL_MEMORY_TEST_SV
 `define FUNCTIONAL_MEMORY_TEST_SV
 
-// This file is `included inside vortex_test_pkg.
-// All imports are provided by the enclosing package scope — do NOT re-import here.
-
-class functional_memory_test extends vortex_base_test;
+class functional_memory_test extends kernel_launch_test;
     `uvm_component_utils(functional_memory_test)
 
-    // -------------------------------------------------------------------------
-    // Constructor
-    // -------------------------------------------------------------------------
+    localparam int MIN_WARPS   = 4;
+    localparam int MIN_THREADS = 4;
+
     function new(string name = "functional_memory_test", uvm_component parent = null);
         super.new(name, parent);
     endfunction
 
-    // -------------------------------------------------------------------------
-    // build_phase — base handles everything (cfg, vif, env creation)
-    // -------------------------------------------------------------------------
-    virtual function void build_phase(uvm_phase phase);
-        super.build_phase(phase);
-        `uvm_info(get_type_name(), "Building functional memory test...", UVM_LOW)
-    endfunction
-
-    // -------------------------------------------------------------------------
-    // customize_config — called by base.build_phase AFTER set_defaults/apply_plusargs
-    // -------------------------------------------------------------------------
     virtual function void customize_config();
-        cfg.enable_scoreboard   = 1;
-        cfg.enable_coverage     = 1;
-        
-        cfg.simx_enable         = 1;             // <-- SimX is ENABLED
-        cfg.simx_path           = "DPI_MODE";    // <-- BYPASS legacy config validation
+        // Set our default program before calling super, so super's fallback
+        // (which fills program_path only when empty) does not overwrite it.
+        // If +PROGRAM was passed via plusarg, apply_plusargs() already set
+        // cfg.program_path before this method runs — we do not overwrite that.
+        if (cfg.program_path == "")
+            cfg.program_path = "../Vortex/tests/kernel/functional_mem/functional_mem.elf";
 
-        cfg.dcr_agent_is_active = 0;   // PASSIVE — TBTOP owns all DCR writes
+        // Delegate to kernel_launch_test for scoreboard/coverage/SimX enable,
+        // conform-timeout detection, and RESULT_BASE_ADDR / RESULT_SIZE_BYTES
+        // plusarg handling.
+        super.customize_config();
 
-        // This program stores its result at 0x80001000, so point the generic
-        // result comparison window at the actual destination instead of the
-        // default startup+0x100000 region.
-        cfg.result_base_addr    = cfg.startup_addr + 64'h1000;
-        cfg.result_size_bytes   = 4;
-
-        if (cfg.axi_agent_enable) begin
-            cfg.mem_agent_enable = 0;
-        end else begin
-            cfg.mem_agent_enable = 1;
+        // Set scenario-specific result window unless the user provided an
+        // explicit +RESULT_BASE_ADDR override (super sets addr=0 when no plusarg).
+        if (cfg.result_base_addr == 64'h0) begin
+            cfg.result_base_addr  = 64'h0000_0000_8001_0000;
+            cfg.result_size_bytes = 4;
         end
 
-        cfg.axi_agent_is_active = cfg.axi_agent_enable;
-
-        if (cfg.test_timeout_cycles > cfg.global_timeout_cycles)
-            cfg.test_timeout_cycles = cfg.global_timeout_cycles;
-
-        `uvm_info(get_type_name(),
-            $sformatf("FuncMem cfg: startup=0x%016h timeout=%0d cycles iface=%s",
-                cfg.startup_addr,
-                cfg.test_timeout_cycles,
-                cfg.axi_agent_enable ? "AXI4" : "CustomMEM"), UVM_LOW)
+        // Enforce minimum hardware configuration for this scenario.
+        // Policy: fatal-and-refuse — never silently bump the operator's config.
+        if (cfg.num_warps < MIN_WARPS) begin
+            `uvm_fatal(get_type_name(),
+                $sformatf("functional_memory_test requires num_warps >= %0d (configured: %0d). Pass +NUM_WARPS=%0d or higher.",
+                    MIN_WARPS, cfg.num_warps, MIN_WARPS))
+        end
+        if (cfg.num_threads < MIN_THREADS) begin
+            `uvm_fatal(get_type_name(),
+                $sformatf("functional_memory_test requires num_threads >= %0d (configured: %0d). Pass +NUM_THREADS=%0d or higher.",
+                    MIN_THREADS, cfg.num_threads, MIN_THREADS))
+        end
     endfunction
 
-    // -------------------------------------------------------------------------
-    // end_of_elaboration_phase
-    // -------------------------------------------------------------------------
     virtual function void end_of_elaboration_phase(uvm_phase phase);
         super.end_of_elaboration_phase(phase);
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
-        `uvm_info(get_type_name(), " FUNCTIONAL MEMORY TEST                                        ", UVM_LOW)
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
-        `uvm_info(get_type_name(), " Test Flow:                                                     ", UVM_LOW)
-        `uvm_info(get_type_name(), "   1. load_program()         [base]  load hex into mem_model   ", UVM_LOW)
-        `uvm_info(get_type_name(), "   2. wait_for_reset()       [override] level-safe             ", UVM_LOW)
-        `uvm_info(get_type_name(), "   3. monitor_memory_activity[base]  background AXI/MEM counts ", UVM_LOW)
-        `uvm_info(get_type_name(), "   4. run_test_stimulus()    [override] vortex_functional_vseq ", UVM_LOW)
-        `uvm_info(get_type_name(), "   5. wait_for_completion()  [base]  wait for EBREAK           ", UVM_LOW)
-        `uvm_info(get_type_name(), "   6. check_results()        [override] golden value check     ", UVM_LOW)
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
-        `uvm_info(get_type_name(),
-            $sformatf(" Interface : %s", cfg.axi_agent_enable ? "AXI4 (USE_AXI_WRAPPER)" : "Custom MEM"), UVM_LOW)
-        `uvm_info(get_type_name(),
-            $sformatf(" HW Config : %0d clusters x %0d cores x %0d warps x %0d threads",
-                cfg.num_clusters, cfg.num_cores, cfg.num_warps, cfg.num_threads), UVM_LOW)
-        `uvm_info(get_type_name(),
-            $sformatf(" Startup   : 0x%016h", cfg.startup_addr), UVM_LOW)
-        `uvm_info(get_type_name(),
-            $sformatf(" Timeout   : %0d cycles", cfg.test_timeout_cycles), UVM_LOW)
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
+        `uvm_info(get_type_name(), {"\n",
+            "----------------------------------------------------------------\n",
+            " FUNCTIONAL MEMORY TEST                                        \n",
+            "----------------------------------------------------------------\n",
+            "  Scenarios:                                                   \n",
+            "    T1: Word/Halfword/Byte access (data-path width)            \n",
+            "    T2: Per-thread strided access (address computation)        \n",
+            "    T3: Tight Read-After-Write (LSU bypass/write-through)      \n",
+            "    T4: Cross-warp memory visibility (barrier + cache)         \n",
+            "  Interface: ",
+            cfg.axi_agent_enable ? "AXI4 (secondary coverage)\n" :
+                                   "Custom-MEM (primary)\n",
+            "  Check model: black-box end-state vs SimX                    \n",
+            "    Sentinel memory window: 0x80010000 (4 bytes)               \n",
+            "    Console compare:        vx_printf output streams           \n",
+            $sformatf("  Warps=%0d Threads=%0d\n", cfg.num_warps, cfg.num_threads),
+            $sformatf("  Program: %s\n", cfg.program_path),
+            "----------------------------------------------------------------"
+        }, UVM_LOW)
     endfunction
 
-    // -------------------------------------------------------------------------
-    // load_program — OVERRIDE
-    // -------------------------------------------------------------------------
-    virtual task load_program();
-        mem_model mem;
-        string hex_file;
-        int fd;
-
-        #2ns;
-
-        if (!uvm_config_db #(mem_model)::get(null, "*", "mem_model", mem)) begin
-            `uvm_fatal(get_type_name(), "mem_model not found in config_db — was it set by TB_TOP?")
-        end
-
-        if (!$value$plusargs("PROGRAM=%s", hex_file)) begin
-            `uvm_fatal(get_type_name(), "No +PROGRAM plusarg — pass --program=<path> to the run script")
-        end
-
-        fd = $fopen(hex_file, "r");
-        if (fd == 0) begin
-            `uvm_fatal(get_type_name(), $sformatf("Program file not found: %s", hex_file))
-        end
-        $fclose(fd);
-
-        `uvm_info(get_type_name(),
-            $sformatf("Loading hex file: %s at 0x%016h", hex_file, cfg.startup_addr), UVM_LOW)
-
-        bytes_loaded = mem.load_hex_file(hex_file, cfg.startup_addr);
-
-        if (bytes_loaded > 0)
-            `uvm_info(get_type_name(), $sformatf("✓ Loaded %0d bytes into mem_model", bytes_loaded), UVM_LOW)
-        else
-            `uvm_fatal(get_type_name(), $sformatf("load_hex_file() returned 0 bytes — check file format: %s", hex_file))
-    endtask
-
-    // -------------------------------------------------------------------------
-    // wait_for_reset — OVERRIDE
-    // -------------------------------------------------------------------------
-    virtual task wait_for_reset();
-        `uvm_info(get_type_name(), "Waiting for reset (level-safe)...", UVM_MEDIUM)
-        if (!vif.reset_n) @(posedge vif.reset_n);
-        repeat(10) @(posedge vif.clk);
-        `uvm_info(get_type_name(), "Reset released — program pre-loaded, DCR configured by TBTOP", UVM_LOW)
-    endtask
-
-    // -------------------------------------------------------------------------
-    // run_test_stimulus — OVERRIDE
-    // -------------------------------------------------------------------------
-    virtual task run_test_stimulus();
-        vortex_functional_mem_vseq vseq;
-        vseq = vortex_functional_mem_vseq::type_id::create("vseq");
-        `uvm_info(get_type_name(), $sformatf("Starting functional mem test: %0d iters", vseq.num_iterations), UVM_LOW)
-        vseq.start(env.m_virtual_sequencer);
-    endtask
-
-    // -------------------------------------------------------------------------
-    // check_results — OVERRIDE
-    // -------------------------------------------------------------------------
+    // load_program, run_test_stimulus: inherited from kernel_launch_test.
+    //
+    // check_results: extends the inherited equivalence gate with an absolute
+    // sentinel check. The inherited gate verifies DUT == SimX end-state; this
+    // override additionally verifies that RESULT_ADDR holds 0x900DCAFE — the
+    // kernel's success magic. Without this second gate, a test where both DUT
+    // and SimX produce the same wrong output would pass the scoreboard silently.
     virtual function void check_results();
-        uvm_report_server rs = uvm_report_server::get_server();
-        int err_count;
+        mem_model mem;
+        bit [31:0] sentinel;
 
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
-        `uvm_info(get_type_name(), " FUNCTIONAL MEMORY TEST — RESULT VALIDATION                    ", UVM_LOW)
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
+        // Gate 1: DUT-vs-SimX equivalence (inherited scoreboard gate)
+        super.check_results();
 
-        if (bytes_loaded > 0)
-            `uvm_info(get_type_name(), $sformatf("PASS — Program loaded: %0d bytes", bytes_loaded), UVM_LOW)
-        else begin
-            `uvm_error(get_type_name(), "FAIL — Program not loaded (bytes_loaded == 0)")
-            test_passed = 0;
-            return;
-        end
+        // Gate 2: absolute-correctness sentinel — only meaningful if gate 1 passed.
+        // If gate 1 already failed, the kernel did not complete or both sides
+        // diverged; adding more errors here would be noise.
+        if (!test_passed) return;
 
-        `uvm_info(get_type_name(), "PASS ��� DCR configured by TBTOP during reset", UVM_LOW)
-
-        if (vif.status_if.ebreak_detected)
-            `uvm_info(get_type_name(), $sformatf("PASS — EBREAK detected at cycle %0d", completion_cycle), UVM_LOW)
-        else begin
-            `uvm_error(get_type_name(), "FAIL — EBREAK not detected (DUT never completed)")
-            test_passed = 0;
-            return;
-        end
-
-        err_count = rs.get_severity_count(UVM_ERROR);
-        if (err_count == 0) begin
-            test_passed = 1;
-            `uvm_info(get_type_name(), "PASS — Golden value match confirmed by vseq", UVM_LOW)
-        end else begin
-            test_passed = 0;
+        if (!uvm_config_db#(mem_model)::get(null, "*", "mem_model", mem)) begin
             `uvm_error(get_type_name(),
-                $sformatf("FAIL — %0d UVM_ERROR(s) detected (check golden mismatch above)", err_count))
+                "FAIL — mem_model not available for absolute sentinel check at RESULT_ADDR")
+            test_passed = 0;
+            return;
         end
 
-        `uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
+        sentinel = mem.read_word(64'h0000_0000_8001_0000);
+        if (sentinel !== 32'h900DCAFE) begin
+            `uvm_error(get_type_name(),
+                $sformatf("FAIL — kernel reported errors: RESULT_ADDR=0x80010000=0x%08h (expected 0x900DCAFE); DUT==SimX equivalence held but the kernel itself failed",
+                    sentinel))
+            test_passed = 0;
+        end else begin
+            `uvm_info(get_type_name(),
+                "PASS — RESULT_ADDR=0x900DCAFE: kernel success sentinel confirmed",
+                UVM_LOW)
+        end
     endfunction
 
 endclass : functional_memory_test
