@@ -351,6 +351,7 @@ module vortex_tb_top;
     int          tb_idle_cycles;
     logic        tb_probe_ebreak_seen;   // C3: registered — set when ebreak first seen at fetch
     wire         tb_ebreak_fetch;        // C3: combinational — same-cycle ebreak detect
+    wire         tb_commit_fire;         // C2: real commit handshake from VX_commit.commit_arb_if[0]
 
     int idle_threshold_val = 5000;
     initial begin
@@ -369,12 +370,14 @@ module vortex_tb_top;
         end else begin
             tb_cycle_count <= tb_cycle_count + 1;
 
+            // C2: real retired instruction count from VX_commit.commit_arb_if[0]
+            if (tb_commit_fire) tb_instr_count <= tb_instr_count + 1;
+
             if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
                 (vif.axi_if.bvalid && vif.axi_if.bready) ||
                 (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0])) begin
                 tb_mem_ops     <= tb_mem_ops + 1;
                 tb_idle_cycles <= 0;
-                if (tb_mem_ops % 3 == 0) tb_instr_count <= tb_instr_count + 1;
                 if (!tb_execution_started) begin
                     tb_execution_started <= 1;
                     $display("\n[TB_STATUS @ %0t] Execution STARTED", $time);
@@ -480,6 +483,12 @@ module vortex_tb_top;
         // C3: drive module-level wire — same-cycle ebreak detection
         assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
 
+        // C2: real retired count — commit_arb_if[0] is the single-issue-lane commit bus
+        // (ISSUE_WIDTH=UP(NUM_WARPS/16)=1 for default 4W config). Instance: VX_core.commit.
+        assign tb_commit_fire =
+            dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].valid &&
+            dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].ready;
+
         reg tb_probe_exit_addr_seen;
 
         // Extract cache bus signals from core (1C_1S_1C config: cluster[0].socket[0].core[0])
@@ -551,6 +560,11 @@ module vortex_tb_top;
 
         // C3: drive module-level wire — same-cycle ebreak detection
         assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
+
+        // C2: real retired count — non-AXI path (same VX_commit instance name: commit)
+        assign tb_commit_fire =
+            dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].valid &&
+            dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].ready;
 
         reg tb_probe_exit_addr_seen;
 
