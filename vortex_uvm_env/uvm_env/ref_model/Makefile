@@ -60,10 +60,10 @@ CXXFLAGS     += -I$(THIRD_PARTY)/cvfpu/src
 
 # Architecture configuration to solve processor problems
 XLEN          ?= 32
-NUM_CLUSTERS  ?= 1
-NUM_CORES     ?= 2
-NUM_WARPS     ?= 4
-NUM_THREADS   ?= 4
+# NUM_CLUSTERS  ?= 1
+# NUM_CORES     ?= 2
+# NUM_WARPS     ?= 4
+# NUM_THREADS   ?= 4
 EXTRA_CXXFLAGS ?=
 
 ARCH_CONFIGS  = -DNUM_CLUSTERS=$(NUM_CLUSTERS)
@@ -91,8 +91,8 @@ CXXFLAGS     += $(EXTRA_CXXFLAGS)
 
 # Debug settings
 CXXFLAGS     += -DDEBUG_LEVEL=3
-CXXFLAGS     += -g
-CXXFLAGS     += -UNDEBUG 
+# CXXFLAGS     += -g
+# CXXFLAGS     += -UNDEBUG 
 
 # Linker flags - KEY FIX: -static-libstdc++ -static-libgcc embed C++ runtime
 # This prevents GLIBCXX_3.4.29 errors from Questa's old GCC 7.4.0 libstdc++

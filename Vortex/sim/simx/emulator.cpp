@@ -223,6 +223,26 @@ int Emulator::get_exitcode() const {
   return warps_.at(0).ireg_file.at(3).at(0);
 }
 
+std::vector<uint64_t> Emulator::read_dst_reg(uint32_t wid, const RegOpd& dst) const {
+  const auto& warp = warps_.at(wid);
+  std::vector<uint64_t> values(arch_.num_threads(), 0);
+  switch (dst.type) {
+  case RegType::Integer:
+    for (uint32_t t = 0, n = arch_.num_threads(); t < n; ++t) {
+      values[t] = static_cast<uint64_t>(warp.ireg_file.at(dst.idx).at(t));
+    }
+    break;
+  case RegType::Float:
+    for (uint32_t t = 0, n = arch_.num_threads(); t < n; ++t) {
+      values[t] = warp.freg_file.at(dst.idx).at(t);
+    }
+    break;
+  default:
+    break;
+  }
+  return values;
+}
+
 void Emulator::suspend(uint32_t wid) {
   assert(!stalled_warps_.test(wid));
   stalled_warps_.set(wid);
@@ -471,7 +491,11 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
     if (vec_unit_->get_csr(addr, wid, tid, &value))
       return value;
   #endif
-    if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
+    if ((addr >= 0x300 && addr < 0x400) || (addr >= 0xF00 && addr < 0x1000)) {
+      // silently return 0 for unimplemented machine-mode / hw-id CSRs
+      // (covers riscv-dv boilerplate: 0x343/MTINST, 0x344/MIP, etc.)
+      return 0;
+    } else if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
      || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
       // user-defined MPM CSRs
       auto perf_class = dcrs_.base_dcrs.read(VX_DCR_BASE_MPM_CLASS);
@@ -587,6 +611,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
   #endif
     break;
   case VX_CSR_MSTATUS:
+  case VX_CSR_MISA:
   case VX_CSR_MEDELEG:
   case VX_CSR_MIDELEG:
   case VX_CSR_MIE:
@@ -602,6 +627,8 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
       if (vec_unit_->set_csr(addr, wid, tid, value))
         return;
     #endif
+      if ((addr >= 0x300 && addr < 0x400) || (addr >= 0xF00 && addr < 0x1000))
+        return; // silently ignore unimplemented machine-mode / hw-id CSR writes
       std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
       std::flush(std::cout);
       std::abort();

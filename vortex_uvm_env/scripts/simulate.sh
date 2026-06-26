@@ -57,6 +57,11 @@ if [[ $VERBOSE -eq 1 ]]; then
     SIM_OPTS="$SIM_OPTS +VERBOSE"
 fi
 
+# Stress iterations — read by random_instruction_stress_test via +NUM_STRESS_ITER
+if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
+    SIM_OPTS="$SIM_OPTS +NUM_STRESS_ITER=$STRESS_ITER"
+fi
+
 
 
 
@@ -81,11 +86,12 @@ if [[ "$SIMULATOR" == "questa" ]]; then
     export LD_PRELOAD=/lib/x86_64-linux-gnu/libstdc++.so.6
 
     if [[ $GUI_MODE -eq 1 ]]; then
-        vsim vortex_tb_top $SIM_OPTS $DPI_FLAG \
+        vsim -coverage vortex_tb_top $SIM_OPTS $DPI_FLAG \
             -do "add wave -r /*; run -all"
     else
-        vsim -c vortex_tb_top $SIM_OPTS $DPI_FLAG \
-            -do "run -all; quit -f" \
+        vsim -coverage -c vortex_tb_top $SIM_OPTS $DPI_FLAG \
+            -onfinish stop \
+            -do "run -all; coverage save $RESULTS_RUN_DIR/reports/coverage.ucdb; quit -f" \
             2>&1 | tee "$LOG_FILE"
     fi
 
@@ -106,15 +112,16 @@ SIM_EXIT_CODE=$?
 print_header "Results"
 
 
-# Count UVM errors directly — this is the authoritative source
-# Subtract the 2 expected end-of-test UVM_ERRORs (base_test + smoke_test banners)
-# that fire ONLY when test_passed=0 — they are symptoms, not causes.
-# Real errors are the ones fired DURING simulation.
+# Count UVM errors directly — this is the authoritative source.
+# T4: no subtraction. Every UVM_ERROR in the log is a real failure.
+# The old "-2" workaround was hiding real errors; root causes that
+# generated phantom errors (wait_for_completion stale event, vacuous-run)
+# were fixed directly (commits 2ccef437, 11f71359).
 UVM_ERRORS=$(grep -c "^# UVM_ERROR /" "$LOG_FILE" 2>/dev/null || true)
 UVM_ERRORS=${UVM_ERRORS:-0}
 UVM_FATALS=$(grep -c "^# UVM_FATAL /" "$LOG_FILE" 2>/dev/null || true)
 UVM_FATALS=${UVM_FATALS:-0}
-REAL_UVM_ERRORS=$((UVM_ERRORS > 2 ? UVM_ERRORS - 2 : UVM_ERRORS))
+REAL_UVM_ERRORS=$UVM_ERRORS
 
 # Count RTL assertion errors — lines starting with "# ** Error:" in the log.
 # These are real DUT failures that must cause the run to be marked FAILED
@@ -174,6 +181,33 @@ if grep -q "Total Cycles\|Cycles:" "$LOG_FILE" 2>/dev/null; then
     grep -E "Total Cycles|Cycles:|Instructions|IPC" "$LOG_FILE" | sed 's/^/  /'
 fi
 
+
+################################################################################
+# Coverage report (per-run; merge across runs via merge_coverage.sh)
+################################################################################
+
+
+COV_UCDB="$RESULTS_RUN_DIR/reports/coverage.ucdb"
+if [[ "$SIMULATOR" == "questa" && -f "$COV_UCDB" && $PER_RUN_COV_REPORT -eq 1 ]]; then
+    EXCLUDE_DO="$SCRIPTS_DIR/coverage_exclude.do"
+    EXCL_CMD=""
+    [[ -f "$EXCLUDE_DO" ]] && EXCL_CMD="do $EXCLUDE_DO;"
+    print_info "Coverage: generating per-run report (--cov-report)"
+    vsim -viewcov "$COV_UCDB" -c -do "
+        ${EXCL_CMD}
+        coverage report -details -cvg -code bcst -output $RESULTS_RUN_DIR/reports/coverage.txt;
+        coverage report -details -byfile -output $RESULTS_RUN_DIR/reports/coverage_by_file.txt;
+        quit -f;" >/dev/null 2>&1 || true
+fi
+
+# auto-stage this run's UCDB for the next merge (one slot PER PROGRAM, so
+# re-running a kernel overwrites its own slot instead of piling up)
+if [[ -f "$COV_UCDB" ]]; then
+    mkdir -p "$PROJECT_ROOT/cov/staging"
+    stage_name="${TEST_NAME}_${PROGRAM:-noprog}"
+    stage_name="$(echo "$stage_name" | tr '/ ' '__')"   # sanitize path/space
+    cp "$COV_UCDB" "$PROJECT_ROOT/cov/staging/${stage_name}.ucdb"
+fi
 
 ################################################################################
 # Create Summary Report
