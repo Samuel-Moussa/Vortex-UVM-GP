@@ -166,6 +166,7 @@ NO_WAVES=0
 GUI_MODE=0
 VERBOSE=0
 PER_RUN_COV_REPORT=0
+STRESS_ITER=1
 
 # Simulator (auto-detected in prepare.sh)
 SIMULATOR=""
@@ -193,6 +194,7 @@ for arg in "$@"; do
         --threads=*)      NUM_THREADS="${arg#*=}" ;;
         --timeout=*)      TIMEOUT_CYCLES="${arg#*=}" ;;
         --startup-addr=*) STARTUP_ADDR="${arg#*=}" ;;
+        --stress-iter=*)  STRESS_ITER="${arg#*=}" ;;
         --no-compile)     NO_COMPILE=1 ;;
         --no-waves)       NO_WAVES=1 ;;
         --cov-report)     PER_RUN_COV_REPORT=1 ;;
