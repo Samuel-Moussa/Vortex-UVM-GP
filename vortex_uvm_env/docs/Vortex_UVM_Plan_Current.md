@@ -11,7 +11,7 @@
 | 2026-06-26 | `7764ba14` | **[S] C3 DONE:** ebreak (0x00100073) decoded at fetch stage drives completion as primary; busy=0 and idle-threshold demoted to fallback warnings. hello → PASS. |
 | 2026-06-26 | `22115864` | **[S] C2 DONE:** tb_mem_ops%3 fabrication removed; real commit handshake tap → tb_instr_count. vecadd: 12798 instrs / 100k cycles = IPC 0.128. |
 | 2026-06-26 | `4661f7cb` | **[S] riscv-dv pipeline:** prepare.sh corrected path + gcc assemble step; --stress-iter wired through Makefile→run.sh→simulate.sh→plusarg. |
-| 2026-06-26 | `2ccef437` | **[S] riscv_arithmetic_basic_test PASS (0 errors):** 6 root causes fixed — SimX CSR guards, RVC (rv32im target), RTL CSR assert (sed strip), ecall→ebreak, UVM stale event, vacuous-run. Documented in docs/session_fixes_2026-06-26.md. |
+| 2026-06-26 | `2ccef437` | **[S] riscv_arithmetic_basic_test PASS (0 errors):** 6 root causes fixed — SimX CSR guards, RVC (rv32im target), RTL CSR assert (sed strip), ecall→ebreak, UVM stale event, vacuous-run. Documented per-issue in docs/fixes/ (fix_06–fix_12). |
 | 2026-06-26 | `11f71359` | **[S] I1 DONE (probe side):** generate loops replace cluster[0] hardcodes for tb_commit_fires_all and tb_ebreak_fetch_all. Correct for any NUM_CLUSTERS/NUM_CORES/ISSUE_WIDTH. hello + riscv-dv stress PASS. |
 
 **Team:** Samuel **[S]** (infra correctness + full configurability) · Ahmad **[A]** (coverage + scoreboard) · Steven **[St]** (tests, sequences, SVA, SimX/DPI)
@@ -39,7 +39,7 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 - **I1-probes ✅** `tb_commit_fires_all[TB_NUM_LANES]` and `tb_ebreak_fetch_all[TB_NUM_CORES_T]` driven by `genvar` loops — no more `cluster[0]` hardcodes. Both AXI and non-AXI `ifdef` paths updated. Behaviorally identical for primary config (loop iterates once). (`11f71359`)
 
 **DONE — riscv-dv pipeline (new this session):**
-- **riscv-dv `random_instruction_stress_test` / `riscv_arithmetic_basic_test` ✅** — 0 UVM_ERROR, 0 UVM_FATAL, EBREAK at 88387 cycles. Six root causes fixed: SimX M-mode CSR guards, RVC decode crash (rv32im target), RTL CSR assertion (sed strip), ecall→ebreak, UVM stale `wait_trigger()`, vacuous-run false error. Documented in `docs/session_fixes_2026-06-26.md`. (`4661f7cb`, `2ccef437`)
+- **riscv-dv `random_instruction_stress_test` / `riscv_arithmetic_basic_test` ✅** — 0 UVM_ERROR, 0 UVM_FATAL, EBREAK at 88387 cycles. Six root causes fixed: SimX M-mode CSR guards, RVC decode crash (rv32im target), RTL CSR assertion (sed strip), ecall→ebreak, UVM stale `wait_trigger()`, vacuous-run false error. Documented per-issue in `docs/fixes/` (fix_06–fix_12). (`4661f7cb`, `2ccef437`)
 
 **DONE — Infrastructure (pre-session):**
 - 5-agent UVM env, virtual sequencer, config-DB plusarg flow.

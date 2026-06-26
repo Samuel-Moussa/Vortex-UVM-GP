@@ -11,7 +11,7 @@ author: Samuel Moussa
 
 The riscv-dv pipeline had never been run end-to-end before this session. Three independent plumbing bugs prevented it from even starting:
 
-1. **Wrong path**: `prepare.sh` was looking for the generated `.S` assembly in the wrong directory. The riscv-dv `run.py` outputs to `out/asm_tests/<test_name>/<iter>/`, but `prepare.sh` was searching `out/<test_name>/` — file was never found.
+1. **Wrong path**: `prepare.sh` was not locating the generated `.S` assembly. riscv-dv writes to `<RISCV_DV_HOME>/out_<date>/asm_test/<test_name>_0.S` (directory `asm_test`, singular; file suffixed `_0.S`). The fix searches the riscv-dv home for `*/asm_test/${PROGRAM}_0.S` and takes the newest.
 
 2. **Missing assemble+link step**: `prepare.sh` was trying to load a `.hex` file directly from riscv-dv output, but riscv-dv generates `.S` (assembly source), not `.hex`. The compile step (gcc assemble + link + objcopy to hex) was entirely missing.
 
@@ -19,39 +19,44 @@ The riscv-dv pipeline had never been run end-to-end before this session. Three i
 
 ---
 
-## Files Edited
+## Files Edited (code copied verbatim from commit 4661f7cb)
+
+> NOTE: at this commit the gcc target was still `rv32imc` and the linker used
+> riscv-dv's own `link.ld`. The switch to `rv32im` (no RVC) and the sed
+> post-processing came LATER, in commit 2ccef437 — see
+> [fix_08](fix_08_riscv_dv_rvc_decode_crash.md) and
+> [fix_09](fix_09_riscv_dv_rtl_csr_assertion.md). Don't conflate the two.
 
 ### `vortex_uvm_env/scripts/prepare.sh`
 
-**Path fix** — find the `.S` file in the correct riscv-dv output directory:
+**riscv-dv home + path discovery** — riscv-dv writes to
+`out_<date>/asm_test/<test>_0.S` (note: `asm_test` singular, `_0.S` suffix):
 ```bash
-# Before:
-PROGRAM_SOURCE=$(find "$RISCVDV_OUT_DIR/$PROGRAM" -name "*.S" | head -1)
-
-# After:
-PROGRAM_SOURCE=$(find "$RISCVDV_OUT_DIR/asm_tests/$PROGRAM" -name "*.S" 2>/dev/null | head -1)
+RISCV_DV_HOME="${RISCV_DV_HOME:-$HOME/riscv-dv}"
+# find the newest matching generated assembly:
+PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | sort -r | head -1)
 ```
 
-**Assemble + link step** — added before hex conversion:
+**Assemble + link step** — added because riscv-dv emits raw `.S`, not ELF/hex.
+The actual compiler call at this commit (rv32imc, riscv-dv link script):
 ```bash
-# Compile: assemble and link to ELF
-PROGRAM_ELF="${PROGRAM_HEX%.hex}.elf"
-riscv32-unknown-elf-gcc \
-    -march=rv32im_zicsr_zifencei -mabi=ilp32 \
-    -nostdlib -static \
-    -Ttext=0x80000000 \
-    -o "$PROGRAM_ELF" \
-    "$ASM_CLEAN"   # see fix_07 for why we compile the cleaned version, not the raw .S
-
-# Convert ELF to hex
-riscv32-unknown-elf-objcopy -O verilog \
-    --verilog-data-width=4 \
-    "$PROGRAM_ELF" "$PROGRAM_HEX"
+ASM_ELF="${PROGRAM_HEX%.hex}.elf"
+RISCV_GCC="${RISCV_GCC:-riscv64-unknown-elf-gcc}"
+if $RISCV_GCC \
+    -T"$RISCV_DV_HOME/scripts/link.ld" \
+    -march=rv32imc_zicsr_zifencei -mabi=ilp32 \
+    -o "$ASM_ELF" \
+    "$PROGRAM_SOURCE" 2>&1 | tee "$OBJCOPY_LOG"; then
+    PROGRAM_SOURCE="$ASM_ELF"   # downstream objcopy→hex now has a real ELF
+fi
 ```
+(`riscv64-unknown-elf-gcc` with `-mabi=ilp32`/`-march=rv32*` produces a 32-bit
+ELF — the 64-bit toolchain is just what's installed; the ABI/arch flags pin it
+to RV32.)
 
 ### `vortex_uvm_env/scripts/simulate.sh`
 
-**STRESS_ITER wiring** — added plusarg for stress iteration count:
+**STRESS_ITER wiring** — added plusarg for stress iteration count (verbatim):
 ```bash
 # Stress iterations — read by random_instruction_stress_test via +NUM_STRESS_ITER
 if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
@@ -59,7 +64,8 @@ if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
 fi
 ```
 
-The Makefile exposes `STRESS_ITER=N` as a make variable which is forwarded to `simulate.sh` via the environment.
+`vortex_uvm_env/Makefile` and `scripts/run.sh` were also touched (4 + 2 lines)
+to expose `STRESS_ITER=N` as a make variable and forward it through.
 
 ---
 
@@ -75,11 +81,13 @@ The Makefile exposes `STRESS_ITER=N` as a make variable which is forwarded to `s
 **No conflicts for this specific fix.** `prepare.sh` and `simulate.sh` are Samuel's lane.
 
 **Steven — important note on `prepare.sh`:**
-Steven's D-simx task involves wiring SimX to run with the correct multi-core parameters. The `prepare.sh` script is where the program ELF/hex is generated. If Steven's SimX integration requires a differently-linked ELF (e.g., different start address, additional sections), he needs to coordinate with Samuel on the gcc flags in `prepare.sh`. The current flags are:
+Steven's D-simx task involves wiring SimX to run with the correct multi-core parameters. `prepare.sh` is where the program ELF/hex is generated. If D-simx needs a differently-linked ELF (different start address, extra sections), coordinate with Samuel. As of this commit the riscv-dv compile uses riscv-dv's own link script and `rv32imc`:
 ```
--march=rv32im_zicsr_zifencei -mabi=ilp32 -nostdlib -static -Ttext=0x80000000
+riscv64-unknown-elf-gcc -T<RISCV_DV_HOME>/scripts/link.ld -march=rv32imc_zicsr_zifencei -mabi=ilp32
 ```
+(Later changed to `rv32im` by commit 2ccef437 — see fix_08.)
 
 **Note on riscv-dv output directory structure:**
-riscv-dv `run.py` creates: `out/asm_tests/<test_name>/<iter>/<test_name>_<iter>.S`
-The `RISCVDV_OUT_DIR` variable in `prepare.sh` must point to the riscv-dv `out/` directory. If the riscv-dv install location changes, this path must be updated.
+riscv-dv creates `<RISCV_DV_HOME>/out_<date>/asm_test/<test_name>_0.S`. `prepare.sh`
+discovers it via `find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S"`. Override
+the search root with `export RISCV_DV_HOME=/path/to/riscv-dv` before invoking make.
