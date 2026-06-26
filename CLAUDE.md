@@ -35,7 +35,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ---
 
-**Synced-to:** `37cfce55` (2026-06-26) — I2 done; Tier-1 probe items complete (C1/C2/C3/T4/I1/I2 ✅)
+**Synced-to:** `I5-commit` (2026-06-26) — I5 done; dead files removed, stale // 8 comments fixed
 
 ## CHECKLIST — Samuel's tasks (finish top-down)
 
@@ -64,7 +64,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 - [x] **I2 — elaboration asserts.** UVM params == DUT params (widths, counts) fail loud at elaboration with a clear message.
   *[DONE 37cfce55 2026-06-26]:* `u_i2_topology_asserts` initial block in `vortex_tb_top.sv`. Reads four plusargs at time=0, compares against RTL macros; `$fatal` on mismatch. Clean run prints `[I2-ASSERT] Topology OK: 1CL 1C 4W 4T`. Negative: `sim-only CLUSTERS=2` on 1-cluster RTL prints `[I2-ASSERT] NUM_CLUSTERS: plusarg=2 but RTL compiled with 1` and aborts.*
 - [ ] **I3 — SimX param-match.** Coordinate config → SimX build/runtime *(with Steven's D-simx)*. *Accept:* SimX instantiated with same cores/clusters as DUT.
-- [ ] **I5 — hygiene.** Remove dead files (`vortex_config2.sv`, `vortex_status_if_fixed.sv`); fix stale comments.
+- [x] **I5 — hygiene.** Remove dead files (`vortex_config2.sv`, `vortex_status_if_fixed.sv`); fix stale comments.
 - [ ] **P1-bind — passive commit probe.** `bind` a passive monitor on `commit_arb_if[*]` (observability only, never a checker); add `initial assert ($bits(uuid) > 1)`. *(I build the bind + interface; Ahmad samples it for coverage.)*
   *PARTIAL — `vx_instr_probe` bound on `VX_dispatch`, `vx_sched_probe` on `VX_schedule`. The commit_arb_if[*] bind and UUID assert are NOT present. IMPLEMENTED-UNVERIFIED on dispatch/sched probes.*
 
