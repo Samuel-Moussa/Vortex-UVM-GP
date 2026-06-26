@@ -10,7 +10,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 > Place at repo root. Claude Code reads this every session. **Keep the checklist below up to date — check a box only after its acceptance check passes in the actual simulator, then commit.**
 
 ## Who / what
-- I am **Samuel**. My lane: **infrastructure correctness + full configurability**. Coverage & scoreboard belong to **Ahmad**; directed/random tests, AXI SVA, SimX/DPI belong to **Steven**. Do not silently do their work — if a shared file needs a change in their lane, flag it.
+- I am **Samuel**. My lane: **infrastructure correctness + full configurability + constrained-random (riscv-dv) testing**. Coverage & scoreboard belong to **Ahmad**; directed tests, AXI SVA, SimX/DPI belong to **Steven**. Do not silently do their work — if a shared file needs a change in their lane, flag it.
 - Repo: `Samuel-Moussa/Vortex-UVM-GP` · branch `Sudky_scoreboard_and_coverage_collector` · RTL pin `7a52ee5`.
 - Stack: QuestaSim 2021.2_1, Ubuntu 22.04. Primary config **1CL/1C/4W/4T RV32 AXI**. SimX = golden reference (DPI). AXI memory interface.
 - Verification method is **black-box**: end-state equivalence vs SimX. No white-box per-unit scoreboards in this plan (that's Future Work).
