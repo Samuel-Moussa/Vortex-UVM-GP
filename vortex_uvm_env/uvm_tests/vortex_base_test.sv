@@ -247,10 +247,17 @@ class vortex_base_test extends uvm_test;
     // Wait for Completion
     //==========================================================================
     virtual task wait_for_completion();
+        // Fast path: run_test_stimulus() may have already waited for EBREAK.
+        // wait_trigger() misses past triggers; check the RTL signal directly.
+        if (vif.status_if.ebreak_detected) begin
+            repeat(5) @(posedge vif.clk);
+            `uvm_info(get_type_name(), "EBREAK already detected (fast path)", UVM_LOW)
+            return;
+        end
         fork
             begin
                 fork
-                    // Bulletproof fix: Wait for the UVM event triggered by the scoreboard/monitor!
+                    // Wait for the UVM event triggered by the scoreboard/monitor.
                     begin
                         if (cfg != null && cfg.ebreak_event != null)
                             cfg.ebreak_event.wait_trigger();
