@@ -212,13 +212,13 @@ class vortex_config extends uvm_object;
     //==========================================================================
     // AXI4 INTERFACE
     // FIXED: ID/DATA/STRB widths must match VX_MEM_* package params.
-    //   AXI_ID_WIDTH   = VX_MEM_TAG_WIDTH  = 8  (NOT 50, NOT 4)
+    //   AXI_ID_WIDTH   = VX_MEM_TAG_WIDTH  = VX_gpu_pkg::VX_MEM_TAG_WIDTH (e.g. 50 debug, 7 NDEBUG)
     //   AXI_DATA_WIDTH = VX_MEM_DATA_WIDTH = 512
     //   AXI_STRB_WIDTH = VX_MEM_LINE_SIZE  = 64
     //   AXI_ADDR_WIDTH = mem_addr_width    = 32 (RV32) or 48 (RV64)
     //==========================================================================
 
-    int unsigned        AXI_ID_WIDTH;    // FIXED = 8 (= VX_MEM_TAG_WIDTH)
+    int unsigned        AXI_ID_WIDTH;    // = VX_gpu_pkg::VX_MEM_TAG_WIDTH (derived, not hardcoded)
     rand int unsigned   AXI_ADDR_WIDTH;  // 32 or 48, tracks mem_addr_width
     int unsigned        AXI_DATA_WIDTH;  // FIXED = 512 (= VX_MEM_DATA_WIDTH)
     rand int unsigned   AXI_USER_WIDTH;
@@ -617,7 +617,7 @@ class vortex_config extends uvm_object;
         // FIXED — must always match the package parameters above
         mem_data_width   = VX_MEM_DATA_WIDTH;    // 512
         mem_byteen_width = VX_MEM_BYTEEN_WIDTH;  // 64
-        mem_tag_width    = VX_MEM_TAG_WIDTH;      // 8
+        mem_tag_width    = VX_MEM_TAG_WIDTH;      // derived — see VX_gpu_pkg::VX_MEM_TAG_WIDTH
 
         `ifdef STARTUP_ADDR
             startup_addr = `STARTUP_ADDR;
@@ -678,7 +678,7 @@ class vortex_config extends uvm_object;
         // --- AXI4 — FIXED widths derived from VX_MEM_* pkg params ---
         // AXI_ID_WIDTH and AXI_DATA_WIDTH MUST equal pkg params.
         // Never set these to arbitrary values.
-        AXI_ID_WIDTH   = VX_MEM_TAG_WIDTH;      // 8  — L3_MEM_TAG_WIDTH
+        AXI_ID_WIDTH   = VX_MEM_TAG_WIDTH;      // derived (e.g. 50 debug / 7 NDEBUG)
         AXI_DATA_WIDTH = VX_MEM_DATA_WIDTH;      // 512 — matches mem bus
         AXI_STRB_WIDTH = VX_MEM_BYTEEN_WIDTH;    // 64
 
@@ -910,10 +910,10 @@ class vortex_config extends uvm_object;
         // mem_data/byteen/tag NEVER change — re-assert for safety
         mem_data_width   = VX_MEM_DATA_WIDTH;    // 512
         mem_byteen_width = VX_MEM_BYTEEN_WIDTH;  // 64
-        mem_tag_width    = VX_MEM_TAG_WIDTH;      // 8
+        mem_tag_width    = VX_MEM_TAG_WIDTH;      // derived — see VX_gpu_pkg::VX_MEM_TAG_WIDTH
 
         // AXI ID/DATA/STRB widths are FIXED — re-assert
-        AXI_ID_WIDTH   = VX_MEM_TAG_WIDTH;    // 8
+        AXI_ID_WIDTH   = VX_MEM_TAG_WIDTH;    // derived (e.g. 50 debug / 7 NDEBUG)
         AXI_DATA_WIDTH = VX_MEM_DATA_WIDTH;   // 512
         AXI_STRB_WIDTH = VX_MEM_BYTEEN_WIDTH; // 64
         // AXI_ADDR_WIDTH already updated above if XLEN_64

@@ -13,7 +13,7 @@
 //
 //   AXI_ADDR_W = vortex_config_pkg::AXI_ADDR_WIDTH  (32 RV32, 48 RV64)
 //   AXI_DATA_W = vortex_config_pkg::AXI_DATA_WIDTH  (512, fixed)
-//   AXI_ID_W   = vortex_config_pkg::AXI_ID_WIDTH    (8,   fixed = VX_MEM_TAG_WIDTH)
+//   AXI_ID_W   = vortex_config_pkg::AXI_ID_WIDTH    (derived = VX_gpu_pkg::VX_MEM_TAG_WIDTH)
 //
 // Usage in testbench:
 //   vortex_if vif(clk, reset_n);
@@ -44,7 +44,7 @@ interface vortex_if (
     //==========================================================================
     // SUB-INTERFACE INSTANTIATION
     // Parameters sourced from vortex_config_pkg, NOT from raw RTL macros.
-    //   AXI_ID_WIDTH   = 8   (VX_MEM_TAG_WIDTH = L3_MEM_TAG_WIDTH)
+    //   AXI_ID_WIDTH   = VX_gpu_pkg::VX_MEM_TAG_WIDTH (derived, e.g. 50 debug / 7 NDEBUG)
     //   AXI_DATA_WIDTH = 512 (VX_MEM_DATA_WIDTH = L3_LINE_SIZE * 8)
     //   AXI_ADDR_WIDTH = 32 or 48 (byte address, XLEN-dependent)
     //==========================================================================
