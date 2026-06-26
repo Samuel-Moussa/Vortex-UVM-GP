@@ -57,6 +57,11 @@ if [[ $VERBOSE -eq 1 ]]; then
     SIM_OPTS="$SIM_OPTS +VERBOSE"
 fi
 
+# Stress iterations — read by random_instruction_stress_test via +NUM_STRESS_ITER
+if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
+    SIM_OPTS="$SIM_OPTS +NUM_STRESS_ITER=$STRESS_ITER"
+fi
+
 
 
 
