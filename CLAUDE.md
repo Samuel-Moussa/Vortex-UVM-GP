@@ -35,7 +35,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ---
 
-**Synced-to:** `I5-commit` (2026-06-26) — I5 done; dead files removed, stale // 8 comments fixed
+**Synced-to:** `a42f164c` (2026-06-26) — I5 done; dead files removed, stale // 8 comments fixed
 
 ## CHECKLIST — Samuel's tasks (finish top-down)
 
