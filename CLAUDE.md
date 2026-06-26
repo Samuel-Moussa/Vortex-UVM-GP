@@ -75,6 +75,28 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ---
 
+## Open Investigation Items
+Issues observed in sim that need root-cause before Gate-0 sign-off. Not yet assigned to a checklist box.
+
+### INV-1 — vecadd `busy` never goes low (completion blocked)
+- **Symptom:** Every vecadd run ends via TIMEOUT, never via `busy=0` fallback or ebreak. `Total Cycles` always equals `TIMEOUT-1`. Doubling the timeout just doubles the cycle count — the program runs indefinitely.
+- **Evidence:** `assert_busy_eventually_idles` fires at `Started: 3895ns + 100000ns window`. `** Error: TIMEOUT after N cycles!` is the only completion path.
+- **Candidates:**
+  1. `vif.status_if.busy` is not properly wired to the DUT `busy` output (check `vortex_if.sv` binding vs. DUT port).
+  2. vecadd genuinely never halts — the kernel loop or MMIO exit sequence hangs in DUT.
+  3. The `busy` signal stays high because a warp is stuck (X-prop, infinite loop, wrong hex load).
+- **Impact:** Blocks all completion testing for vecadd; T4 negative-injection test also meaningless until completion is reliable.
+
+### INV-2 — `assert_dcr_write_timing` fires at startup
+- **Symptom:** `vortex_if.sv:172` triggers at 3915ns and 3975ns on every vecadd run.
+- **Evidence:** `Time: 3915 ns Started: 3915 ns Scope: vortex_tb_top.vif.assert_dcr_write_timing`.
+- **Candidates:**
+  1. DCR write sequence in the test or driver violates the timing constraint (setup/hold relative to clock).
+  2. The assertion window is too tight for the testbench's DCR init sequence.
+- **Impact:** Each firing adds to the RTL error count, masking real errors.
+
+---
+
 ## Dependencies to watch
 - **C2 / P1** couple with Ahmad (he samples the probe).
 - **I3 / D-matrix** couple with Steven (SimX cluster runtime).
