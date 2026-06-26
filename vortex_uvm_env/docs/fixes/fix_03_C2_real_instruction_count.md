@@ -9,46 +9,56 @@ author: Samuel Moussa
 
 ## Problem
 
-`status_if.instr_count` was being populated with:
+`tb_instr_count` was being incremented by a fabricated heuristic tied to the
+memory-op counter:
 ```sv
-instr_count <= mem_ops / 3;  // fabricated
+if (tb_mem_ops % 3 == 0) tb_instr_count <= tb_instr_count + 1;  // fabricated: +1 every 3rd mem op
 ```
-`mem_ops` was an AXI transaction counter. Dividing by 3 was a guess based on rough vecadd profiling — it had no basis in the RTL and would be wrong for any other program. IPC computed from this was meaningless.
+`tb_mem_ops` counts AXI/mem handshakes. Bumping the instruction count once every
+3 memory ops was a guess with no basis in the RTL — wrong for any program. IPC
+derived from it was meaningless.
 
-The real fix: tap the `commit_arb_if[*].valid && ready` handshake from `VX_commit` — this fires exactly once per retired instruction.
+The real fix: tap the `commit_arb_if[*].valid && ready` handshake from
+`VX_commit` — this fires exactly once per retired instruction.
 
 ---
 
-## Files Edited
+## Files Edited (code copied verbatim from commit 22115864)
 
 ### `vortex_uvm_env/tb/vortex_tb_top.sv`
 
-**Removed fabricated counter:**
+**Removed fabricated counter (the single removed line in the diff):**
 ```sv
 // REMOVED:
-if (axi_if.wvalid && axi_if.wready) mem_ops <= mem_ops + 1;
-// REMOVED in report:
-instr_count <= mem_ops / 3;
+if (tb_mem_ops % 3 == 0) tb_instr_count <= tb_instr_count + 1;
 ```
 
-**Added real commit tap (single-core, commit 22115864):**
+**Added real commit tap.** Module-level wire + counter increment:
 ```sv
-wire tb_commit_fire =
+wire tb_commit_fire;   // C2: real commit handshake from VX_commit.commit_arb_if[0]
+// ...in the always_ff:
+// C2: real retired instruction count from VX_commit.commit_arb_if[0]
+if (tb_commit_fire) tb_instr_count <= tb_instr_count + 1;
+```
+
+The hierarchy tap (AXI path), copied verbatim:
+```sv
+// C2: real retired count — commit_arb_if[0] is the single-issue-lane commit bus
+// (ISSUE_WIDTH=UP(NUM_WARPS/16)=1 for default 4W config). Instance: VX_core.commit.
+assign tb_commit_fire =
     dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].valid &&
     dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].ready;
-
-always_ff @(posedge clk) begin
-    if (!reset_n)
-        tb_instr_count <= '0;
-    else if (tb_commit_fire)
-        tb_instr_count <= tb_instr_count + 1;
-end
 ```
 
-**Wired into status interface:**
+Non-AXI path uses the same instance name without the `.vortex` wrapper:
 ```sv
-assign status_if.instr_count = tb_instr_count;
+assign tb_commit_fire =
+    dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].valid &&
+    dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].ready;
 ```
+
+**Status wiring** (`vif.status_if.instr_count` is assigned from `tb_instr_count`
+in the existing continuous-assign block — unchanged by C2).
 
 **Extended in commit 11f71359 (I1):**
 Single `tb_commit_fire` replaced with `tb_commit_fires_all[TB_NUM_LANES-1:0]` + popcount accumulator.

@@ -18,53 +18,67 @@ The real fix: decode the actual EBREAK instruction opcode (`0x00100073`) from th
 
 ---
 
-## Files Edited
+## Files Edited (code copied verbatim from commit 7764ba14)
 
 ### `vortex_uvm_env/tb/vortex_tb_top.sv`
 
-**Added constant:**
+**Module-level declarations added:**
 ```sv
-localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+logic        tb_probe_ebreak_seen;   // C3: registered — set when ebreak first seen at fetch
+wire         tb_ebreak_fetch;        // C3: combinational — same-cycle ebreak detect
 ```
 
-**Added combinational wire (single-core, commit 7764ba14):**
+**Constant + combinational wire (inside the probe block; uses the existing
+`fetch_valid`/`fetch_instr` display taps that point at core[0] at this commit):**
 ```sv
-wire tb_ebreak_fetch =
-    dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid &&
-    (dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr
-     == TB_EBREAK_INSTR);
+localparam [31:0] TB_EBREAK_INSTR   = 32'h00100073;
+// C3: drive module-level wire — same-cycle ebreak detection
+assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
 ```
 
-**Registered latch (sets once, holds):**
+**Registered latch (sets once on first ebreak fetch):**
 ```sv
-always_ff @(posedge clk) begin
-    if (!reset_n)
-        tb_probe_ebreak_seen <= 1'b0;
-    else if (!tb_probe_ebreak_seen && tb_ebreak_fetch) begin
-        tb_probe_ebreak_seen <= 1'b1;
-        $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched", $time);
-    end
+if (!tb_probe_ebreak_seen && fetch_valid && (fetch_instr == TB_EBREAK_INSTR)) begin
+    tb_probe_ebreak_seen <= 1'b1;
+    // ... $display ...
 end
 ```
 
-**Completion always_ff updated:**
-Primary trigger is now `tb_probe_ebreak_seen`. The old `busy=0` + idle-threshold paths demoted to `** Warning:` fallbacks.
-
+**Completion `always_ff` — note the real signal is `tb_execution_complete`,
+NOT `status_if.ebreak_detected` directly:**
 ```sv
-// Primary: EBREAK decoded from fetch interface
-if (tb_probe_ebreak_seen && !status_if.ebreak_detected) begin
-    status_if.ebreak_detected <= 1'b1;
-end
-// Fallback (warning): busy went low without ebreak
-else if (!vif.busy && idle_counter >= IDLE_THRESHOLD) begin
-    `uvm_warning("TB", "Completion via busy=0 fallback — no ebreak seen")
-    status_if.ebreak_detected <= 1'b1;
+// C3 PRIMARY: ebreak (0x00100073) decoded at fetch stage
+// tb_ebreak_fetch is combinational (same-cycle); tb_probe_ebreak_seen is registered
+// (latched one cycle earlier) — either fires the primary path.
+if (tb_execution_started && !tb_execution_complete && (tb_ebreak_fetch || tb_probe_ebreak_seen)) begin
+    tb_execution_complete <= 1;
+    $display("\n╔═══════════════════════════════════════════════════╗");
+    $display("║  EXECUTION COMPLETE (ebreak 0x00100073 decoded)  ║");
+    $display("╚═══════════════════════════════════════════════════╝");
+// C3 FALLBACK 1: busy=0 without ebreak — should not happen in a correct run
+end else if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy) begin
+    tb_execution_complete <= 1;
+    $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via busy=0 fallback — ebreak not decoded", $time);
+// C3 FALLBACK 2: idle threshold — program may be hung
+end else if (tb_execution_started && !tb_execution_complete &&
+             tb_idle_cycles >= idle_threshold_val) begin
+    tb_execution_complete <= 1;
+    $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via idle safety net (%0d cyc) — ebreak not decoded", ...);
 end
 ```
+
+`status_if.ebreak_detected` is a *separate* continuous assign downstream:
+```sv
+assign vif.status_if.ebreak_detected = tb_execution_complete && axi_channels_idle && mem_channels_idle;
+```
+So the primary trigger sets `tb_execution_complete`, which (once the bus
+drains) drives `ebreak_detected` that the UVM side waits on.
 
 **Extended in commit 11f71359 (I1):**
-`tb_ebreak_fetch` changed from a single-core wire to an OR across all cores via generate loop.
-See [fix_05_I1_multicore_probes.md](fix_05_I1_multicore_probes.md) for the generate loop details.
+At commit 7764ba14, `tb_ebreak_fetch` was driven from the core[0] `fetch_valid`/
+`fetch_instr` display taps. I1 (11f71359) replaced that with an OR across all
+cores: `assign tb_ebreak_fetch = |tb_ebreak_fetch_all;` fed by a generate loop.
+See [fix_05_I1_multicore_probes.md](fix_05_I1_multicore_probes.md).
 
 ---
 
