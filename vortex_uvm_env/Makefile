@@ -52,6 +52,7 @@ VERBOSE       ?= 0
 NO_WAVES      ?= 0
 DEBUG_ADDR    ?= 0
 NO_TCU        ?= 0
+STRESS_ITER   ?= 1
 
 .DEFAULT_GOAL := help
 
@@ -81,6 +82,9 @@ ifeq ($(DEBUG_ADDR),1)
 endif
 ifeq ($(NO_TCU),1)
     _FLAGS += --no-tcu
+endif
+ifneq ($(STRESS_ITER),1)
+    _FLAGS += --stress-iter=$(STRESS_ITER)
 endif
 
 ################################################################################
