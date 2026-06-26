@@ -18,6 +18,7 @@ Per-issue documentation for all fixes made in this session. Each file covers one
 | [fix_10_riscv_dv_ecall_ebreak.md](fix_10_riscv_dv_ecall_ebreak.md) | ecall → ebreak substitution for TB completion detection | 2ccef437 | None |
 | [fix_11_riscv_dv_uvm_stale_event.md](fix_11_riscv_dv_uvm_stale_event.md) | UVM stale event: wait_trigger() misses past triggers | 2ccef437 | Ahmad (derived tests inherit fix) |
 | [fix_12_riscv_dv_vacuous_run.md](fix_12_riscv_dv_vacuous_run.md) | Vacuous run false UVM_ERROR in scoreboard | 2ccef437 | **Ahmad** (scoreboard.sv is his file) |
+| [fix_13_I2_elaboration_asserts.md](fix_13_I2_elaboration_asserts.md) | I2: elaboration asserts for topology params (NUM_CLUSTERS/CORES/WARPS/THREADS) | 37cfce55 | None (awareness only for Ahmad + Steven) |
 
 ## Teammate Summary
 
