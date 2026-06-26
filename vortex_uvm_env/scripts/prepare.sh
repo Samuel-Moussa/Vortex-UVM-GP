@@ -351,14 +351,27 @@ if [[ -n "$PROGRAM" ]]; then
         elif [[ "$PROGRAM_TYPE" == "riscv-test" || \
                 "$PROGRAM_TYPE" == "riscv-dv"   || \
                 "$PROGRAM_TYPE" == "custom-elf" ]]; then
+            # No --change-addresses: ELF is already linked at 0x80000000.
+            # objcopy without the flag outputs @00000000 (relative offset 0),
+            # and mem_model adds baseaddr=0x80000000 on top → correct placement.
+            # Using --change-addresses=0x80000000 causes @80000000 in the hex,
+            # then 0x80000000+0x80000000=0x100000000 overflow → empty RAM → X-prop.
             if $OBJCOPY \
                 -O verilog \
-                --change-addresses=$STARTUP_ADDR \
                 --verilog-data-width=1 \
                 "$PROGRAM_SOURCE" "$PROGRAM_HEX" 2>&1 | tee "$OBJCOPY_LOG"; then
                 print_success "${PROGRAM_TYPE} converted"
             else
                 print_error "Conversion failed"; cat "$OBJCOPY_LOG"; exit 1
+            fi
+            # Strip Windows CRLF if objcopy emitted them (WSL2 toolchain quirk).
+            tr -d '\r' < "$PROGRAM_HEX" > "${PROGRAM_HEX}.tmp" && mv "${PROGRAM_HEX}.tmp" "$PROGRAM_HEX"
+            # ELFs linked at 0x80000000 produce @80000000; mem_model expects @00000000
+            # (it adds baseaddr on top). Remap silently — both conventions are valid.
+            if [[ "$(head -1 "$PROGRAM_HEX")" == "@80000000" ]]; then
+                # Remap ALL section markers: @80XXXXXX → @00XXXXXX (subtract link base)
+                sed -i 's/^@80/@00/' "$PROGRAM_HEX"
+                print_info "Remapped @80XXXXXX → @00XXXXXX for all sections (ELF linked at 0x80000000)"
             fi
         fi
 
@@ -368,30 +381,7 @@ if [[ -n "$PROGRAM" ]]; then
             if [[ ! -s "$PROGRAM_HEX" ]]; then
                 print_error "HEX file is empty"; exit 1
             fi
-            FIRST_LINE=$(head -1 "$PROGRAM_HEX")
-
-            # ── FIX C (converted files) ──────────────────────────────────────
-            # objcopy --change-addresses=0x80000000 on a binary that is already
-            # linked at 0x80000000 produces @80000000 in the output.
-            # mem_model adds baseaddr on top → 0x100000000 overflow → empty RAM
-            # → DUT fetches nops/zeros → test may PASS vacuously (1 instr, 154 cy).
-            if [[ "$FIRST_LINE" == "@80000000" ]]; then
-                print_error "Converted HEX starts with @80000000 — address overflow bug!"
-                echo ""
-                echo "  The ELF is already linked at 0x80000000."
-                echo "  Do NOT use --change-addresses with a pre-linked ELF."
-                echo "  Use --change-section-address to subtract the link base instead:"
-                echo ""
-                echo "    riscv64-unknown-elf-objcopy -O verilog \\"
-                echo "        --verilog-data-width=1 \\"
-                echo "        --change-section-address .text-0x80000000 \\"
-                echo "        $PROGRAM_SOURCE $PROGRAM_HEX"
-                echo ""
-                echo "  Or fix in-place and re-run:"
-                echo "    sed -i 's/^@80000000/@00000000/' $PROGRAM_HEX"
-                exit 1
-            fi
-            # ─────────────────────────────────────────────────────────────────
+            FIRST_LINE=$(head -1 "$PROGRAM_HEX" | tr -d '\r')
 
             if [[ "$FIRST_LINE" =~ ^@[0-9a-fA-F]{8} ]]; then
                 print_success "HEX format validated"
