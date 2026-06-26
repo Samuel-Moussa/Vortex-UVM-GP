@@ -48,22 +48,21 @@ elif args.target == "rv32im":
 
 ### `vortex_uvm_env/scripts/prepare.sh`
 
-riscv-dv invocation changed from `rv32imc` to `rv32im`:
+riscv-dv invocation changed from the `rv32imc` ISA to the `rv32im` target
+(verbatim from commit 2ccef437 — note the flag itself changed `--isa` → `--target`):
 ```bash
 # Before:
-python3 run.py --target rv32imc ...
-
+            --isa=rv32imc \
 # After:
-python3 run.py --target rv32im ...
+                --target=rv32im \
 ```
 
-GCC compile arch also updated:
+GCC compile arch also updated (verbatim):
 ```bash
 # Before:
--march=rv32imc_zicsr_zifencei
-
+                    -march=rv32imc_zicsr_zifencei -mabi=ilp32 \
 # After:
--march=rv32im_zicsr_zifencei
+                    -march=rv32im_zicsr_zifencei -mabi=ilp32 \
 ```
 
 ---

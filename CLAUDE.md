@@ -70,7 +70,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ### 🟢 NEW THIS SESSION — riscv-dv pipeline end-to-end
 - [x] **riscv-dv `random_instruction_stress_test` with `riscv_arithmetic_basic_test` — PASSING.**
-  *[DONE 2ccef437 2026-06-26]:* 6 root causes fixed across SimX (CSR guards, RVC), prepare.sh (rv32im target, sed post-process for machine-mode CSRs/mret/ecall→ebreak), vortex_base_test.sv (wait_for_completion fast-path), vortex_scoreboard.sv (vacuous-run warning for pure arithmetic programs). 0 UVM_ERROR, 0 UVM_FATAL. EBREAK at 88387 cycles. Documented in `docs/session_fixes_2026-06-26.md`.
+  *[DONE 2ccef437 2026-06-26]:* 6 root causes fixed across SimX (CSR guards, RVC), prepare.sh (rv32im target, sed post-process for machine-mode CSRs/mret/ecall→ebreak), vortex_base_test.sv (wait_for_completion fast-path), vortex_scoreboard.sv (vacuous-run warning for pure arithmetic programs). 0 UVM_ERROR, 0 UVM_FATAL. EBREAK at 88387 cycles. Documented per-issue in `docs/fixes/` (fix_06–fix_12).
   *Also fixed: ISS-01 (hex load address overflow in prepare.sh) was part of C1 commit.*
 
 ### 🟡 TIER 2 — my directed tests
@@ -99,7 +99,7 @@ Issues observed in sim that need root-cause before Gate-0 sign-off. Not yet assi
 
 ### ~~INV-3~~ — RESOLVED: riscv-dv end-to-end now working
 - **Root causes (all fixed, commit 2ccef437):** SimX SIGABRT on VX_CSR_MISA + unguarded M-mode CSR range; SimX decode abort on RVC compressed instructions (rv32imc→rv32im); RTL assertion on csrw 0x301/0x305 (sed post-process strips them); ecall vs ebreak (DUT probe only sees 0x00100073); UVM `wait_trigger()` stale-event race in `wait_for_completion()`; vacuous-run false error for pure arithmetic programs (no data-region stores).
-- See `docs/session_fixes_2026-06-26.md` for full root-cause writeup.
+- See `docs/fixes/` (fix_06–fix_12) for full per-issue root-cause writeups.
 
 ### INV-2 — `assert_dcr_write_timing` fires at startup
 - **Symptom:** `vortex_if.sv:172` triggers at 3915ns and 3975ns on every vecadd run.

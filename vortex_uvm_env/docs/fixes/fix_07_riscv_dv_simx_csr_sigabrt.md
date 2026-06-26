@@ -26,47 +26,43 @@ Two CSR-related failures:
 
 ## Files Edited
 
-### `Vortex/sim/simx/emulator.cpp`
+### `Vortex/sim/simx/emulator.cpp` (code copied verbatim from commit 2ccef437)
 
-**Fix 1 — Add `VX_CSR_MISA` to the silent-ignore list in `set_csr`:**
+**Fix 1 — Add `VX_CSR_MISA` to the existing M-mode fall-through `case` list in
+`set_csr` (it joins MSTATUS/MEDELEG/MIDELEG/MIE/... which already no-op):**
 ```cpp
-// Before: VX_CSR_MISA was missing from the switch entirely
-
-// After: added alongside other ignored CSRs:
-case VX_CSR_MISA:
-    // Vortex is not a full M-mode implementation — ignore writes to misa
-    break;
+  case VX_CSR_MSTATUS:
++ case VX_CSR_MISA:
+  case VX_CSR_MEDELEG:
+  case VX_CSR_MIDELEG:
+  case VX_CSR_MIE:
+  // ... (these all fall through to the same silent handling)
 ```
 
-**Fix 2 — Guard the `default:` with an M-mode range check:**
-
-In `get_csr()`:
+**Fix 2a — `get_csr()`: M-mode range guard inserted BEFORE the existing
+`VX_CSR_MPM_BASE` branch (returns 0 instead of falling to the abort path):**
 ```cpp
-default:
-    // Before:
-    assert(false);
-
-    // After:
     if ((addr >= 0x300 && addr < 0x400) || (addr >= 0xF00 && addr < 0x1000)) {
-        // M-mode CSR range: silently return 0 (Vortex not full M-mode)
-        return 0;
-    }
-    assert(false);  // still fatal for truly unknown CSRs outside M-mode range
+      // silently return 0 for unimplemented machine-mode / hw-id CSRs
+      // (covers riscv-dv boilerplate: 0x343/MTINST, 0x344/MIP, etc.)
+      return 0;
+    } else if ((addr >= VX_CSR_MPM_BASE && addr < (VX_CSR_MPM_BASE + 32))
+            || (addr >= VX_CSR_MPM_BASE_H && addr < (VX_CSR_MPM_BASE_H + 32))) {
+      // ... existing user-defined MPM handling ...
 ```
 
-In `set_csr()`:
+**Fix 2b — `set_csr()`: M-mode range guard inserted in the default branch,
+right before the existing `std::abort()`:**
 ```cpp
-default:
-    // Before:
-    assert(false);
-
-    // After:
-    if ((addr >= 0x300 && addr < 0x400) || (addr >= 0xF00 && addr < 0x1000)) {
-        // M-mode CSR range: silently ignore writes
-        break;
-    }
-    assert(false);
+      if ((addr >= 0x300 && addr < 0x400) || (addr >= 0xF00 && addr < 0x1000))
+        return; // silently ignore unimplemented machine-mode / hw-id CSR writes
+      std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ...;
+      std::flush(std::cout);
+      std::abort();
 ```
+
+Net: 9 lines changed in `emulator.cpp`. The abort path is preserved for any CSR
+**outside** the M-mode/hw-id ranges, so a genuinely unknown CSR still fails loud.
 
 ---
 
