@@ -349,6 +349,8 @@ module vortex_tb_top;
     logic        tb_execution_started;
     logic        tb_execution_complete;
     int          tb_idle_cycles;
+    logic        tb_probe_ebreak_seen;   // C3: registered — set when ebreak first seen at fetch
+    wire         tb_ebreak_fetch;        // C3: combinational — same-cycle ebreak detect
 
     int idle_threshold_val = 5000;
     initial begin
@@ -368,7 +370,7 @@ module vortex_tb_top;
             tb_cycle_count <= tb_cycle_count + 1;
 
             if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
-                (vif.axi_if.bvalid && vif.axi_if.bready) || 
+                (vif.axi_if.bvalid && vif.axi_if.bready) ||
                 (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0])) begin
                 tb_mem_ops     <= tb_mem_ops + 1;
                 tb_idle_cycles <= 0;
@@ -381,19 +383,28 @@ module vortex_tb_top;
                 tb_idle_cycles <= tb_idle_cycles + 1;
             end
 
-            if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy) begin
+            // C3 PRIMARY: ebreak (0x00100073) decoded at fetch stage
+            // tb_ebreak_fetch is combinational (same-cycle); tb_probe_ebreak_seen is registered
+            // (latched one cycle earlier) — either fires the primary path.
+            if (tb_execution_started && !tb_execution_complete && (tb_ebreak_fetch || tb_probe_ebreak_seen)) begin
                 tb_execution_complete <= 1;
                 $display("\n╔═══════════════════════════════════════════════════╗");
-                $display("║  EXECUTION COMPLETE (DUT busy=0)                  ║");
+                $display("║  EXECUTION COMPLETE (ebreak 0x00100073 decoded)  ║");
                 $display("╚═══════════════════════════════════════════════════╝");
                 $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
                          tb_cycle_count, tb_mem_ops, tb_instr_count);
+            // C3 FALLBACK 1: busy=0 without ebreak — should not happen in a correct run
+            end else if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy) begin
+                tb_execution_complete <= 1;
+                $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via busy=0 fallback — ebreak not decoded", $time);
+                $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
+                         tb_cycle_count, tb_mem_ops, tb_instr_count);
+            // C3 FALLBACK 2: idle threshold — program may be hung
             end else if (tb_execution_started && !tb_execution_complete &&
                          tb_idle_cycles >= idle_threshold_val) begin
                 tb_execution_complete <= 1;
-                $display("\n╔═══════════════════════════════════════════════════╗");
-                $display("║  EXECUTION COMPLETE (idle safety net %0d cyc)     ║", idle_threshold_val);
-                $display("╚═══════════════════════════════════════════════════╝");
+                $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via idle safety net (%0d cyc) — ebreak not decoded",
+                         $time, idle_threshold_val);
                 $display("  DUT busy=%b — may be stuck!", vif.status_if.busy);
             end
         end
@@ -462,11 +473,13 @@ module vortex_tb_top;
         wire [`XLEN-1:0] fetch_pc_full;
         wire [31:0] fetch_instr;
 
-        localparam [31:0] TB_EBREAK_PC = 32'h800008ac;
-        localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+        localparam [31:0] TB_EBREAK_INSTR   = 32'h00100073;
         localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
+        // tb_probe_ebreak_seen declared at module level (C3)
 
-        reg tb_probe_ebreak_seen;
+        // C3: drive module-level wire — same-cycle ebreak detection
+        assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
+
         reg tb_probe_exit_addr_seen;
 
         // Extract cache bus signals from core (1C_1S_1C config: cluster[0].socket[0].core[0])
@@ -502,7 +515,7 @@ module vortex_tb_top;
                 if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
                 if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
 
-                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_pc_full[31:0] == TB_EBREAK_PC) && (fetch_instr == TB_EBREAK_INSTR)) begin
+                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_instr == TB_EBREAK_INSTR)) begin
                     tb_probe_ebreak_seen <= 1'b1;
                     $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
                 end
@@ -532,11 +545,13 @@ module vortex_tb_top;
         wire [`XLEN-1:0] fetch_pc_full;
         wire [31:0] fetch_instr;
 
-        localparam [31:0] TB_EBREAK_PC = 32'h800008ac;
-        localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+        localparam [31:0] TB_EBREAK_INSTR   = 32'h00100073;
         localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
+        // tb_probe_ebreak_seen declared at module level (C3)
 
-        reg tb_probe_ebreak_seen;
+        // C3: drive module-level wire — same-cycle ebreak detection
+        assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
+
         reg tb_probe_exit_addr_seen;
 
         assign icache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
@@ -567,7 +582,7 @@ module vortex_tb_top;
                 if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
                 if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
 
-                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_pc_full[31:0] == TB_EBREAK_PC) && (fetch_instr == TB_EBREAK_INSTR)) begin
+                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_instr == TB_EBREAK_INSTR)) begin
                     tb_probe_ebreak_seen <= 1'b1;
                     $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
                 end
