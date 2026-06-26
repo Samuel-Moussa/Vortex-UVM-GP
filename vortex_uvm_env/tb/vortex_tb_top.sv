@@ -609,6 +609,23 @@ module vortex_tb_top;
     end
 
     //==========================================================================
+    // C1 — ELABORATION ASSERT: UVM VX_MEM_TAG_WIDTH == RTL VX_MEM_TAG_WIDTH
+    // Both are derived from VX_gpu_pkg::VX_MEM_TAG_WIDTH. The first check
+    // catches any future regression where someone re-hardcodes the UVM param.
+    // The $bits check is the structural proof: DUT port width == UVM param.
+    //==========================================================================
+    initial begin : u_c1_tag_width_assert
+        assert (vortex_config_pkg::VX_MEM_TAG_WIDTH == VX_gpu_pkg::VX_MEM_TAG_WIDTH)
+            else $fatal(1, "[C1-ASSERT] VX_MEM_TAG_WIDTH: UVM_pkg=%0d RTL_pkg=%0d -- check vortex_config.sv",
+                        vortex_config_pkg::VX_MEM_TAG_WIDTH, VX_gpu_pkg::VX_MEM_TAG_WIDTH);
+`ifdef USE_AXI_WRAPPER
+        assert ($bits(axi_awid[0]) == vortex_config_pkg::VX_MEM_TAG_WIDTH)
+            else $fatal(1, "[C1-ASSERT] DUT AXI awid width=%0d bits but UVM VX_MEM_TAG_WIDTH=%0d",
+                        $bits(axi_awid[0]), vortex_config_pkg::VX_MEM_TAG_WIDTH);
+`endif
+    end
+
+    //==========================================================================
     // TIMEOUT WATCHDOG
     //==========================================================================
 
