@@ -80,8 +80,8 @@ class axi_transaction extends uvm_sequence_item;
     // Transaction type selector
     rand axi_trans_type_e trans_type;
     
-    // Transaction ID — AXI_ID_WIDTH = VX_MEM_TAG_WIDTH = 8 (256 IDs)
-    rand bit [7:0] id;
+    // Transaction ID — AXI_ID_WIDTH = VX_MEM_TAG_WIDTH (derived from RTL, =50 debug / 7 NDEBUG)
+    rand bit [AXI_ID_WIDTH-1:0] id;
     
     // Starting address — 64-bit to cover both RV32 (32-bit) and RV64 (48-bit)
     // RV32 upper bits constrained to 0 via cfg; stored wide to avoid truncation
@@ -159,10 +159,9 @@ class axi_transaction extends uvm_sequence_item;
     // Constraints
     //==========================================================================
     
-    // ID is 8-bit fixed (AXI_ID_WIDTH = VX_MEM_TAG_WIDTH = 8)
-    // No additional constraint needed — field declaration enforces 8-bit range
-    constraint valid_id_c {
-        id < (1 << AXI_ID_WIDTH);  // AXI_ID_WIDTH = 8 from vortex_config_pkg
+    // ID must fit the derived width (AXI_ID_WIDTH = VX_MEM_TAG_WIDTH from vortex_config_pkg)
+    constraint id_range_c {
+        id < (1 << AXI_ID_WIDTH); 
     }
     
     // Burst length must be valid AXI4 range
