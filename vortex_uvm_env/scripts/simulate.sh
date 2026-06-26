@@ -57,6 +57,11 @@ if [[ $VERBOSE -eq 1 ]]; then
     SIM_OPTS="$SIM_OPTS +VERBOSE"
 fi
 
+# Stress iterations — read by random_instruction_stress_test via +NUM_STRESS_ITER
+if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
+    SIM_OPTS="$SIM_OPTS +NUM_STRESS_ITER=$STRESS_ITER"
+fi
+
 
 
 
@@ -110,15 +115,16 @@ SIM_EXIT_CODE=$?
 print_header "Results"
 
 
-# Count UVM errors directly — this is the authoritative source
-# Subtract the 2 expected end-of-test UVM_ERRORs (base_test + smoke_test banners)
-# that fire ONLY when test_passed=0 — they are symptoms, not causes.
-# Real errors are the ones fired DURING simulation.
+# Count UVM errors directly — this is the authoritative source.
+# T4: no subtraction. Every UVM_ERROR in the log is a real failure.
+# The old "-2" workaround was hiding real errors; root causes that
+# generated phantom errors (wait_for_completion stale event, vacuous-run)
+# were fixed directly (commits 2ccef437, 11f71359).
 UVM_ERRORS=$(grep -c "^# UVM_ERROR /" "$LOG_FILE" 2>/dev/null || true)
 UVM_ERRORS=${UVM_ERRORS:-0}
 UVM_FATALS=$(grep -c "^# UVM_FATAL /" "$LOG_FILE" 2>/dev/null || true)
 UVM_FATALS=${UVM_FATALS:-0}
-REAL_UVM_ERRORS=$((UVM_ERRORS > 2 ? UVM_ERRORS - 2 : UVM_ERRORS))
+REAL_UVM_ERRORS=$UVM_ERRORS
 
 # Count RTL assertion errors — lines starting with "# ** Error:" in the log.
 # These are real DUT failures that must cause the run to be marked FAILED

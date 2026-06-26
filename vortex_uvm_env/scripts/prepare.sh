@@ -65,6 +65,15 @@ if [[ -n "$QUESTA_HOME" ]]; then
     print_success "QUESTA_HOME: $QUESTA_HOME"
 fi
 
+# ── RISCV-DV HOME ────────────────────────────────────────────────────────────
+# Default: ~/riscv-dv. Override with env var RISCV_DV_HOME before calling make.
+RISCV_DV_HOME="${RISCV_DV_HOME:-$HOME/riscv-dv}"
+if [[ -d "$RISCV_DV_HOME" ]]; then
+    print_success "riscv-dv: $RISCV_DV_HOME"
+else
+    print_info "riscv-dv not found at $RISCV_DV_HOME (only needed for riscv_* programs)"
+fi
+
 # ── DPI LIBRARY PATHS ────────────────────────────────────────────────────────
 UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
 SIMX_REF_DIR="$PROJECT_ROOT/uvm_env/ref_model"
@@ -253,46 +262,63 @@ if [[ -n "$PROGRAM" ]]; then
         print_info "Found RISC-V test: $PROGRAM_SOURCE"
 
 
-    # Case 4: RISC-V DV test (pre-generated)
-    elif [[ -f "$VORTEX_HOME/third_party/riscv-dv/out/$PROGRAM/$PROGRAM" ]]; then
-        PROGRAM_TYPE="riscv-dv"
-        PROGRAM_SOURCE="$VORTEX_HOME/third_party/riscv-dv/out/$PROGRAM/$PROGRAM"
-        print_info "Found RISC-V DV test: $PROGRAM_SOURCE"
-
-
-    # Case 5: RISC-V DV test needs generation
+    # Case 4/5: RISC-V DV test — use PROGRAM= to name the riscv-dv profile exactly.
+    # RISCV_DV_REGEN=1 forces fresh generation; RISCV_DV_REGEN=0 (default) uses the
+    # newest pre-generated assembly under $RISCV_DV_HOME/out_*/asm_test/ if it exists.
+    #
+    # SimX-compatible profiles (no privileged instructions):
+    #   riscv_arithmetic_basic_test   — arithmetic only, no load/store/branch  ← safe with SimX
+    #   riscv_loop_test               — loops + branches
+    #   riscv_jump_stress_test        — jump-heavy
+    # Full random profiles (mret/trap handlers → SimX will SIGABRT):
+    #   riscv_rand_instr_test         — full random, use without SimX comparison
     elif [[ "$PROGRAM" == riscv_* ]]; then
+        RISCV_DV_TEST="$PROGRAM"
         PROGRAM_TYPE="riscv-dv"
-        print_info "RISC-V DV test needs generation: $PROGRAM"
-        if [[ ! -d "$VORTEX_HOME/third_party/riscv-dv" ]]; then
-            print_error "RISC-V DV not found at \$VORTEX_HOME/third_party/riscv-dv"
-            echo "    cd \$VORTEX_HOME/third_party"
-            echo "    git clone https://github.com/chipsalliance/riscv-dv.git"
-            echo "    cd riscv-dv && pip3 install -r requirements.txt"
+
+        if [[ ! -d "$RISCV_DV_HOME" ]]; then
+            print_error "riscv-dv not found at $RISCV_DV_HOME"
+            echo "  Install: git clone https://github.com/chipsalliance/riscv-dv.git ~/riscv-dv"
+            echo "           cd ~/riscv-dv && pip3 install -r requirements.txt"
+            echo "  Or set: export RISCV_DV_HOME=/path/to/riscv-dv"
             exit 1
         fi
-        print_info "Generating with riscv-dv..."
-        cd "$VORTEX_HOME/third_party/riscv-dv" || exit 1
-        if python3 run.py \
-            --test="$PROGRAM" \
-            --simulator=questa \
-            --isa=rv32imc \
-            --iterations=1 \
-            --steps=gen \
-            2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
-            PROGRAM_SOURCE=$(find out/ -name "$PROGRAM.0" -type f | head -1)
-            if [[ -z "$PROGRAM_SOURCE" ]]; then
-                print_error "Generated test not found in out/ directory"
+
+        # Try pre-generated first unless RISCV_DV_REGEN=1
+        RISCV_DV_ASM=""
+        if [[ "${RISCV_DV_REGEN:-0}" != "1" ]]; then
+            RISCV_DV_ASM=$(find "$RISCV_DV_HOME" -path "*/asm_test/${RISCV_DV_TEST}_0.S" \
+                               -type f 2>/dev/null | sort -r | head -1)
+            if [[ -n "$RISCV_DV_ASM" ]]; then
+                PROGRAM_SOURCE="$RISCV_DV_ASM"
+                print_info "Using pre-generated assembly (RISCV_DV_REGEN=1 to force refresh): $PROGRAM_SOURCE"
+            fi
+        fi
+
+        if [[ -z "$RISCV_DV_ASM" ]]; then
+            print_info "Generating riscv-dv test: $RISCV_DV_TEST"
+            cd "$RISCV_DV_HOME" || exit 1
+            if python3 run.py \
+                --test="$RISCV_DV_TEST" \
+                --simulator=questa \
+                --target=rv32im \
+                --iterations=1 \
+                --steps=gen \
+                2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
+                PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" \
+                    -path "*/asm_test/${RISCV_DV_TEST}_0.S" -type f 2>/dev/null | sort -r | head -1)
+                if [[ -z "$PROGRAM_SOURCE" ]]; then
+                    print_error "Generated assembly not found — expected: out_*/asm_test/${RISCV_DV_TEST}_0.S"
+                    exit 1
+                fi
+                print_success "Generated: $PROGRAM_SOURCE"
+            else
+                print_error "riscv-dv generation failed"
+                cat "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"
                 exit 1
             fi
-            PROGRAM_SOURCE="$VORTEX_HOME/third_party/riscv-dv/$PROGRAM_SOURCE"
-            print_success "Generated: $PROGRAM_SOURCE"
-        else
-            print_error "RISC-V DV generation failed"
-            cat "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"
-            exit 1
+            cd "$FLISTS_DIR" || exit 1
         fi
-        cd "$FLISTS_DIR" || exit 1
 
 
     # Case 6: Custom ELF/BIN
@@ -351,14 +377,65 @@ if [[ -n "$PROGRAM" ]]; then
         elif [[ "$PROGRAM_TYPE" == "riscv-test" || \
                 "$PROGRAM_TYPE" == "riscv-dv"   || \
                 "$PROGRAM_TYPE" == "custom-elf" ]]; then
+
+            # riscv-dv sources are raw .S assembly — must compile to ELF first.
+            # riscv-test and custom-elf sources are already ELFs → skip this step.
+            if [[ "$PROGRAM_TYPE" == "riscv-dv" && "$PROGRAM_SOURCE" == *.S ]]; then
+                # Vortex RTL does not implement machine-mode CSRs (0x300–0x3FF, 0xF14)
+                # or mret — strip them from the generated assembly to avoid RTL assertion
+                # errors. nop replaces mret; machine-mode csrw/csrr become plain nop.
+                ASM_CLEAN="${PROGRAM_HEX%.hex}_clean.S"
+                sed \
+                    -e 's/\bcsrw\s\+0x3[0-9a-fA-F][0-9a-fA-F]\b.*/nop/g' \
+                    -e 's/\bcsrr\s\+[a-z0-9]*,\s*0x3[0-9a-fA-F][0-9a-fA-F]\b.*/nop/g' \
+                    -e 's/\bcsrr\s\+[a-z0-9]*,\s*0xf14\b.*/nop/g' \
+                    -e 's/\bmret\b/nop/g' \
+                    -e 's/\becall\b/ebreak/g' \
+                    "$PROGRAM_SOURCE" > "$ASM_CLEAN"
+                print_info "Stripped machine-mode CSRs/mret, replaced ecall→ebreak → $ASM_CLEAN"
+                PROGRAM_SOURCE="$ASM_CLEAN"
+
+                ASM_ELF="${PROGRAM_HEX%.hex}.elf"
+                RISCV_GCC="${RISCV_GCC:-riscv64-unknown-elf-gcc}"
+                print_info "Compiling riscv-dv assembly → ELF: $ASM_ELF"
+                if $RISCV_GCC \
+                    -static -mcmodel=medany -fvisibility=hidden \
+                    -nostdlib -nostartfiles \
+                    -I"$RISCV_DV_HOME/user_extension" \
+                    -T"$RISCV_DV_HOME/scripts/link.ld" \
+                    "$PROGRAM_SOURCE" \
+                    -o "$ASM_ELF" \
+                    -march=rv32im_zicsr_zifencei -mabi=ilp32 \
+                    2>&1 | tee "$OBJCOPY_LOG"; then
+                    print_success "riscv-dv compiled to ELF"
+                    PROGRAM_SOURCE="$ASM_ELF"
+                else
+                    print_error "riscv-dv assembly compilation failed"
+                    cat "$OBJCOPY_LOG"; exit 1
+                fi
+            fi
+
+            # No --change-addresses: ELF is already linked at 0x80000000.
+            # objcopy without the flag outputs @00000000 (relative offset 0),
+            # and mem_model adds baseaddr=0x80000000 on top → correct placement.
+            # Using --change-addresses=0x80000000 causes @80000000 in the hex,
+            # then 0x80000000+0x80000000=0x100000000 overflow → empty RAM → X-prop.
             if $OBJCOPY \
                 -O verilog \
-                --change-addresses=$STARTUP_ADDR \
                 --verilog-data-width=1 \
                 "$PROGRAM_SOURCE" "$PROGRAM_HEX" 2>&1 | tee "$OBJCOPY_LOG"; then
                 print_success "${PROGRAM_TYPE} converted"
             else
                 print_error "Conversion failed"; cat "$OBJCOPY_LOG"; exit 1
+            fi
+            # Strip Windows CRLF if objcopy emitted them (WSL2 toolchain quirk).
+            tr -d '\r' < "$PROGRAM_HEX" > "${PROGRAM_HEX}.tmp" && mv "${PROGRAM_HEX}.tmp" "$PROGRAM_HEX"
+            # ELFs linked at 0x80000000 produce @80000000; mem_model expects @00000000
+            # (it adds baseaddr on top). Remap silently — both conventions are valid.
+            if [[ "$(head -1 "$PROGRAM_HEX")" == "@80000000" ]]; then
+                # Remap ALL section markers: @80XXXXXX → @00XXXXXX (subtract link base)
+                sed -i 's/^@80/@00/' "$PROGRAM_HEX"
+                print_info "Remapped @80XXXXXX → @00XXXXXX for all sections (ELF linked at 0x80000000)"
             fi
         fi
 
@@ -368,30 +445,7 @@ if [[ -n "$PROGRAM" ]]; then
             if [[ ! -s "$PROGRAM_HEX" ]]; then
                 print_error "HEX file is empty"; exit 1
             fi
-            FIRST_LINE=$(head -1 "$PROGRAM_HEX")
-
-            # ── FIX C (converted files) ──────────────────────────────────────
-            # objcopy --change-addresses=0x80000000 on a binary that is already
-            # linked at 0x80000000 produces @80000000 in the output.
-            # mem_model adds baseaddr on top → 0x100000000 overflow → empty RAM
-            # → DUT fetches nops/zeros → test may PASS vacuously (1 instr, 154 cy).
-            if [[ "$FIRST_LINE" == "@80000000" ]]; then
-                print_error "Converted HEX starts with @80000000 — address overflow bug!"
-                echo ""
-                echo "  The ELF is already linked at 0x80000000."
-                echo "  Do NOT use --change-addresses with a pre-linked ELF."
-                echo "  Use --change-section-address to subtract the link base instead:"
-                echo ""
-                echo "    riscv64-unknown-elf-objcopy -O verilog \\"
-                echo "        --verilog-data-width=1 \\"
-                echo "        --change-section-address .text-0x80000000 \\"
-                echo "        $PROGRAM_SOURCE $PROGRAM_HEX"
-                echo ""
-                echo "  Or fix in-place and re-run:"
-                echo "    sed -i 's/^@80000000/@00000000/' $PROGRAM_HEX"
-                exit 1
-            fi
-            # ─────────────────────────────────────────────────────────────────
+            FIRST_LINE=$(head -1 "$PROGRAM_HEX" | tr -d '\r')
 
             if [[ "$FIRST_LINE" =~ ^@[0-9a-fA-F]{8} ]]; then
                 print_success "HEX format validated"
