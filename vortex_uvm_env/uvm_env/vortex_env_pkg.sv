@@ -29,6 +29,7 @@ package vortex_env_pkg;
     import status_agent_pkg::*;
     import mem_model_pkg::*;
     import simx_pkg::*;
+    import VX_gpu_pkg::*;
 
     // Declare analysis imp macros ONCE for the entire environment
     `uvm_analysis_imp_decl(_mem)
