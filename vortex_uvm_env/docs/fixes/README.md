@@ -19,6 +19,14 @@ Per-issue documentation for all fixes made in this session. Each file covers one
 | [fix_11_riscv_dv_uvm_stale_event.md](fix_11_riscv_dv_uvm_stale_event.md) | UVM stale event: wait_trigger() misses past triggers | 2ccef437 | Ahmad (derived tests inherit fix) |
 | [fix_12_riscv_dv_vacuous_run.md](fix_12_riscv_dv_vacuous_run.md) | Vacuous run false UVM_ERROR in scoreboard | 2ccef437 | **Ahmad** (scoreboard.sv is his file) |
 | [fix_13_I2_elaboration_asserts.md](fix_13_I2_elaboration_asserts.md) | I2: elaboration asserts for topology params (NUM_CLUSTERS/CORES/WARPS/THREADS) | 37cfce55 | None (awareness only for Ahmad + Steven) |
+| [fix_14_I5_hygiene.md](fix_14_I5_hygiene.md) | I5: remove dead files + fix stale `// 8` tag-width comments | a42f164c | None |
+
+> **Verification status (Opus review, 2026-06-26):** every code block in these
+> docs was re-checked against the actual `git show <commit>` diff. fix_01, 02,
+> 03, 06, 07, 08 were corrected where the reconstructed snippet did not match the
+> committed code (the commit IDs and file paths were always right; some
+> before/after code was idealized from memory). fix_04, 05, 09, 10, 11, 12, 13,
+> 14 matched on first pass.
 
 ## Teammate Summary
 
