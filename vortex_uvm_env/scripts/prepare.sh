@@ -65,6 +65,15 @@ if [[ -n "$QUESTA_HOME" ]]; then
     print_success "QUESTA_HOME: $QUESTA_HOME"
 fi
 
+# ── RISCV-DV HOME ────────────────────────────────────────────────────────────
+# Default: ~/riscv-dv. Override with env var RISCV_DV_HOME before calling make.
+RISCV_DV_HOME="${RISCV_DV_HOME:-$HOME/riscv-dv}"
+if [[ -d "$RISCV_DV_HOME" ]]; then
+    print_success "riscv-dv: $RISCV_DV_HOME"
+else
+    print_info "riscv-dv not found at $RISCV_DV_HOME (only needed for riscv_* programs)"
+fi
+
 # ── DPI LIBRARY PATHS ────────────────────────────────────────────────────────
 UVM_DPI_LIB="$QUESTA_HOME/uvm-1.2/linux_x86_64/uvm_dpi"
 SIMX_REF_DIR="$PROJECT_ROOT/uvm_env/ref_model"
@@ -253,26 +262,28 @@ if [[ -n "$PROGRAM" ]]; then
         print_info "Found RISC-V test: $PROGRAM_SOURCE"
 
 
-    # Case 4: RISC-V DV test (pre-generated)
-    elif [[ -f "$VORTEX_HOME/third_party/riscv-dv/out/$PROGRAM/$PROGRAM" ]]; then
+    # Case 4: RISC-V DV test (pre-generated assembly from a previous run)
+    # riscv-dv outputs to out_<date>/asm_test/<test>_0.S — find the newest match.
+    elif [[ "$PROGRAM" == riscv_* ]] && \
+         [[ -n "$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | head -1)" ]]; then
         PROGRAM_TYPE="riscv-dv"
-        PROGRAM_SOURCE="$VORTEX_HOME/third_party/riscv-dv/out/$PROGRAM/$PROGRAM"
-        print_info "Found RISC-V DV test: $PROGRAM_SOURCE"
+        PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | sort -r | head -1)
+        print_info "Found pre-generated riscv-dv assembly: $PROGRAM_SOURCE"
 
 
     # Case 5: RISC-V DV test needs generation
     elif [[ "$PROGRAM" == riscv_* ]]; then
         PROGRAM_TYPE="riscv-dv"
         print_info "RISC-V DV test needs generation: $PROGRAM"
-        if [[ ! -d "$VORTEX_HOME/third_party/riscv-dv" ]]; then
-            print_error "RISC-V DV not found at \$VORTEX_HOME/third_party/riscv-dv"
-            echo "    cd \$VORTEX_HOME/third_party"
-            echo "    git clone https://github.com/chipsalliance/riscv-dv.git"
-            echo "    cd riscv-dv && pip3 install -r requirements.txt"
+        if [[ ! -d "$RISCV_DV_HOME" ]]; then
+            print_error "riscv-dv not found at $RISCV_DV_HOME"
+            echo "  Install: git clone https://github.com/chipsalliance/riscv-dv.git ~/riscv-dv"
+            echo "           cd ~/riscv-dv && pip3 install -r requirements.txt"
+            echo "  Or set: export RISCV_DV_HOME=/path/to/riscv-dv"
             exit 1
         fi
-        print_info "Generating with riscv-dv..."
-        cd "$VORTEX_HOME/third_party/riscv-dv" || exit 1
+        print_info "Generating with riscv-dv ($RISCV_DV_HOME)..."
+        cd "$RISCV_DV_HOME" || exit 1
         if python3 run.py \
             --test="$PROGRAM" \
             --simulator=questa \
@@ -280,15 +291,15 @@ if [[ -n "$PROGRAM" ]]; then
             --iterations=1 \
             --steps=gen \
             2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
-            PROGRAM_SOURCE=$(find out/ -name "$PROGRAM.0" -type f | head -1)
+            # Output: out_<date>/asm_test/<test>_0.S — find the newest
+            PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | sort -r | head -1)
             if [[ -z "$PROGRAM_SOURCE" ]]; then
-                print_error "Generated test not found in out/ directory"
+                print_error "Generated assembly not found — expected: out_*/asm_test/${PROGRAM}_0.S"
                 exit 1
             fi
-            PROGRAM_SOURCE="$VORTEX_HOME/third_party/riscv-dv/$PROGRAM_SOURCE"
             print_success "Generated: $PROGRAM_SOURCE"
         else
-            print_error "RISC-V DV generation failed"
+            print_error "riscv-dv generation failed"
             cat "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"
             exit 1
         fi
@@ -351,6 +362,30 @@ if [[ -n "$PROGRAM" ]]; then
         elif [[ "$PROGRAM_TYPE" == "riscv-test" || \
                 "$PROGRAM_TYPE" == "riscv-dv"   || \
                 "$PROGRAM_TYPE" == "custom-elf" ]]; then
+
+            # riscv-dv sources are raw .S assembly — must compile to ELF first.
+            # riscv-test and custom-elf sources are already ELFs → skip this step.
+            if [[ "$PROGRAM_TYPE" == "riscv-dv" && "$PROGRAM_SOURCE" == *.S ]]; then
+                ASM_ELF="${PROGRAM_HEX%.hex}.elf"
+                RISCV_GCC="${RISCV_GCC:-riscv64-unknown-elf-gcc}"
+                print_info "Compiling riscv-dv assembly → ELF: $ASM_ELF"
+                if $RISCV_GCC \
+                    -static -mcmodel=medany -fvisibility=hidden \
+                    -nostdlib -nostartfiles \
+                    -I"$RISCV_DV_HOME/user_extension" \
+                    -T"$RISCV_DV_HOME/scripts/link.ld" \
+                    "$PROGRAM_SOURCE" \
+                    -o "$ASM_ELF" \
+                    -march=rv32imc_zicsr_zifencei -mabi=ilp32 \
+                    2>&1 | tee "$OBJCOPY_LOG"; then
+                    print_success "riscv-dv compiled to ELF"
+                    PROGRAM_SOURCE="$ASM_ELF"
+                else
+                    print_error "riscv-dv assembly compilation failed"
+                    cat "$OBJCOPY_LOG"; exit 1
+                fi
+            fi
+
             # No --change-addresses: ELF is already linked at 0x80000000.
             # objcopy without the flag outputs @00000000 (relative offset 0),
             # and mem_model adds baseaddr=0x80000000 on top → correct placement.
