@@ -76,6 +76,9 @@ LOG_FILE="$RESULTS_RUN_DIR/logs/simulation.log"
 #      FIX B: $DPI_FLAG links the DPI shared library when present.
 #      FIX C: LD_PRELOAD forces system libstdc++ to avoid GLIBCXX_3.4.29 from Questa's GCC 7
 #             This ensures libramulator.so (linked by simx_model.so) finds correct symbols.
+
+PROG_SHORT="$(basename "${PROGRAM%.*}")"   # strips path + .elf → "functional_mem"
+
 if [[ "$SIMULATOR" == "questa" ]]; then
     # Preload correct libstdc++ to resolve GLIBCXX_3.4.29 from ramulator.so dependency
     export LD_PRELOAD=/lib/x86_64-linux-gnu/libstdc++.so.6
@@ -86,7 +89,7 @@ if [[ "$SIMULATOR" == "questa" ]]; then
     else
         vsim -coverage -c vortex_tb_top $SIM_OPTS $DPI_FLAG \
             -onfinish stop \
-            -do "run -all; coverage save $RESULTS_RUN_DIR/reports/coverage.ucdb; quit -f" \
+            -do "run -all; coverage save -testname ${TEST_NAME}_${PROG_SHORT} $RESULTS_RUN_DIR/reports/coverage.ucdb; quit -f" \
             2>&1 | tee "$LOG_FILE"
     fi
 
@@ -198,7 +201,7 @@ fi
 # re-running a kernel overwrites its own slot instead of piling up)
 if [[ -f "$COV_UCDB" ]]; then
     mkdir -p "$PROJECT_ROOT/cov/staging"
-    stage_name="${TEST_NAME}_${PROGRAM:-noprog}"
+    stage_name="${TEST_NAME}_${PROG_SHORT}"
     stage_name="$(echo "$stage_name" | tr '/ ' '__')"   # sanitize path/space
     cp "$COV_UCDB" "$PROJECT_ROOT/cov/staging/${stage_name}.ucdb"
 fi
