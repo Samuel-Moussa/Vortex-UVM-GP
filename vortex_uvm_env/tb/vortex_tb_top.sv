@@ -350,8 +350,29 @@ module vortex_tb_top;
     logic        tb_execution_complete;
     int          tb_idle_cycles;
     logic        tb_probe_ebreak_seen;   // C3: registered — set when ebreak first seen at fetch
-    wire         tb_ebreak_fetch;        // C3: combinational — same-cycle ebreak detect
-    wire         tb_commit_fire;         // C2: real commit handshake from VX_commit.commit_arb_if[0]
+    wire         tb_ebreak_fetch;        // C3: combinational — OR across all cores
+
+    // I1: multi-core commit + ebreak observation arrays.
+    // One wire per commit lane (NUM_CLUSTERS × NUM_SOCKETS × SOCKET_SIZE × ISSUE_WIDTH).
+    // One wire per core for ebreak detection.
+    localparam TB_NUM_CLUSTERS = `NUM_CLUSTERS;
+    localparam TB_NUM_SOCKETS  = VX_gpu_pkg::NUM_SOCKETS;
+    localparam TB_SOCK_SIZE    = `SOCKET_SIZE;
+    localparam TB_ISSUE_W      = `ISSUE_WIDTH;
+    localparam TB_NUM_CORES_T  = TB_NUM_CLUSTERS * TB_NUM_SOCKETS * TB_SOCK_SIZE;
+    localparam TB_NUM_LANES    = TB_NUM_CORES_T * TB_ISSUE_W;
+
+    wire [TB_NUM_LANES-1:0]   tb_commit_fires_all;  // per-lane commit handshake
+    wire [TB_NUM_CORES_T-1:0] tb_ebreak_fetch_all;  // per-core ebreak-at-fetch
+    logic [$clog2(TB_NUM_LANES+1)-1:0] tb_commit_count_cyc; // popcount this cycle
+
+    // Popcount: how many lanes committed this clock edge
+    always_comb begin : u_commit_popcount
+        tb_commit_count_cyc = '0;
+        for (int _i = 0; _i < TB_NUM_LANES; _i++)
+            tb_commit_count_cyc += TB_NUM_LANES'(tb_commit_fires_all[_i]);
+    end
+    assign tb_ebreak_fetch = |tb_ebreak_fetch_all;
 
     int idle_threshold_val = 5000;
     initial begin
@@ -370,8 +391,8 @@ module vortex_tb_top;
         end else begin
             tb_cycle_count <= tb_cycle_count + 1;
 
-            // C2: real retired instruction count from VX_commit.commit_arb_if[0]
-            if (tb_commit_fire) tb_instr_count <= tb_instr_count + 1;
+            // I1/C2: real retired count — sum all commit lanes across all cores
+            tb_instr_count <= tb_instr_count + 64'(tb_commit_count_cyc);
 
             if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
                 (vif.axi_if.bvalid && vif.axi_if.bready) ||
@@ -480,26 +501,41 @@ module vortex_tb_top;
         localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
         // tb_probe_ebreak_seen declared at module level (C3)
 
-        // C3: drive module-level wire — same-cycle ebreak detection
-        assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
-
-        // C2: real retired count — commit_arb_if[0] is the single-issue-lane commit bus
-        // (ISSUE_WIDTH=UP(NUM_WARPS/16)=1 for default 4W config). Instance: VX_core.commit.
-        assign tb_commit_fire =
-            dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].valid &&
-            dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].ready;
+        // I1: generate loops — commit fires + ebreak detection across ALL cores/lanes.
+        // cache/fetch wires for display keep core[0] reference (debug display only).
+        genvar _cl, _sk, _co, _lw;
+        generate
+            for (_cl = 0; _cl < TB_NUM_CLUSTERS; _cl++) begin : g_axi_cl
+                for (_sk = 0; _sk < TB_NUM_SOCKETS; _sk++) begin : g_axi_sk
+                    for (_co = 0; _co < TB_SOCK_SIZE; _co++) begin : g_axi_co
+                        localparam _CORE_IDX = _cl * TB_NUM_SOCKETS * TB_SOCK_SIZE
+                                             + _sk * TB_SOCK_SIZE + _co;
+                        localparam _LANE_BASE = _CORE_IDX * TB_ISSUE_W;
+                        // ebreak: per core (fetch is before issue/lane split)
+                        assign tb_ebreak_fetch_all[_CORE_IDX] =
+                            dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.valid &&
+                            (dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.data.instr == TB_EBREAK_INSTR);
+                        for (_lw = 0; _lw < TB_ISSUE_W; _lw++) begin : g_axi_lw
+                            assign tb_commit_fires_all[_LANE_BASE + _lw] =
+                                dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].valid &&
+                                dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].ready;
+                        end
+                    end
+                end
+            end
+        endgenerate
 
         reg tb_probe_exit_addr_seen;
 
-        // Extract cache bus signals from core (1C_1S_1C config: cluster[0].socket[0].core[0])
+        // Cache/fetch display signals — core[0] only (debug telemetry, not pass/fail)
         assign icache_req_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
         assign icache_req_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_ready;
         assign icache_rsp_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_valid;
         assign icache_rsp_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_ready;
 
-        assign fetch_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
+        assign fetch_valid   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
-        assign fetch_instr = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
+        assign fetch_instr   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         // DCACHE is an array; measure the first port (0)
         assign dcache_req_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
@@ -524,9 +560,9 @@ module vortex_tb_top;
                 if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
                 if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
 
-                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_instr == TB_EBREAK_INSTR)) begin
+                if (!tb_probe_ebreak_seen && tb_ebreak_fetch) begin
                     tb_probe_ebreak_seen <= 1'b1;
-                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
+                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h (core[0] PC shown; any core triggered)", $time, fetch_pc_full[31:0], fetch_instr);
                 end
 
                 if (!tb_probe_exit_addr_seen && vif.axi_if.awvalid && vif.axi_if.awready && (vif.axi_if.awaddr == TB_EXIT_MMIO_ADDR)) begin
@@ -558,24 +594,39 @@ module vortex_tb_top;
         localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
         // tb_probe_ebreak_seen declared at module level (C3)
 
-        // C3: drive module-level wire — same-cycle ebreak detection
-        assign tb_ebreak_fetch = fetch_valid && (fetch_instr == TB_EBREAK_INSTR);
-
-        // C2: real retired count — non-AXI path (same VX_commit instance name: commit)
-        assign tb_commit_fire =
-            dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].valid &&
-            dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.commit_arb_if[0].ready;
+        // I1: generate loops — commit fires + ebreak detection across ALL cores/lanes.
+        genvar _cl, _sk, _co, _lw;
+        generate
+            for (_cl = 0; _cl < TB_NUM_CLUSTERS; _cl++) begin : g_mem_cl
+                for (_sk = 0; _sk < TB_NUM_SOCKETS; _sk++) begin : g_mem_sk
+                    for (_co = 0; _co < TB_SOCK_SIZE; _co++) begin : g_mem_co
+                        localparam _CORE_IDX = _cl * TB_NUM_SOCKETS * TB_SOCK_SIZE
+                                             + _sk * TB_SOCK_SIZE + _co;
+                        localparam _LANE_BASE = _CORE_IDX * TB_ISSUE_W;
+                        assign tb_ebreak_fetch_all[_CORE_IDX] =
+                            dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.valid &&
+                            (dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.data.instr == TB_EBREAK_INSTR);
+                        for (_lw = 0; _lw < TB_ISSUE_W; _lw++) begin : g_mem_lw
+                            assign tb_commit_fires_all[_LANE_BASE + _lw] =
+                                dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].valid &&
+                                dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].ready;
+                        end
+                    end
+                end
+            end
+        endgenerate
 
         reg tb_probe_exit_addr_seen;
 
+        // Cache/fetch display signals — core[0] only (debug telemetry, not pass/fail)
         assign icache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
         assign icache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_ready;
         assign icache_rsp_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_valid;
         assign icache_rsp_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_ready;
 
-        assign fetch_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
+        assign fetch_valid   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
-        assign fetch_instr = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
+        assign fetch_instr   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         assign dcache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
         assign dcache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_ready;
@@ -596,9 +647,9 @@ module vortex_tb_top;
                 if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
                 if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
 
-                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_instr == TB_EBREAK_INSTR)) begin
+                if (!tb_probe_ebreak_seen && tb_ebreak_fetch) begin
                     tb_probe_ebreak_seen <= 1'b1;
-                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
+                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h (core[0] PC shown; any core triggered)", $time, fetch_pc_full[31:0], fetch_instr);
                 end
 
                 if (!tb_probe_exit_addr_seen && vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0] && vif.mem_if.req_rw[0] && (vif.mem_if.req_addr[0] == TB_EXIT_MMIO_ADDR[31:2])) begin
