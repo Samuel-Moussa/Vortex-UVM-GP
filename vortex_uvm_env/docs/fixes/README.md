@@ -20,6 +20,15 @@ Per-issue documentation for all fixes made in this session. Each file covers one
 | [fix_12_riscv_dv_vacuous_run.md](fix_12_riscv_dv_vacuous_run.md) | Vacuous run false UVM_ERROR in scoreboard | 2ccef437 | **Ahmad** (scoreboard.sv is his file) |
 | [fix_13_I2_elaboration_asserts.md](fix_13_I2_elaboration_asserts.md) | I2: elaboration asserts for topology params (NUM_CLUSTERS/CORES/WARPS/THREADS) | 37cfce55 | None (awareness only for Ahmad + Steven) |
 | [fix_14_I5_hygiene.md](fix_14_I5_hygiene.md) | I5: remove dead files + fix stale `// 8` tag-width comments | a42f164c | None |
+| [fix_15_busy_low_sustained.md](fix_15_busy_low_sustained.md) | Issue 2: busy=0 completion now requires sustained de-assertion (not single cycle) | 19c3d558 | None |
+| [fix_16_i2_alias_gap.md](fix_16_i2_alias_gap.md) | Issue 3: I2 assert now also checks CLUSTERS/CORES/WARPS/THREADS aliases | 19c3d558 | None |
+
+## Review artifacts (Opus engineering pass, 2026-06-26)
+
+| File | Purpose |
+|------|---------|
+| [EVALUATION_2026-06-26.md](EVALUATION_2026-06-26.md) | Per-fix logic verdict + the 4 defects found, ranked by severity/lane |
+| [HANDOVER_Ahmad_scoreboard_dropped_stores.md](HANDOVER_Ahmad_scoreboard_dropped_stores.md) | **Issue 1 (CRITICAL, Ahmad's lane):** scoreboard can't detect dropped stores; proposed SimX-driven comparison + tightened vacuous guard |
 
 > **Verification status (Opus review, 2026-06-26):** every code block in these
 > docs was re-checked against the actual `git show <commit>` diff. fix_01, 02,
