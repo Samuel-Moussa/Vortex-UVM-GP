@@ -35,7 +35,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ---
 
-**Synced-to:** `e087a78f` (2026-06-26) — T4 done; all Samuel Gate-0 items complete (C1/C2/C3/T4 ✅)
+**Synced-to:** `37cfce55` (2026-06-26) — I2 done; Tier-1 probe items complete (C1/C2/C3/T4/I1/I2 ✅)
 
 ## CHECKLIST — Samuel's tasks (finish top-down)
 
@@ -61,8 +61,8 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 - [x] **I1 — param→DUT commit/ebreak probes configurable for N cores.** Generate loops for `tb_commit_fires_all` and `tb_ebreak_fetch_all` cover all `NUM_CLUSTERS × NUM_SOCKETS × SOCKET_SIZE` cores and all `ISSUE_WIDTH` commit lanes.
   *[DONE 11f71359 2026-06-26]:* Both AXI and non-AXI ifdef paths updated. Primary config (1CL/1C/4W/4T) TB_NUM_LANES=1 — no behaviour change. Regression: hello PASS, riscv-dv stress PASS.
   *Remaining I1 gap:* SimX is not yet re-invoked with multi-core params at runtime (depends on Steven's D-simx). Script plumbing (`--clusters`, `--cores`, `--warps`, `--threads` → plusargs) already exists.
-- [ ] **I2 — elaboration asserts.** UVM params == DUT params (widths, counts) fail loud at elaboration with a clear message.
-  *C1 assert (tag width) DONE. Still open: NUM_CLUSTERS, NUM_CORES, NUM_WARPS, NUM_THREADS assert.*
+- [x] **I2 — elaboration asserts.** UVM params == DUT params (widths, counts) fail loud at elaboration with a clear message.
+  *[DONE 37cfce55 2026-06-26]:* `u_i2_topology_asserts` initial block in `vortex_tb_top.sv`. Reads four plusargs at time=0, compares against RTL macros; `$fatal` on mismatch. Clean run prints `[I2-ASSERT] Topology OK: 1CL 1C 4W 4T`. Negative: `sim-only CLUSTERS=2` on 1-cluster RTL prints `[I2-ASSERT] NUM_CLUSTERS: plusarg=2 but RTL compiled with 1` and aborts.*
 - [ ] **I3 — SimX param-match.** Coordinate config → SimX build/runtime *(with Steven's D-simx)*. *Accept:* SimX instantiated with same cores/clusters as DUT.
 - [ ] **I5 — hygiene.** Remove dead files (`vortex_config2.sv`, `vortex_status_if_fixed.sv`); fix stale comments.
 - [ ] **P1-bind — passive commit probe.** `bind` a passive monitor on `commit_arb_if[*]` (observability only, never a checker); add `initial assert ($bits(uuid) > 1)`. *(I build the bind + interface; Ahmad samples it for coverage.)*
