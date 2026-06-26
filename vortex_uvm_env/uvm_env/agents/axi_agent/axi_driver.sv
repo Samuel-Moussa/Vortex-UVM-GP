@@ -35,19 +35,19 @@ class axi_driver extends uvm_driver #(axi_transaction);
     int num_writes_served = 0;
 
     // Queues and Registers for tracking transactions
-    logic [7:0] b_resp_q[$]; 
+    logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]    b_resp_q[$]; 
     
-    logic [7:0]                                        aw_id_reg;
-    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]      aw_addr_reg;
+    logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]    aw_id_reg;
+    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]  aw_addr_reg;
     
-    logic [7:0]                                        ar_id_reg;
-    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]      ar_addr_reg;
-    logic [7:0]                                        ar_len_reg;
-    logic [7:0]                                        read_beat_count;
-    logic [7:0] aw_queue[$];   // Queue of IDs for pending writes
-    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0] aw_addr_queue[$];
+    logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]    ar_id_reg;
+    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]  ar_addr_reg;
+    logic [7:0]                                    ar_len_reg;
+    logic [7:0]                                    read_beat_count;
+    logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]    aw_queue[$];   // Queue of IDs for pending writes
+    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]  aw_addr_queue[$];
     logic                                          aw_active;
-    logic [7:0]                                    aw_active_id;
+    logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]    aw_active_id;
     logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]  aw_active_addr;
 
     //--------------------------------------------------------------------------
@@ -144,7 +144,7 @@ class axi_driver extends uvm_driver #(axi_transaction);
             @(posedge vif.clk);
             vif.awready <= 1'b1;
             if (vif.awvalid && vif.awready) begin
-                aw_queue.push_back(vif.awid[7:0]);
+                aw_queue.push_back(vif.awid);
                 aw_addr_queue.push_back(vif.awaddr);
             end
         end
@@ -175,7 +175,6 @@ class axi_driver extends uvm_driver #(axi_transaction);
             end
             
             if (vif.wvalid && vif.wready && aw_active) begin
-                automatic logic [7:0] aw_id = aw_active_id;
                 automatic bit [vortex_config_pkg::AXI_ADDR_WIDTH-1:0] addr = aw_active_addr;
                 automatic bit [511:0] data = vif.wdata;
                 automatic bit [63:0] wstrb = vif.wstrb;
@@ -185,7 +184,7 @@ class axi_driver extends uvm_driver #(axi_transaction);
                 end
                 
                 if (vif.wlast) begin
-                    b_resp_q.push_back(aw_id);  // Queue B response with correct AW ID
+                    b_resp_q.push_back(aw_active_id);  // Queue B response with the full-width AW ID
                     write_complete_flag = 1'b1;
                     aw_active = 1'b0;
                 end
@@ -240,13 +239,13 @@ class axi_driver extends uvm_driver #(axi_transaction);
             vif.arready <= !vif.rvalid;
 
             if (vif.arvalid && vif.arready) begin
-                ar_id_reg         = vif.arid[7:0];
+                ar_id_reg         = vif.arid;
                 ar_addr_reg       = vif.araddr;
                 ar_len_reg        = vif.arlen;
                 read_beat_count   = '0;
 
                 vif.rvalid        <= 1'b1;
-                vif.rid           <= vif.arid[7:0];
+                vif.rid           <= vif.arid;
                 vif.rdata         <= memory.read_line(vif.araddr);
                 vif.rresp         <= 2'b00;
                 vif.rlast         <= (vif.arlen == 8'h0);

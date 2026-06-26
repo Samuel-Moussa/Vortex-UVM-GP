@@ -53,7 +53,7 @@ interface vortex_if (
     vortex_axi_if #(
         .ADDR_WIDTH (vortex_config_pkg::AXI_ADDR_WIDTH),   // 32 RV32, 48 RV64
         .DATA_WIDTH (vortex_config_pkg::AXI_DATA_WIDTH),   // 512 (fixed)
-        .ID_WIDTH   (vortex_config_pkg::AXI_ID_WIDTH)      // 8   (fixed)
+        .ID_WIDTH   (vortex_config_pkg::AXI_ID_WIDTH)      // = VX_MEM_TAG_WIDTH (derived, 50 debug)
     ) axi_if (.clk(clk), .reset_n(reset_n));
 
     // Custom memory interface (for non-AXI version)
