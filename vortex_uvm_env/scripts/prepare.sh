@@ -262,19 +262,20 @@ if [[ -n "$PROGRAM" ]]; then
         print_info "Found RISC-V test: $PROGRAM_SOURCE"
 
 
-    # Case 4: RISC-V DV test (pre-generated assembly from a previous run)
-    # riscv-dv outputs to out_<date>/asm_test/<test>_0.S — find the newest match.
-    elif [[ "$PROGRAM" == riscv_* ]] && \
-         [[ -n "$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | head -1)" ]]; then
-        PROGRAM_TYPE="riscv-dv"
-        PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | sort -r | head -1)
-        print_info "Found pre-generated riscv-dv assembly: $PROGRAM_SOURCE"
-
-
-    # Case 5: RISC-V DV test needs generation
+    # Case 4/5: RISC-V DV test — use PROGRAM= to name the riscv-dv profile exactly.
+    # RISCV_DV_REGEN=1 forces fresh generation; RISCV_DV_REGEN=0 (default) uses the
+    # newest pre-generated assembly under $RISCV_DV_HOME/out_*/asm_test/ if it exists.
+    #
+    # SimX-compatible profiles (no privileged instructions):
+    #   riscv_arithmetic_basic_test   — arithmetic only, no load/store/branch  ← safe with SimX
+    #   riscv_loop_test               — loops + branches
+    #   riscv_jump_stress_test        — jump-heavy
+    # Full random profiles (mret/trap handlers → SimX will SIGABRT):
+    #   riscv_rand_instr_test         — full random, use without SimX comparison
     elif [[ "$PROGRAM" == riscv_* ]]; then
+        RISCV_DV_TEST="$PROGRAM"
         PROGRAM_TYPE="riscv-dv"
-        print_info "RISC-V DV test needs generation: $PROGRAM"
+
         if [[ ! -d "$RISCV_DV_HOME" ]]; then
             print_error "riscv-dv not found at $RISCV_DV_HOME"
             echo "  Install: git clone https://github.com/chipsalliance/riscv-dv.git ~/riscv-dv"
@@ -282,28 +283,42 @@ if [[ -n "$PROGRAM" ]]; then
             echo "  Or set: export RISCV_DV_HOME=/path/to/riscv-dv"
             exit 1
         fi
-        print_info "Generating with riscv-dv ($RISCV_DV_HOME)..."
-        cd "$RISCV_DV_HOME" || exit 1
-        if python3 run.py \
-            --test="$PROGRAM" \
-            --simulator=questa \
-            --isa=rv32imc \
-            --iterations=1 \
-            --steps=gen \
-            2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
-            # Output: out_<date>/asm_test/<test>_0.S — find the newest
-            PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" -path "*/asm_test/${PROGRAM}_0.S" -type f 2>/dev/null | sort -r | head -1)
-            if [[ -z "$PROGRAM_SOURCE" ]]; then
-                print_error "Generated assembly not found — expected: out_*/asm_test/${PROGRAM}_0.S"
+
+        # Try pre-generated first unless RISCV_DV_REGEN=1
+        RISCV_DV_ASM=""
+        if [[ "${RISCV_DV_REGEN:-0}" != "1" ]]; then
+            RISCV_DV_ASM=$(find "$RISCV_DV_HOME" -path "*/asm_test/${RISCV_DV_TEST}_0.S" \
+                               -type f 2>/dev/null | sort -r | head -1)
+            if [[ -n "$RISCV_DV_ASM" ]]; then
+                PROGRAM_SOURCE="$RISCV_DV_ASM"
+                print_info "Using pre-generated assembly (RISCV_DV_REGEN=1 to force refresh): $PROGRAM_SOURCE"
+            fi
+        fi
+
+        if [[ -z "$RISCV_DV_ASM" ]]; then
+            print_info "Generating riscv-dv test: $RISCV_DV_TEST"
+            cd "$RISCV_DV_HOME" || exit 1
+            if python3 run.py \
+                --test="$RISCV_DV_TEST" \
+                --simulator=questa \
+                --target=rv32im \
+                --iterations=1 \
+                --steps=gen \
+                2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
+                PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" \
+                    -path "*/asm_test/${RISCV_DV_TEST}_0.S" -type f 2>/dev/null | sort -r | head -1)
+                if [[ -z "$PROGRAM_SOURCE" ]]; then
+                    print_error "Generated assembly not found — expected: out_*/asm_test/${RISCV_DV_TEST}_0.S"
+                    exit 1
+                fi
+                print_success "Generated: $PROGRAM_SOURCE"
+            else
+                print_error "riscv-dv generation failed"
+                cat "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"
                 exit 1
             fi
-            print_success "Generated: $PROGRAM_SOURCE"
-        else
-            print_error "riscv-dv generation failed"
-            cat "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"
-            exit 1
+            cd "$FLISTS_DIR" || exit 1
         fi
-        cd "$FLISTS_DIR" || exit 1
 
 
     # Case 6: Custom ELF/BIN
@@ -366,6 +381,20 @@ if [[ -n "$PROGRAM" ]]; then
             # riscv-dv sources are raw .S assembly — must compile to ELF first.
             # riscv-test and custom-elf sources are already ELFs → skip this step.
             if [[ "$PROGRAM_TYPE" == "riscv-dv" && "$PROGRAM_SOURCE" == *.S ]]; then
+                # Vortex RTL does not implement machine-mode CSRs (0x300–0x3FF, 0xF14)
+                # or mret — strip them from the generated assembly to avoid RTL assertion
+                # errors. nop replaces mret; machine-mode csrw/csrr become plain nop.
+                ASM_CLEAN="${PROGRAM_HEX%.hex}_clean.S"
+                sed \
+                    -e 's/\bcsrw\s\+0x3[0-9a-fA-F][0-9a-fA-F]\b.*/nop/g' \
+                    -e 's/\bcsrr\s\+[a-z0-9]*,\s*0x3[0-9a-fA-F][0-9a-fA-F]\b.*/nop/g' \
+                    -e 's/\bcsrr\s\+[a-z0-9]*,\s*0xf14\b.*/nop/g' \
+                    -e 's/\bmret\b/nop/g' \
+                    -e 's/\becall\b/ebreak/g' \
+                    "$PROGRAM_SOURCE" > "$ASM_CLEAN"
+                print_info "Stripped machine-mode CSRs/mret, replaced ecall→ebreak → $ASM_CLEAN"
+                PROGRAM_SOURCE="$ASM_CLEAN"
+
                 ASM_ELF="${PROGRAM_HEX%.hex}.elf"
                 RISCV_GCC="${RISCV_GCC:-riscv64-unknown-elf-gcc}"
                 print_info "Compiling riscv-dv assembly → ELF: $ASM_ELF"
@@ -376,7 +405,7 @@ if [[ -n "$PROGRAM" ]]; then
                     -T"$RISCV_DV_HOME/scripts/link.ld" \
                     "$PROGRAM_SOURCE" \
                     -o "$ASM_ELF" \
-                    -march=rv32imc_zicsr_zifencei -mabi=ilp32 \
+                    -march=rv32im_zicsr_zifencei -mabi=ilp32 \
                     2>&1 | tee "$OBJCOPY_LOG"; then
                     print_success "riscv-dv compiled to ELF"
                     PROGRAM_SOURCE="$ASM_ELF"
