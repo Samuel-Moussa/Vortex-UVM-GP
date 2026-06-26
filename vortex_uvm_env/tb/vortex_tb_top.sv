@@ -349,11 +349,40 @@ module vortex_tb_top;
     logic        tb_execution_started;
     logic        tb_execution_complete;
     int          tb_idle_cycles;
+    int          tb_busy_low_cycles;     // Issue 2: consecutive cycles with busy==0
+    logic        tb_probe_ebreak_seen;   // C3: registered — set when ebreak first seen at fetch
+    wire         tb_ebreak_fetch;        // C3: combinational — OR across all cores
+
+    // I1: multi-core commit + ebreak observation arrays.
+    // One wire per commit lane (NUM_CLUSTERS × NUM_SOCKETS × SOCKET_SIZE × ISSUE_WIDTH).
+    // One wire per core for ebreak detection.
+    localparam TB_NUM_CLUSTERS = `NUM_CLUSTERS;
+    localparam TB_NUM_SOCKETS  = VX_gpu_pkg::NUM_SOCKETS;
+    localparam TB_SOCK_SIZE    = `SOCKET_SIZE;
+    localparam TB_ISSUE_W      = `ISSUE_WIDTH;
+    localparam TB_NUM_CORES_T  = TB_NUM_CLUSTERS * TB_NUM_SOCKETS * TB_SOCK_SIZE;
+    localparam TB_NUM_LANES    = TB_NUM_CORES_T * TB_ISSUE_W;
+
+    wire [TB_NUM_LANES-1:0]   tb_commit_fires_all;  // per-lane commit handshake
+    wire [TB_NUM_CORES_T-1:0] tb_ebreak_fetch_all;  // per-core ebreak-at-fetch
+    logic [$clog2(TB_NUM_LANES+1)-1:0] tb_commit_count_cyc; // popcount this cycle
+
+    // Popcount: how many lanes committed this clock edge
+    always_comb begin : u_commit_popcount
+        tb_commit_count_cyc = '0;
+        for (int _i = 0; _i < TB_NUM_LANES; _i++)
+            tb_commit_count_cyc += TB_NUM_LANES'(tb_commit_fires_all[_i]);
+    end
+    assign tb_ebreak_fetch = |tb_ebreak_fetch_all;
 
     int idle_threshold_val = 5000;
+    // Issue 2 fix: busy=0 completion must be SUSTAINED, not a single-cycle glitch.
+    // A transient busy de-assertion between kernel phases must NOT end the test.
+    int busy_low_threshold_val = 100;
     initial begin
         int tmp;
-        if ($value$plusargs("IDLE_THRESHOLD=%d", tmp)) idle_threshold_val = tmp;
+        if ($value$plusargs("IDLE_THRESHOLD=%d", tmp))     idle_threshold_val     = tmp;
+        if ($value$plusargs("BUSY_LOW_THRESHOLD=%d", tmp)) busy_low_threshold_val = tmp;
     end
 
     always_ff @(posedge clk) begin
@@ -364,15 +393,25 @@ module vortex_tb_top;
             tb_execution_started  <= 0;
             tb_execution_complete <= 0;
             tb_idle_cycles        <= 0;
+            tb_busy_low_cycles    <= 0;
         end else begin
             tb_cycle_count <= tb_cycle_count + 1;
 
+            // I1/C2: real retired count — sum all commit lanes across all cores
+            tb_instr_count <= tb_instr_count + 64'(tb_commit_count_cyc);
+
+            // Issue 2: track SUSTAINED busy de-assertion. Reset on any busy-high
+            // cycle so a transient gap can never accumulate to the threshold.
+            if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy)
+                tb_busy_low_cycles <= tb_busy_low_cycles + 1;
+            else
+                tb_busy_low_cycles <= 0;
+
             if ((vif.axi_if.rvalid && vif.axi_if.rready) ||
-                (vif.axi_if.bvalid && vif.axi_if.bready) || 
+                (vif.axi_if.bvalid && vif.axi_if.bready) ||
                 (vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0])) begin
                 tb_mem_ops     <= tb_mem_ops + 1;
                 tb_idle_cycles <= 0;
-                if (tb_mem_ops % 3 == 0) tb_instr_count <= tb_instr_count + 1;
                 if (!tb_execution_started) begin
                     tb_execution_started <= 1;
                     $display("\n[TB_STATUS @ %0t] Execution STARTED", $time);
@@ -381,19 +420,32 @@ module vortex_tb_top;
                 tb_idle_cycles <= tb_idle_cycles + 1;
             end
 
-            if (tb_execution_started && !tb_execution_complete && !vif.status_if.busy) begin
+            // C3 PRIMARY: ebreak (0x00100073) decoded at fetch stage
+            // tb_ebreak_fetch is combinational (same-cycle); tb_probe_ebreak_seen is registered
+            // (latched one cycle earlier) — either fires the primary path.
+            if (tb_execution_started && !tb_execution_complete && (tb_ebreak_fetch || tb_probe_ebreak_seen)) begin
                 tb_execution_complete <= 1;
                 $display("\n╔═══════════════════════════════════════════════════╗");
-                $display("║  EXECUTION COMPLETE (DUT busy=0)                  ║");
+                $display("║  EXECUTION COMPLETE (ebreak 0x00100073 decoded)  ║");
                 $display("╚═══════════════════════════════════════════════════╝");
                 $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
                          tb_cycle_count, tb_mem_ops, tb_instr_count);
+            // C3 FALLBACK 1: SUSTAINED busy=0 without ebreak — should not happen in a
+            // correct run. Issue 2 fix: require busy low for busy_low_threshold_val
+            // consecutive cycles so a transient mid-kernel gap can't end the test early.
+            end else if (tb_execution_started && !tb_execution_complete &&
+                         tb_busy_low_cycles >= busy_low_threshold_val) begin
+                tb_execution_complete <= 1;
+                $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via sustained busy=0 fallback (%0d cyc) — ebreak not decoded",
+                         $time, busy_low_threshold_val);
+                $display("  Total Cycles: %0d  Mem Ops: %0d  Instructions: %0d",
+                         tb_cycle_count, tb_mem_ops, tb_instr_count);
+            // C3 FALLBACK 2: idle threshold — program may be hung
             end else if (tb_execution_started && !tb_execution_complete &&
                          tb_idle_cycles >= idle_threshold_val) begin
                 tb_execution_complete <= 1;
-                $display("\n╔═══════════════════════════════════════════════════╗");
-                $display("║  EXECUTION COMPLETE (idle safety net %0d cyc)     ║", idle_threshold_val);
-                $display("╚═══════════════════════════════════════════════════╝");
+                $display("\n** Warning: [TB_TOP @ %0t] EXECUTION COMPLETE via idle safety net (%0d cyc) — ebreak not decoded",
+                         $time, idle_threshold_val);
                 $display("  DUT busy=%b — may be stuck!", vif.status_if.busy);
             end
         end
@@ -462,22 +514,45 @@ module vortex_tb_top;
         wire [`XLEN-1:0] fetch_pc_full;
         wire [31:0] fetch_instr;
 
-        localparam [31:0] TB_EBREAK_PC = 32'h800008ac;
-        localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+        localparam [31:0] TB_EBREAK_INSTR   = 32'h00100073;
         localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
+        // tb_probe_ebreak_seen declared at module level (C3)
 
-        reg tb_probe_ebreak_seen;
+        // I1: generate loops — commit fires + ebreak detection across ALL cores/lanes.
+        // cache/fetch wires for display keep core[0] reference (debug display only).
+        genvar _cl, _sk, _co, _lw;
+        generate
+            for (_cl = 0; _cl < TB_NUM_CLUSTERS; _cl++) begin : g_axi_cl
+                for (_sk = 0; _sk < TB_NUM_SOCKETS; _sk++) begin : g_axi_sk
+                    for (_co = 0; _co < TB_SOCK_SIZE; _co++) begin : g_axi_co
+                        localparam _CORE_IDX = _cl * TB_NUM_SOCKETS * TB_SOCK_SIZE
+                                             + _sk * TB_SOCK_SIZE + _co;
+                        localparam _LANE_BASE = _CORE_IDX * TB_ISSUE_W;
+                        // ebreak: per core (fetch is before issue/lane split)
+                        assign tb_ebreak_fetch_all[_CORE_IDX] =
+                            dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.valid &&
+                            (dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.data.instr == TB_EBREAK_INSTR);
+                        for (_lw = 0; _lw < TB_ISSUE_W; _lw++) begin : g_axi_lw
+                            assign tb_commit_fires_all[_LANE_BASE + _lw] =
+                                dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].valid &&
+                                dut.vortex.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].ready;
+                        end
+                    end
+                end
+            end
+        endgenerate
+
         reg tb_probe_exit_addr_seen;
 
-        // Extract cache bus signals from core (1C_1S_1C config: cluster[0].socket[0].core[0])
+        // Cache/fetch display signals — core[0] only (debug telemetry, not pass/fail)
         assign icache_req_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
         assign icache_req_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_ready;
         assign icache_rsp_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_valid;
         assign icache_rsp_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_ready;
 
-        assign fetch_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
+        assign fetch_valid   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
-        assign fetch_instr = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
+        assign fetch_instr   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         // DCACHE is an array; measure the first port (0)
         assign dcache_req_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
@@ -502,9 +577,9 @@ module vortex_tb_top;
                 if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
                 if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
 
-                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_pc_full[31:0] == TB_EBREAK_PC) && (fetch_instr == TB_EBREAK_INSTR)) begin
+                if (!tb_probe_ebreak_seen && tb_ebreak_fetch) begin
                     tb_probe_ebreak_seen <= 1'b1;
-                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
+                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h (core[0] PC shown; any core triggered)", $time, fetch_pc_full[31:0], fetch_instr);
                 end
 
                 if (!tb_probe_exit_addr_seen && vif.axi_if.awvalid && vif.axi_if.awready && (vif.axi_if.awaddr == TB_EXIT_MMIO_ADDR)) begin
@@ -532,21 +607,43 @@ module vortex_tb_top;
         wire [`XLEN-1:0] fetch_pc_full;
         wire [31:0] fetch_instr;
 
-        localparam [31:0] TB_EBREAK_PC = 32'h800008ac;
-        localparam [31:0] TB_EBREAK_INSTR = 32'h00100073;
+        localparam [31:0] TB_EBREAK_INSTR   = 32'h00100073;
         localparam [31:0] TB_EXIT_MMIO_ADDR = 32'h00000088;
+        // tb_probe_ebreak_seen declared at module level (C3)
 
-        reg tb_probe_ebreak_seen;
+        // I1: generate loops — commit fires + ebreak detection across ALL cores/lanes.
+        genvar _cl, _sk, _co, _lw;
+        generate
+            for (_cl = 0; _cl < TB_NUM_CLUSTERS; _cl++) begin : g_mem_cl
+                for (_sk = 0; _sk < TB_NUM_SOCKETS; _sk++) begin : g_mem_sk
+                    for (_co = 0; _co < TB_SOCK_SIZE; _co++) begin : g_mem_co
+                        localparam _CORE_IDX = _cl * TB_NUM_SOCKETS * TB_SOCK_SIZE
+                                             + _sk * TB_SOCK_SIZE + _co;
+                        localparam _LANE_BASE = _CORE_IDX * TB_ISSUE_W;
+                        assign tb_ebreak_fetch_all[_CORE_IDX] =
+                            dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.valid &&
+                            (dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.fetch_if.data.instr == TB_EBREAK_INSTR);
+                        for (_lw = 0; _lw < TB_ISSUE_W; _lw++) begin : g_mem_lw
+                            assign tb_commit_fires_all[_LANE_BASE + _lw] =
+                                dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].valid &&
+                                dut.g_clusters[_cl].cluster.g_sockets[_sk].socket.g_cores[_co].core.commit.commit_arb_if[_lw].ready;
+                        end
+                    end
+                end
+            end
+        endgenerate
+
         reg tb_probe_exit_addr_seen;
 
+        // Cache/fetch display signals — core[0] only (debug telemetry, not pass/fail)
         assign icache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_valid;
         assign icache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.req_ready;
         assign icache_rsp_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_valid;
         assign icache_rsp_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.icache_bus_if.rsp_ready;
 
-        assign fetch_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
+        assign fetch_valid   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
-        assign fetch_instr = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
+        assign fetch_instr   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         assign dcache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
         assign dcache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_ready;
@@ -567,9 +664,9 @@ module vortex_tb_top;
                 if (icache_stalled) icache_stall_cycles <= icache_stall_cycles + 1;
                 if (dcache_stalled) dcache_stall_cycles <= dcache_stall_cycles + 1;
 
-                if (!tb_probe_ebreak_seen && fetch_valid && (fetch_pc_full[31:0] == TB_EBREAK_PC) && (fetch_instr == TB_EBREAK_INSTR)) begin
+                if (!tb_probe_ebreak_seen && tb_ebreak_fetch) begin
                     tb_probe_ebreak_seen <= 1'b1;
-                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h", $time, fetch_pc_full[31:0], fetch_instr);
+                    $display("[TB_PROBE_EBREAK @ %0t] ebreak fetched at PC=0x%08h instr=0x%08h (core[0] PC shown; any core triggered)", $time, fetch_pc_full[31:0], fetch_instr);
                 end
 
                 if (!tb_probe_exit_addr_seen && vif.mem_if.req_valid[0] && vif.mem_if.req_ready[0] && vif.mem_if.req_rw[0] && (vif.mem_if.req_addr[0] == TB_EXIT_MMIO_ADDR[31:2])) begin
@@ -609,6 +706,76 @@ module vortex_tb_top;
     end
 
     //==========================================================================
+    // C1 — ELABORATION ASSERT: UVM VX_MEM_TAG_WIDTH == RTL VX_MEM_TAG_WIDTH
+    // Both are derived from VX_gpu_pkg::VX_MEM_TAG_WIDTH. The first check
+    // catches any future regression where someone re-hardcodes the UVM param.
+    // The $bits check is the structural proof: DUT port width == UVM param.
+    //==========================================================================
+    initial begin : u_c1_tag_width_assert
+        assert (vortex_config_pkg::VX_MEM_TAG_WIDTH == VX_gpu_pkg::VX_MEM_TAG_WIDTH)
+            else $fatal(1, "[C1-ASSERT] VX_MEM_TAG_WIDTH: UVM_pkg=%0d RTL_pkg=%0d -- check vortex_config.sv",
+                        vortex_config_pkg::VX_MEM_TAG_WIDTH, VX_gpu_pkg::VX_MEM_TAG_WIDTH);
+`ifdef USE_AXI_WRAPPER
+        assert ($bits(axi_awid[0]) == vortex_config_pkg::VX_MEM_TAG_WIDTH)
+            else $fatal(1, "[C1-ASSERT] DUT AXI awid width=%0d bits but UVM VX_MEM_TAG_WIDTH=%0d",
+                        $bits(axi_awid[0]), vortex_config_pkg::VX_MEM_TAG_WIDTH);
+`endif
+    end
+
+    //==========================================================================
+    // I2 — ELABORATION ASSERTS: UVM plusarg topology == RTL compile-time params
+    // These fire at time=0 before any UVM phase runs. If +NUM_CLUSTERS=2 but
+    // the RTL was compiled with `NUM_CLUSTERS=1, the bench is meaningless.
+    // Pattern: read the plusarg (default = RTL value so single-config runs
+    // always pass); fatal if the override disagrees with the compiled DUT.
+    //==========================================================================
+    initial begin : u_i2_topology_asserts
+        int unsigned chk_clusters, chk_cores, chk_warps, chk_threads;
+
+        // Default to the RTL compile-time values so the assert is a no-op
+        // when the plusarg is not supplied (single-config baseline run).
+        chk_clusters = TB_NUM_CLUSTERS;
+        chk_cores    = `NUM_CORES;
+        chk_warps    = `NUM_WARPS;
+        chk_threads  = `NUM_THREADS;
+
+        // Issue 3: accept both the NUM_* form and the short aliases the config
+        // object reads (vortex_config.sv apply_plusargs). Check NUM_* first; if
+        // absent, fall back to the alias so an alias-form override is also caught.
+        if (!$value$plusargs("NUM_CLUSTERS=%d", chk_clusters))
+            void'($value$plusargs("CLUSTERS=%d", chk_clusters));
+        if (!$value$plusargs("NUM_CORES=%d", chk_cores))
+            void'($value$plusargs("CORES=%d", chk_cores));
+        if (!$value$plusargs("NUM_WARPS=%d", chk_warps))
+            void'($value$plusargs("WARPS=%d", chk_warps));
+        if (!$value$plusargs("NUM_THREADS=%d", chk_threads))
+            void'($value$plusargs("THREADS=%d", chk_threads));
+
+        assert (chk_clusters == TB_NUM_CLUSTERS)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_CLUSTERS: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_CLUSTERS",
+                chk_clusters, TB_NUM_CLUSTERS);
+
+        assert (chk_cores == `NUM_CORES)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_CORES: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_CORES",
+                chk_cores, `NUM_CORES);
+
+        assert (chk_warps == `NUM_WARPS)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_WARPS: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_WARPS",
+                chk_warps, `NUM_WARPS);
+
+        assert (chk_threads == `NUM_THREADS)
+            else $fatal(1,
+                "[I2-ASSERT] NUM_THREADS: plusarg=%0d but RTL compiled with %0d -- recompile with correct `NUM_THREADS",
+                chk_threads, `NUM_THREADS);
+
+        $display("[I2-ASSERT] Topology OK: %0dCL %0dC %0dW %0dT (RTL == UVM plusargs)",
+                 TB_NUM_CLUSTERS, `NUM_CORES, `NUM_WARPS, `NUM_THREADS);
+    end
+
+    //==========================================================================
     // TIMEOUT WATCHDOG
     //==========================================================================
 
@@ -636,19 +803,48 @@ module vortex_tb_top;
         join_none
     end
 
+
+    // Bind warp/scheduler-state coverage probe into every VX_schedule instance
+    bind VX_schedule vx_sched_probe #(.CORE_ID(0)) u_sched_probe (
+        .clk          (clk),
+        .reset        (reset),
+        .warp_ctl_if  (warp_ctl_if),
+        .schedule_if  (schedule_if),
+        .active_warps (active_warps),
+        .stalled_warps(stalled_warps),
+        .barrier_ctrs (barrier_ctrs),
+        .join_valid   (join_valid),
+        .join_is_dvg  (join_is_dvg),
+        .join_is_else (join_is_else),
+        .join_tmask   (join_tmask)
+    );
+
+    // Bind white-box instruction probe into every VX_dispatch instance
+    bind VX_dispatch vx_instr_probe #(.CORE_ID(0)) u_instr_probe (
+        .clk        (clk),
+        .reset      (reset),
+        .dispatch_if(dispatch_if)
+    );
+    
+
     //==========================================================================
     // SIMULATION COMPLETION
     //==========================================================================
 
     final begin
+        uvm_report_server svr;
+        int unsigned n_err, n_fatal;
+        svr     = uvm_report_server::get_server();
+        n_err   = svr.get_severity_count(UVM_ERROR);
+        n_fatal = svr.get_severity_count(UVM_FATAL);
         $display("\n================================================================================");
         $display("[TB_TOP @ %0t] Simulation Complete", $time);
-        if (vif.status_if.ebreak_detected)
-            $display("Test Result:    PASS (EBREAK detected)");
+        if (n_err == 0 && n_fatal == 0)
+            $display("Test Result:    PASS");
         else
-            $display("Test Result:    UNKNOWN (check test logs)");
+            $display("Test Result:    FAILED (%0d error(s), %0d fatal)", n_err, n_fatal);
         $display("  Total Cycles: %0d  Instructions: %0d",
-                 vif.status_if.cycle_count, vif.status_if.instr_count);
+                vif.status_if.cycle_count, vif.status_if.instr_count);
         memory.print_statistics();
         $display("================================================================================\n");
     end

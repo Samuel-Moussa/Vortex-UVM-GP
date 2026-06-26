@@ -1,0 +1,238 @@
+commit ff6aa52746dc53eba32e632e7df2c8e6017be309
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-04-09 14:04:30 +0200
+
+Add program_with_store.hex and update functional memory sequence for direct mem_model access, fix the VX_MEM_TAG_WIDTH to match the config(still hardcoded need to be parametrized).
+
+
+
+-----
+commit 64e44a0cdc590db6293e011959f4773352bba0ae
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-04-04 15:00:16 +0200
+
+Add script to check last run results and log errors
+
+
+
+-----
+commit fb6d496b960a078eb9f01a7702fc49d46ef32f95
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-04-02 20:06:37 +0200
+
+Refactor memory model integration across UVM environment
+
+- Updated axi_monitor.sv to import mem_model_pkg and enhance memory model handling for R-beat inline comparison.
+- Modified mem_agent_pkg.sv to use import instead of include for mem_model.
+- Changed vortex_env_pkg.sv to import mem_model_pkg for consistency.
+- Adjusted functional_memory_test.sv to import mem_model_pkg instead of including the file directly.
+- Updated vortex_base_test.sv to import mem_model_pkg, ensuring no multiple definitions occur.
+- Altered vortex_smoke_test.sv and its backup to use import for mem_model_pkg, maintaining consistency in test files.
+- Revised vortex_test_pkg.sv to import mem_model_pkg, aligning with the new import strategy.
+
+
+-----
+commit 1130c2c18c1e590fea3b646d3ea77148d7c783c5
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-04-01 01:30:25 +0200
+
+Enhance functional memory test and refactor related sequences for improved clarity and functionality
+
+
+
+-----
+commit b3595850d2692148f52e794d6e19414a4b9fcf05
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-31 18:48:26 +0200
+
+Merge origin/Samuel_UVM: keep MOD-1 smoke test, merge flist with +incdir+UVM_HOME and VX headers
+
+
+
+-----
+commit 496e5f2e3eadde62ec62cd4b9f6d70dca6392dd0
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-31 17:52:54 +0200
+
+Refactor code structure for improved readability and maintainability
+
+
+
+-----
+commit 1ccacce0cb827deb96319151627bf61f28926e63
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-31 17:02:42 +0200
+
+Add AXI and functional memory virtual sequences for enhanced verification
+
+
+
+-----
+commit b94e48f181fd5f74bed3d16722cf381e8eef73be
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-16 18:53:47 +0200
+
+Add comprehensive smoke test report for Vortex UVM bringup, detailing issues, fixes, and validation results
+
+
+
+-----
+commit f737b745944a5e6f774b91c6200b6b9ca8283a04
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-16 18:36:35 +0200
+
+Enhance run_vortex_uvm_enhanced.sh with fixes for startup address handling, DPI library linking, and HEX validation to prevent address overflow issues.
+
+
+
+-----
+commit 5e99b4f28f70ecd5ac68978f035c582aceecf8fe
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-16 17:50:41 +0200
+
+SMOKE TEST SUCESS WITH program_simple.kex
+
+Refactor vortex_smoke_test for TB_TOP DCR integration
+
+- Removed legacy code and comments related to previous configurations.
+- Updated customize_config to align with TB_TOP DCR driver settings.
+- Adjusted run_phase to load the program during reset and wait for reset release.
+- Enhanced monitor_memory_activity to differentiate between AXI and custom memory interfaces.
+- Revised wait_for_completion and check_results to utilize updated timeout and validation logic.
+- Improved logging for better clarity on test execution and results.
+
+
+-----
+commit ccf4c0683c19d6b2fa2a7a75a20708a34f62ab9c
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-03-03 00:51:24 +0200
+
+Refactor memory agent driver and monitor for clocking block compatibility
+
+- Updated mem_driver to handle clocking block signals correctly by indexing with [0].
+- Modified mem_monitor to ensure proper handling of request and response signals using clocking blocks.
+- Adjusted memory interface parameters in vortex_config to align with RTL specifications.
+- Enhanced vortex_smoke_test to integrate DCR initialization within TB_TOP, ensuring no multi-driver conflicts and proper timing coordination.
+- Added program loading functionality and improved test validation checks.
+- Updated test statistics and logging for clarity and accuracy.
+
+
+-----
+commit 618151956771e5e46ee6dda802e9a24fb09f0352
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-02-16 19:04:08 +0200
+
+Add comprehensive smoke test for Vortex GPGPU
+
+- Introduced `vortex_smoke_test.sv` to verify environment build, DCR configuration, program execution, memory operations, and EBREAK detection.
+- Implemented detailed logging and statistics tracking for DCR and memory activities.
+- Updated `vortex_test_pkg.sv` to include the new smoke test file.
+
+
+-----
+commit 88b1f2070fac021ba11e0d18d397ed0c0f7ea942
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-02-07 17:22:15 +0200
+
+Merge remote-tracking branch 'origin/Samuel_UVM' into Samuel_UVM
+
+
+
+-----
+commit 64c3bac7cadea7b9b7b86f01095115f943239ad8
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2026-02-07 16:40:12 +0200
+
+Refactor Vortex UVM Environment Interfaces and Update Memory Configuration
+
+- Commented out unused code (coverage and SVA) in vortex_if.sv, vortex_mem_if.sv, and vortex_status_if.sv for clarity and maintainability.
+- Enhanced coverage metrics in vortex_status_if.sv to include IPC and cache miss rates.
+- Updated vortex_mem_if.sv to introduce a new clocking block for memory response handling.
+- Modified vortex_tb_top.sv to implement a memory response driver process, improving synchronization with the DUT.
+- Changed VX_MEM_DATA_WIDTH from 64 to 512 in vortex_config.sv to accommodate larger data transactions.
+- Set memory agent to passive mode in vortex_env.sv to ensure it only monitors without driving.
+- Adjusted reset cycles in vortex_tb_top.sv for extended reset duration.
+
+
+-----
+commit 891df852ad3a8c816311a056edfcf8ce27d58bca
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-12-30 19:35:10 +0200
+
+RTL modifications for DPI issue with questa21
+
+
+
+-----
+commit 678df551d71ada2bcd87c8a4f1f8e72397762b4b
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-12-30 19:33:36 +0200
+
+1)questa strict optmization fixse: vortex_top VX_cache_bypass VX_operands
+
+2) dpi issue with FPU & TPU
+
+
+-----
+commit 857abde18e7cf5b1cb7ec8447c50ba82c9f00ad9
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-12-30 03:20:53 +0200
+
+ebreak in top real clk in config c-issue in axi transaction
+
+
+
+-----
+commit 61ffacc76e3aad592fa98836c6f93834154b9d19
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-12-29 19:13:17 +0200
+
+Converted Vortex to local folder
+
+
+
+-----
+commit e43b4bb5224f61f5a748a94d90ca59b483eca19f
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-12-29 18:50:03 +0200
+
+Add Vortex GPGPU RTL and UVM verification environment
+
+Components:
+- Vortex/: RISC-V GPGPU RTL design
+  * Core pipeline stages
+  * Cache hierarchy (L1/L2/L3)
+  * FPU, TCU, and memory subsystems
+  * AXI4 and custom memory interfaces
+
+- vortex_uvm_env/: Complete UVM testbench
+  * 5 UVM agents (mem, axi, dcr, host, status)
+  * Test library and sequences
+  * RTL and UVM compilation scripts
+  * Documentation (README, verification plan, interface mapping)
+  * QuestaSim 2021/2024 support
+
+Removed:
+- Old uvm_env directory
+- Backup files and Zone.Identifier artifacts
+
+
+-----
+commit 16634bdbf5deaea5a230296ab6e34b2d70f89af6
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-10-23 18:09:13 +0300
+
+Add project README.md with ASCII map
+
+
+
+-----
+commit dc4124a79de4ef019adbe9fc7a008495f90c5dae
+Author: Samuel Moussa <samuelmoussa64@gmail.com>
+Date:   2025-10-23 17:16:28 +0300
+
+Initial commit of the Vortex UVM GP
+
+
+
+-----

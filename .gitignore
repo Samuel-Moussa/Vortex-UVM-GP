@@ -36,6 +36,7 @@ core-v-verif/
 Vortex/sim/simx/obj/
 Vortex/sim/simx/simx
 Vortex/sim/simx/simx_config.stamp
+Vortex/tests/riscv/riscv-vector-tests/go/
 
 # Backup files
 *~
@@ -57,9 +58,12 @@ Thumbs.db
 # Coverage files
 *.ucdb
 cov_work/
+vortex_uvm_env/cov/report/html/
 
 # Environment files (optional - remove if you want to commit them)
 env/
+
+Vortex/sim/simx/obj/
 
 
 # Backup folders
@@ -68,3 +72,4 @@ backup/
 # Windows Zone Identifier files
 *:Zone.Identifier
 
+vortex_uvm_env/flists/trace/

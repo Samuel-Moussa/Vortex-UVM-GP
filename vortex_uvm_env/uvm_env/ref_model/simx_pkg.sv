@@ -51,9 +51,48 @@ package simx_pkg;
     import "DPI-C" context function int  simx_step(input int cycles);
     import "DPI-C" context function int  simx_is_done();       // returns 1 when finished
     import "DPI-C" context function int  simx_get_exitcode();  // returns exit code after done
-
+    import "DPI-C" context function string simx_get_console();
+    
     // --- Optional bootstrap helper ---
     import "DPI-C" context function void simx_init_exit_code_register();
+
+    //---------------------------------------------------------
+    // M1 cosim retire-record interface (Option β)
+    //---------------------------------------------------------
+    // Pop one retire record from SimX's drain queue. Returns:
+    //   1 = record returned, 0 = queue empty, -1 = error.
+    // result[] must be sized to at least cfg.num_threads on the caller side.
+    import "DPI-C" context function int simx_cosim_pop(
+        output longint unsigned uuid,
+        output int      unsigned cid,
+        output int      unsigned wid,
+        output longint unsigned pc,
+        output int      unsigned tmask,
+        output byte     unsigned wb,
+        output byte     unsigned is_fp,
+        output byte     unsigned rd,
+        output byte     unsigned sop,
+        output byte     unsigned eop,
+        output longint unsigned result[]
+    );
+    import "DPI-C" context function int  simx_cosim_pending();
+    import "DPI-C" context function void simx_cosim_clear();
+
+    // SV mirror of the C simx_retire_t struct. Used by scoreboard to pass
+    // one popped record around as a single object.
+    typedef struct {
+        longint unsigned uuid;
+        int      unsigned cid;
+        int      unsigned wid;
+        longint unsigned pc;
+        int      unsigned tmask;
+        byte     unsigned wb;
+        byte     unsigned is_fp;
+        byte     unsigned rd;
+        byte     unsigned sop;
+        byte     unsigned eop;
+        longint unsigned result[];
+    } simx_retire_s;
 
     //---------------------------------------------------------
     // UVM Golden Model Component

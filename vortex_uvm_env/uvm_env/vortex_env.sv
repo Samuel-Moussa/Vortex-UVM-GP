@@ -115,11 +115,17 @@ class vortex_env extends uvm_env;
     // ------------------------------------------------------------------
     if (cfg.mem_agent_enable) begin
       m_mem_agent = mem_agent::type_id::create("m_mem_agent", this);
-      // mem_agent runs PASSIVE by default in this env so monitors can
-      // observe DUT traffic without injecting stimulus.
-      // Set ACTIVE in the test's customize_config() when driving is needed.
-      m_mem_agent.is_active = UVM_PASSIVE;
-      `uvm_info("VORTEX_ENV", "mem_agent created (PASSIVE)", UVM_MEDIUM)
+      // Active when the custom-mem path is the primary memory interface;
+      // passive when the AXI wrapper is driving (mem_agent is then a pure
+      // observer of internal-bus traffic). Driving the responder is required
+      // for the DUT to receive memory responses on the custom-mem path —
+      // without it, rsp_valid/rsp_data/rsp_tag/req_ready are never sourced
+      // and the DUT either stalls or X-cascades through its i-cache MSHR.
+      m_mem_agent.is_active = cfg.axi_agent_enable ? UVM_PASSIVE : UVM_ACTIVE;
+      `uvm_info("VORTEX_ENV",
+                $sformatf("mem_agent created (%s)",
+                          cfg.axi_agent_enable ? "PASSIVE" : "ACTIVE"),
+                UVM_MEDIUM)
     end
 
     if (cfg.axi_agent_enable) begin

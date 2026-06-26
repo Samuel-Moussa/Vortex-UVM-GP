@@ -13,7 +13,7 @@
 //
 //   AXI_ADDR_W = vortex_config_pkg::AXI_ADDR_WIDTH  (32 RV32, 48 RV64)
 //   AXI_DATA_W = vortex_config_pkg::AXI_DATA_WIDTH  (512, fixed)
-//   AXI_ID_W   = vortex_config_pkg::AXI_ID_WIDTH    (8,   fixed = VX_MEM_TAG_WIDTH)
+//   AXI_ID_W   = vortex_config_pkg::AXI_ID_WIDTH    (derived = VX_gpu_pkg::VX_MEM_TAG_WIDTH)
 //
 // Usage in testbench:
 //   vortex_if vif(clk, reset_n);
@@ -44,7 +44,7 @@ interface vortex_if (
     //==========================================================================
     // SUB-INTERFACE INSTANTIATION
     // Parameters sourced from vortex_config_pkg, NOT from raw RTL macros.
-    //   AXI_ID_WIDTH   = 8   (VX_MEM_TAG_WIDTH = L3_MEM_TAG_WIDTH)
+    //   AXI_ID_WIDTH   = VX_gpu_pkg::VX_MEM_TAG_WIDTH (derived, e.g. 50 debug / 7 NDEBUG)
     //   AXI_DATA_WIDTH = 512 (VX_MEM_DATA_WIDTH = L3_LINE_SIZE * 8)
     //   AXI_ADDR_WIDTH = 32 or 48 (byte address, XLEN-dependent)
     //==========================================================================
@@ -213,7 +213,24 @@ interface vortex_if (
     endgroup
 
     system_cg sys_cov = new();
-
+    // ---- NEW: drop idle-interface coverpoints from the % calculation --------
+    // The data interface is chosen by the USE_AXI_WRAPPER plusarg (set by the
+    // run script's --interface flag). The unused interface sits idle, so its
+    // coverpoints would pin at 0% and drag system_cg down. Setting weight = 0
+    // removes them from the coverage percentage but KEEPS the bins in the UCDB,
+    // so a later vcover merge across axi+mem runs still recovers full coverage.
+    initial begin
+        int use_axi;
+        if (!$value$plusargs("USE_AXI_WRAPPER=%d", use_axi))
+            use_axi = 1;                // default to AXI when plusarg absent
+        if (use_axi) begin
+            sys_cov.mem_usage_cp.option.weight     = 0;   // idle on AXI runs
+            sys_cov.system_mem_cross.option.weight = 0;
+        end else begin
+            sys_cov.axi_usage_cp.option.weight     = 0;   // idle on MEM runs
+            sys_cov.system_axi_cross.option.weight = 0;
+        end
+    end
     //==========================================================================
     // DEBUG: Interface Status Display
     //==========================================================================
