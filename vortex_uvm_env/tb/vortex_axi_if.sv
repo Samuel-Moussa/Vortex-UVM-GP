@@ -12,7 +12,7 @@
 // Default parameters match Vortex memory bus exactly:
 //   ADDR_WIDTH = AXI_ADDR_WIDTH  (32 RV32, 48 RV64) — set by vortex_if
 //   DATA_WIDTH = 512             (VX_MEM_DATA_WIDTH = L3_LINE_SIZE * 8)
-//   ID_WIDTH   = 8               (VX_MEM_TAG_WIDTH  = L3_MEM_TAG_WIDTH)
+//   ID_WIDTH = VX_MEM_TAG_WIDTH  (derived; =50 for debug UUID_WIDTH=44)
 //
 // Clocking Blocks:
 //   - master_cb:  All 'input' (DUT is master, TB observes) — no dual driver
@@ -31,7 +31,7 @@
 interface automatic vortex_axi_if #(
     parameter ADDR_WIDTH            = 32,    // byte address (32 RV32, 48 RV64)
     parameter DATA_WIDTH            = 512,   // FIX: was 64 — must be VX_MEM_DATA_WIDTH = 512
-    parameter ID_WIDTH              = 50,    // will be parametrized later to VX_MEM_TAG_WIDTH  for now = 50 for 1CL,1C,4T,4W
+    parameter ID_WIDTH              = 50,    // overridden at instantiation = VX_MEM_TAG_WIDTH
     parameter bit ENABLE_FULL_AXI_CHECKS = 1'b1  // set 0 to silence Groups A/C/D/E/F; existing handshake checks stay on
 ) (
     input logic clk,
