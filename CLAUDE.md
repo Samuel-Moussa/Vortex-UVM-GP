@@ -35,7 +35,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ---
 
-**Synced-to:** `4c36bd82` (2026-06-26) — C1 + ISS-01 fixed, hello kernel PASS
+**Synced-to:** `(pending commit 2026-06-26)` — riscv-dv riscv_arithmetic_basic_test PASS (0 errors)
 
 ## CHECKLIST — Samuel's tasks (finish top-down)
 
@@ -88,14 +88,9 @@ Issues observed in sim that need root-cause before Gate-0 sign-off. Not yet assi
   3. The `busy` signal stays high because a warp is stuck (X-prop, infinite loop, wrong hex load).
 - **Impact:** Blocks all completion testing for vecadd; T4 negative-injection test also meaningless until completion is reliable.
 
-### INV-3 — riscv-dv program termination incompatible with stress test Gate 2
-- **Symptom:** `random_instruction_stress_test.sv` Gate 2 checks `vif.status_if.ebreak_detected`. riscv-dv generated programs exit via `write_tohost` + `j write_tohost` (infinite loop) — no `ebreak` is emitted. Gate 2 will always FAIL.
-- **Root cause:** riscv-dv's `user_extension/user_init.s` is empty. The standard riscv-dv exit calls `_exit → write_tohost` (a trap-based convention). Vortex expects EBREAK or MMIO write to `0x00000088`.
-- **Fix options (coordinate with Steven — riscv-dv tests are his lane):**
-  1. Add `ebreak` to `~/riscv-dv/user_extension/user_init.s` as a post-exit epilogue.
-  2. Change Gate 2 in `random_instruction_stress_test.sv` to check `busy=0` (fallback path) instead of `ebreak_detected`.
-  3. Override the riscv-dv link script to add a Vortex MMIO exit before the `j _exit` infinite loop.
-- **Impact:** stress test pipeline (prepare.sh + Makefile) is now fixed; test will compile and load. Blocked on this termination fix before it can PASS.
+### ~~INV-3~~ — RESOLVED: riscv-dv programs DO emit ebreak
+- riscv-dv `ecall` handler calls `ebreak` — DUT reached EBREAK after 5163 cycles. Gate 2 works.
+- **Actual blocker was:** `cfg.simx_enable = 1` in the stress test → SimX SIGABRT on privileged instructions (mret, CSR, trap handlers). Fixed by disabling SimX in `random_instruction_stress_test.sv`.
 
 ### INV-2 — `assert_dcr_write_timing` fires at startup
 - **Symptom:** `vortex_if.sv:172` triggers at 3915ns and 3975ns on every vecadd run.
