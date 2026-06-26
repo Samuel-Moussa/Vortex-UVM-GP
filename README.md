@@ -1,193 +1,272 @@
+<div align="center">
+
 # Vortex GPGPU — UVM Verification Environment
 
-A UVM verification environment for the [Vortex](https://github.com/vortexgpgpu/vortex)
-open-source RISC-V GPGPU, built to the mentor's specification (5-agent layout,
-interface mapping, SimX golden reference, functional + structural coverage). The
-DUT RTL lives in `Vortex/`; the verification environment lives in
-`vortex_uvm_env/`.
+**A reusable, configurable UVM testbench for the Vortex open-source RISC-V GPGPU,**
+**verified by end-state equivalence against the SimX golden model.**
 
-> **Method:** black-box end-state equivalence. The DUT runs a program to
-> completion; the **SimX** software model runs the same program via DPI; the
-> scoreboard compares the final architectural memory state. SimX is the golden
-> reference.
+[![Methodology](https://img.shields.io/badge/Methodology-UVM%201.2-1f6feb?style=flat-square)](https://www.accellera.org/downloads/standards/uvm)
+[![SystemVerilog](https://img.shields.io/badge/SystemVerilog-IEEE%201800-e36209?style=flat-square)](https://ieeexplore.ieee.org/document/8299595)
+[![ISA](https://img.shields.io/badge/ISA-RISC--V%20RV32IM-283272?style=flat-square&logo=riscv&logoColor=white)](https://riscv.org/)
+[![Simulator](https://img.shields.io/badge/Simulator-QuestaSim%202021.2-2da44e?style=flat-square)](https://eda.sw.siemens.com/en-US/ic/questa/)
+[![OS](https://img.shields.io/badge/OS-Ubuntu%2022.04-E95420?style=flat-square&logo=ubuntu&logoColor=white)](https://ubuntu.com/)
+[![Golden Model](https://img.shields.io/badge/Golden%20Model-SimX%20·%20DPI--C-8957e5?style=flat-square)](https://github.com/vortexgpgpu/vortex)
+[![Gate 0](https://img.shields.io/badge/Gate--0-in%20progress-d4a72c?style=flat-square)](CLAUDE.md)
+
+[Quick Start](#-quick-start) ·
+[Architecture](#-architecture) ·
+[Tests](#-tests) ·
+[Status](#-status) ·
+[Docs](#-documentation-map)
+
+</div>
 
 ---
 
-## Quick start
+## Overview
+
+This repository hosts a complete **UVM verification environment** for the
+[Vortex](https://github.com/vortexgpgpu/vortex) RISC-V GPGPU. The design-under-test
+(DUT) RTL is vendored in [`Vortex/`](Vortex/); the verification environment lives
+in [`vortex_uvm_env/`](vortex_uvm_env/).
+
+> [!NOTE]
+> **Verification method — black-box, end-state equivalence.**
+> The DUT executes a program to completion. The **SimX** C++ model executes the
+> same program through a DPI-C bridge. The scoreboard compares the final
+> architectural memory state. **SimX is the golden reference.**
+
+<table>
+<tr><td><b>Simulator</b></td><td>QuestaSim 2021.2_1</td>
+    <td><b>Primary config</b></td><td>1&nbsp;cluster · 1&nbsp;core · 4&nbsp;warps · 4&nbsp;threads</td></tr>
+<tr><td><b>Host OS</b></td><td>Ubuntu 22.04</td>
+    <td><b>ISA / data width</b></td><td>RISC-V RV32IM</td></tr>
+<tr><td><b>Memory interface</b></td><td>AXI4 (primary) · custom valid-ready</td>
+    <td><b>Golden model</b></td><td>SimX, linked as <code>simx_model.so</code></td></tr>
+<tr><td><b>DUT RTL pin</b></td><td colspan="3"><code>Vortex/</code> @ <code>7a52ee5</code></td></tr>
+</table>
+
+---
+
+## Table of Contents
+
+- [Quick Start](#-quick-start)
+- [Repository Layout](#-repository-layout)
+- [Architecture](#-architecture)
+- [Tests](#-tests)
+- [Configurability](#-configurability)
+- [Team & Ownership](#-team--ownership)
+- [Status](#-status)
+- [Documentation Map](#-documentation-map)
+
+---
+
+## 🚀 Quick Start
 
 ```bash
 cd vortex_uvm_env
 
-# Full flow (compile RTL + UVM, build SimX DPI, simulate):
+# Full flow: compile RTL + UVM, build the SimX DPI library, simulate.
 make sim TEST=kernel_launch_test PROGRAM_NAME=hello TIMEOUT=500000
 
-# Re-run without recompiling the RTL:
+# Re-run without recompiling the RTL.
 make sim-only TEST=kernel_launch_test PROGRAM_NAME=hello
 
-# GUI (Questa):
+# Interactive waveform debug (Questa GUI).
 make gui TEST=kernel_launch_test PROGRAM_NAME=hello
 
-# Coverage merge across runs:
-make cov-merge          # merge staged UCDBs
-make help               # all flags
+# Merge per-run coverage into a single UCDB.
+make cov-merge
+
+# All targets and flags.
+make help
 ```
 
-A run drops results in `vortex_uvm_env/results/<date>/run_<time>_<test>/`
-(`logs/simulation.log`, `reports/SUMMARY.txt`, `reports/coverage.ucdb`,
-optional `waves/`). `results/latest` symlinks the most recent.
+Each run writes to `vortex_uvm_env/results/<date>/run_<time>_<test>/`:
 
-### Toolchain / environment
-| Item | Value |
-|------|-------|
-| Simulator | QuestaSim 2021.2_1 |
-| OS | Ubuntu 22.04 |
-| Primary config | **1 cluster / 1 core / 4 warps / 4 threads**, RV32, **AXI** memory interface |
-| Golden model | SimX (C++), linked as `simx_model.so` via DPI-C |
-| RTL pin | `Vortex/` @ `7a52ee5` |
-
-Config is parameterized — override per run:
-`make sim ... CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 INTERFACE=axi`.
-Topology plusargs are checked against the compiled RTL at elaboration (see
-**I2 asserts**), so a stale `sim-only` with mismatched params aborts loudly
-instead of producing garbage.
+```
+results/latest/
+├── logs/simulation.log        # full transcript
+├── reports/SUMMARY.txt        # pass/fail, config, statistics
+├── reports/coverage.ucdb      # per-run coverage database
+└── waves/                     # optional VCD
+```
 
 ---
 
-## Repository layout
+## 📂 Repository Layout
 
 ```
 Vortex_UVM_GP/
-├── Vortex/                       # DUT — Vortex RISC-V GPGPU RTL + SimX model (pinned)
-│   ├── hw/rtl/                   #   SystemVerilog RTL (Vortex.sv, Vortex_axi.sv, ...)
+├── Vortex/                       # DUT — Vortex RISC-V GPGPU (pinned @ 7a52ee5)
+│   ├── hw/rtl/                   #   SystemVerilog RTL (Vortex.sv, Vortex_axi.sv, …)
 │   └── sim/simx/                 #   SimX C++ behavioral model (golden reference)
-├── vortex_uvm_env/               # UVM verification environment  ← work happens here
-│   ├── tb/                       #   vortex_tb_top.sv, vortex_if.sv (interfaces + binds)
-│   ├── uvm_env/                  #   env, config, scoreboard, coverage, virtual sequencer
-│   │   ├── agents/               #     5 agents: mem, axi, dcr, host, status
-│   │   ├── sequences/            #     virtual sequences (kernel launch, mem, stress)
-│   │   └── ref_model/            #     SimX DPI bridge (simx_dpi.cpp, simx_pkg.sv, .so)
-│   ├── uvm_tests/                #   test library (see Tests below)
+│
+├── vortex_uvm_env/               # ◀ UVM verification environment (all work here)
+│   ├── tb/                       #   vortex_tb_top.sv · vortex_if.sv (interfaces, binds, asserts)
+│   ├── uvm_env/
+│   │   ├── agents/               #   5 agents: mem · axi · dcr · host · status
+│   │   ├── sequences/            #   virtual sequences (kernel launch, mem, stress)
+│   │   ├── ref_model/            #   SimX DPI bridge (simx_dpi.cpp, simx_pkg.sv, .so)
+│   │   ├── vortex_env.sv         #   environment
+│   │   ├── vortex_config.sv      #   configuration object (derived from RTL params)
+│   │   ├── vortex_scoreboard.sv  #   end-state comparison vs SimX
+│   │   └── vortex_coverage_collector.sv
+│   ├── uvm_tests/                #   test library (see Tests)
 │   ├── scripts/                  #   run.sh → prepare.sh → compile.sh → simulate.sh
-│   ├── flists/                   #   RTL + UVM file lists
-│   ├── cov/ results/ trace/      #   coverage staging, run outputs, traces
-│   └── docs/                     #   mentor guidance + plan + per-fix writeups (docs/fixes/)
-├── CLAUDE.md                     # Samuel's working context + live task checklist
+│   ├── flists/  cov/  results/   #   file lists · coverage staging · run outputs
+│   └── docs/                     #   guidance, plan, per-fix writeups (docs/fixes/)
+│
+├── CLAUDE.md                     # working context + authoritative live checklist
 └── README.md                     # this file
 ```
 
-The full intended file tree and rationale are in
-[vortex_uvm_env/docs/FILE_TREE.md](vortex_uvm_env/docs/FILE_TREE.md).
+> Full directory rationale: [`vortex_uvm_env/docs/FILE_TREE.md`](vortex_uvm_env/docs/FILE_TREE.md)
 
 ---
 
-## Architecture
+## 🏗 Architecture
 
 ```
-        +------------------- vortex_tb_top -------------------+
-        |                                                     |
-  DCR / host  ──▶ [dcr_agent] [host_agent]                    |
-        |            │                                         |
-        |            ▼                                         |
-  program ──▶  Vortex DUT (RTL)  ──▶ AXI / mem bus ──▶ mem_model
-        |            │  ▲                                      |
-        |   [status_agent] [axi_agent / mem_agent]  (monitors) |
-        |            │                                         |
-        |            ▼  analysis ports                         |
-        |        vortex_scoreboard ──── DPI ───▶ SimX (golden) |
-        |            │                                         |
-        |        vortex_coverage_collector                     |
-        +-----------------------------------------------------+
+        ┌────────────────────── vortex_tb_top ──────────────────────┐
+        │                                                           │
+  DCR / host ──▶ │ dcr_agent │ host_agent │                         │
+        │                       │                                   │
+   program ──▶   Vortex DUT (RTL) ──▶ AXI / mem bus ──▶ mem_model   │
+        │                  │   ▲                                    │
+        │      │ status_agent │ │ axi_agent / mem_agent │ (monitors)│
+        │                  │                                        │
+        │                  ▼  analysis ports                        │
+        │            vortex_scoreboard ───── DPI ─────▶ SimX (gold) │
+        │                  │                                        │
+        │            vortex_coverage_collector                      │
+        └───────────────────────────────────────────────────────────┘
 ```
 
-### The 5 agents → RTL interfaces
-Mapping detail (signals, widths, line refs) in
-[vortex_uvm_env/docs/INTERFACE_MAPPING.md](vortex_uvm_env/docs/INTERFACE_MAPPING.md).
+### Agents → RTL interfaces
 
 | Agent | RTL interface | Protocol | Role |
-|-------|---------------|----------|------|
-| `mem_agent` | custom memory (`Vortex.sv`) | valid-ready | active/passive mem |
-| `axi_agent` | AXI4 (`Vortex_axi.sv`) | AXI4, 5 channels | **primary** mem interface |
+| :--- | :--- | :--- | :--- |
+| `axi_agent` | AXI4 (`Vortex_axi.sv`) | AXI4 · 5 channels | **primary** memory |
+| `mem_agent` | custom memory (`Vortex.sv`) | valid-ready | alt memory path |
 | `dcr_agent` | device config regs | write-only | startup PC, perf config |
 | `host_agent` | kernel launch (via DCR) | DCR-based | start execution |
-| `status_agent` | status/busy | passive | observe busy, completion |
+| `status_agent` | status / busy | passive | observe completion |
 
-### Completion + reference comparison
-- The TB decodes the real **ebreak** (`0x00100073`) at the fetch stage across all
-  cores as the **primary** completion trigger; sustained `busy==0` and an idle
-  watchdog are fallbacks.
+> Signal-level mapping (widths, line refs): [`docs/INTERFACE_MAPPING.md`](vortex_uvm_env/docs/INTERFACE_MAPPING.md)
+
+### Completion & comparison
+
+- **Primary trigger** — the TB decodes the real `ebreak` (`0x00100073`) at the
+  fetch stage across **all** cores.
+- **Fallbacks** — sustained `busy == 0`, then an idle watchdog (both warn).
 - On completion the scoreboard runs SimX to the same point and compares the
-  data-region memory. Instruction count and IPC come from the real
-  `commit_arb_if[*]` retirement handshake (not a heuristic).
+  data-region memory. Instruction count and IPC are derived from the real
+  `commit_arb_if[*]` retirement handshake — not a heuristic.
 
 ---
 
-## Tests
+## 🧪 Tests
 
-`vortex_uvm_env/uvm_tests/` (run with `TEST=<name>`):
+Located in [`vortex_uvm_env/uvm_tests/`](vortex_uvm_env/uvm_tests/) — select with `TEST=<name>`:
 
 | Test | Focus |
-|------|-------|
-| `vortex_smoke_test`, `vortex_sanity_test` | bring-up / connectivity |
+| :--- | :--- |
+| `vortex_smoke_test` · `vortex_sanity_test` | bring-up / connectivity |
 | `kernel_launch_test` | end-to-end kernel (hello, vecadd) vs SimX |
-| `functional_memory_test`, `axi_memory_test` | memory correctness / AXI compliance |
-| `warp_scheduling_test`, `barrier_sync_test` | scheduler / sync primitives |
+| `functional_memory_test` · `axi_memory_test` | memory correctness / AXI compliance |
+| `warp_scheduling_test` · `barrier_sync_test` | scheduler / synchronization |
 | `random_instruction_stress_test` | constrained-random (riscv-dv) pipeline stress |
-| `negative_result_test` | fault-injection guard — must go RED on injection |
+| `negative_result_test` | fault-injection guard — **must go RED on injection** |
 
-`PROGRAM_NAME=<kernel>` resolves a kernel ELF under
-`Vortex/tests/kernel/<name>/`. `riscv_*` programs are generated and compiled
-through the riscv-dv pipeline in `prepare.sh`.
+`PROGRAM_NAME=<kernel>` resolves an ELF under `Vortex/tests/kernel/<name>/`.
+`riscv_*` programs are generated and compiled through the riscv-dv pipeline in
+[`prepare.sh`](vortex_uvm_env/scripts/prepare.sh).
 
 ---
 
-## Team lanes
+## ⚙ Configurability
 
-This is a group project to one shared plan. Each owner stays in their lane and
-flags shared-file changes.
+The environment is parameterized and validated against the compiled RTL at
+elaboration. Override any knob per run:
+
+```bash
+make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd \
+         INTERFACE=axi CLUSTERS=1 CORES=1 WARPS=4 THREADS=4 TIMEOUT=1000000
+```
+
+> [!IMPORTANT]
+> **Elaboration asserts** check the UVM topology and tag widths against the
+> compiled DUT (`NUM_CLUSTERS/CORES/WARPS/THREADS`, `VX_MEM_TAG_WIDTH`). A stale
+> `sim-only` run with mismatched parameters **aborts loudly** at time 0 instead
+> of silently producing garbage.
+
+---
+
+## 👥 Team & Ownership
+
+A group project to one shared plan; each owner stays in lane and flags
+shared-file changes.
 
 | Owner | Lane |
-|-------|------|
-| **Samuel** | infrastructure correctness + full configurability (TB, config, scripts, elaboration asserts) |
-| **Ahmad** | functional/code coverage + scoreboard |
-| **Steven** | directed/random tests, AXI SVA, SimX/DPI |
+| :--- | :--- |
+| **Samuel** | infrastructure correctness + full configurability (TB, config, scripts, asserts) |
+| **Ahmad** | functional & code coverage + scoreboard |
+| **Steven** | directed / random tests, AXI SVA, SimX / DPI |
 
-Cross-lane edits and handovers are documented per-issue in
-[vortex_uvm_env/docs/fixes/](vortex_uvm_env/docs/fixes/) — start at its
-[README](vortex_uvm_env/docs/fixes/README.md). Notable: a CRITICAL scoreboard
-handover ([dropped-stores](vortex_uvm_env/docs/fixes/HANDOVER_Ahmad_scoreboard_dropped_stores.md))
-and the engineering [evaluation](vortex_uvm_env/docs/fixes/EVALUATION_2026-06-26.md).
-
----
-
-## Status (2026-06-26)
-
-**Bench-trust (Gate 0) — Samuel's items complete:**
-- ✅ Tag/ID width derived from RTL with an elaboration `$bits` assert (C1)
-- ✅ Real retired instruction count + IPC from the commit handshake (C2/I1)
-- ✅ ebreak-decode completion, multi-core (C3/I1)
-- ✅ Honest UVM_ERROR gate, no subtraction (T4)
-- ✅ Topology elaboration asserts incl. plusarg aliases (I2)
-- ✅ riscv-dv `random_instruction_stress_test` passing end-to-end
-
-**Open before Gate-0 sign-off:**
-- ⛔ Scoreboard cannot yet detect *dropped* stores (DUT-write-driven comparison) — Ahmad's lane, handover written
-- ⛔ INV-1: vecadd `busy` never idles (completion path blocked for that kernel)
-
-The authoritative, continuously-updated checklist is in
-[CLAUDE.md](CLAUDE.md); the rolling plan is
-[vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md](vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md).
+Cross-lane edits and handovers are documented per issue in
+[`docs/fixes/`](vortex_uvm_env/docs/fixes/) — including a CRITICAL scoreboard
+[handover](vortex_uvm_env/docs/fixes/HANDOVER_Ahmad_scoreboard_dropped_stores.md)
+and the engineering
+[evaluation](vortex_uvm_env/docs/fixes/EVALUATION_2026-06-26.md).
 
 ---
 
-## Documentation map
+## 📊 Status
 
-| Doc | What |
-|-----|------|
-| [docs/README.md](vortex_uvm_env/docs/README.md) | environment overview (original spec) |
-| [docs/FILE_TREE.md](vortex_uvm_env/docs/FILE_TREE.md) | intended directory structure |
-| [docs/INTERFACE_MAPPING.md](vortex_uvm_env/docs/INTERFACE_MAPPING.md) | RTL interface → UVM agent mapping |
-| [docs/DELIVERABLES_SUMMARY.md](vortex_uvm_env/docs/DELIVERABLES_SUMMARY.md) | deliverables checklist |
-| [docs/Vortex_UVM_Plan_Current.md](vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md) | rolling task plan |
-| [docs/fixes/](vortex_uvm_env/docs/fixes/) | per-issue fix writeups + review artifacts |
-| [docs/AXI_SVA_report.md](vortex_uvm_env/docs/AXI_SVA_report.md) | AXI assertions report |
-| [docs/GLIBCXX_*](vortex_uvm_env/docs/) | DPI/Questa libstdc++ toolchain notes |
+> Snapshot — the authoritative live checklist is in [`CLAUDE.md`](CLAUDE.md).
+
+**Bench-trust (Gate 0) — infrastructure items complete**
+
+| ✔ | Item |
+| :---: | :--- |
+| ✅ | Tag/ID width derived from RTL + elaboration `$bits` assert *(C1)* |
+| ✅ | Real retired instruction count + IPC from commit handshake *(C2 / I1)* |
+| ✅ | `ebreak`-decode completion, multi-core *(C3 / I1)* |
+| ✅ | Honest `UVM_ERROR` gate, no subtraction *(T4)* |
+| ✅ | Topology elaboration asserts incl. plusarg aliases *(I2)* |
+| ✅ | riscv-dv `random_instruction_stress_test` end-to-end |
+
+**Open before Gate-0 sign-off**
+
+| ⛔ | Blocker | Lane |
+| :---: | :--- | :--- |
+| ⛔ | Scoreboard cannot yet detect *dropped* stores (DUT-write-driven compare) | Ahmad |
+| ⛔ | INV-1: vecadd `busy` never idles (completion blocked for that kernel) | open |
+
+---
+
+## 📚 Documentation Map
+
+| Document | Purpose |
+| :--- | :--- |
+| [`docs/README.md`](vortex_uvm_env/docs/README.md) | environment overview (original spec) |
+| [`docs/FILE_TREE.md`](vortex_uvm_env/docs/FILE_TREE.md) | intended directory structure |
+| [`docs/INTERFACE_MAPPING.md`](vortex_uvm_env/docs/INTERFACE_MAPPING.md) | RTL interface → UVM agent mapping |
+| [`docs/DELIVERABLES_SUMMARY.md`](vortex_uvm_env/docs/DELIVERABLES_SUMMARY.md) | deliverables checklist |
+| [`docs/Vortex_UVM_Plan_Current.md`](vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md) | rolling task plan |
+| [`docs/fixes/`](vortex_uvm_env/docs/fixes/) | per-issue fix writeups + review artifacts |
+| [`docs/AXI_SVA_report.md`](vortex_uvm_env/docs/AXI_SVA_report.md) | AXI assertions report |
+| [`docs/GLIBCXX_*`](vortex_uvm_env/docs/) | DPI / Questa libstdc++ toolchain notes |
+
+---
+
+## License & Attribution
+
+The Vortex DUT RTL and SimX model are vendored under their upstream license —
+see [`Vortex/LICENSE`](Vortex/LICENSE). The UVM verification environment in
+[`vortex_uvm_env/`](vortex_uvm_env/) is coursework authored by the team above.
+
+<div align="center">
+<sub>Built on the Vortex GPGPU · Verified with UVM 1.2 on QuestaSim · SimX golden reference via DPI-C</sub>
+</div>
