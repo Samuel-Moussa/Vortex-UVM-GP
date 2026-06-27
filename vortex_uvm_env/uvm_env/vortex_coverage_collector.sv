@@ -179,6 +179,14 @@ class vortex_coverage_collector extends uvm_component;
   // Fields verified: trans_type, burst, size, len, bresp, rresp[]
   // Response enums: AXI_OKAY, AXI_EXOKAY, AXI_SLVERR, AXI_DECERR
   // --------------------------------------------------------------------------
+  
+  // Low bits of the AXI ID are routing/structural (nc_sel|req_sel|wsel|tag_id or
+  // |MSHR_ID|bank_sel|); the high UUID_WIDTH(=44) bits are a free-running
+  // per-instruction counter and must NOT be binned. Cover only the routing field.
+  localparam int AXI_ID_W  = $bits(current_axi.id);                  // 50
+  localparam int UUID_W    = VX_gpu_pkg::UUID_WIDTH;                 // 44 (debug)
+  localparam int ROUTE_W   = AXI_ID_W - UUID_W;                      // ~6 reachable bits
+
   covergroup axi_transaction_cg;
     option.per_instance = 1;
 
@@ -187,12 +195,15 @@ class vortex_coverage_collector extends uvm_component;
       bins read  = {axi_transaction::AXI_READ};
     }
 
-    // ID field for outstanding transaction tracking (0-255)
-    cp_id: coverpoint current_axi.id {
-      bins id_low[]  = {[0:63]};
-      bins id_mid[]  = {[64:127]};
-      bins id_high[] = {[128:191]};
-      bins id_top[]  = {[192:255]};
+    // Routing/structural sub-field only (low ROUTE_W bits). Every value here is a
+    // real outstanding-slot / requester / NC-path destination — all reachable.
+    cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0];
+
+    // Is the high UUID field actually populated (debug tag present, non-zero)?
+    // 2 honest bins — confirms tracing tag is live without binning its value.
+    cp_uuid_present : coverpoint (|current_axi.id[AXI_ID_W-1:ROUTE_W]) {
+        bins zero     = {1'b0};
+        bins nonzero  = {1'b1};
     }
 
     cp_burst: coverpoint current_axi.burst {
@@ -246,7 +257,7 @@ class vortex_coverage_collector extends uvm_component;
     cross_type_burst_size: cross cp_type, cp_burst, cp_size;
     cross_type_len: cross cp_type, cp_len;
     cross_len_addr: cross cp_len, cp_addr_region;
-    cross_type_id: cross cp_type, cp_id;
+    cross_type_route : cross cp_type, cp_id_route;
   endgroup : axi_transaction_cg
 
   // --------------------------------------------------------------------------
@@ -466,6 +477,13 @@ class vortex_coverage_collector extends uvm_component;
     dcr_imp    = new("dcr_imp",    this);
     host_imp   = new("host_imp",   this);
     status_imp = new("status_imp", this);
+
+    // Guard against a config (e.g. NDEBUG, UUID_WIDTH=1) that would mis-slice
+    // the AXI ID and accidentally bin the UUID counter again.
+    if (!(ROUTE_W > 0 && ROUTE_W < 12))
+      `uvm_fatal("COVERAGE",
+        $sformatf("cp_id_route width ROUTE_W=%0d implausible (AXI_ID_W=%0d, UUID_W=%0d) — check UUID_WIDTH source",
+                  ROUTE_W, AXI_ID_W, UUID_W))
   endfunction : build_phase
 
   //==========================================================================
