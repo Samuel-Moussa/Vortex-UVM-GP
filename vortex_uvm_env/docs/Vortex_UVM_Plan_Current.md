@@ -93,7 +93,7 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 - **redundant** `dcr_minimal_startup_sequence` — deleted (I5 hygiene). ✅
 
 **OPEN — investigations (un-boxed):**
-- **INV-1** — ROOT-CAUSED (SIMT warp-control: `wspawn`'d warps parked at `vx_tmc zero`; not 32/64, not DCR args, not TLS size). Handed to Steven for waveform/microarch. Blocks the real T4 negative test. See `docs/fixes/INV1_kernel_completion_hang.md`.
+- **INV-1** — **SOLVED 2026-06-29.** Root cause = **`vx_printf` console-IO volume** (NOT a wspawn/tmc hang — that hypothesis retracted). Native simx completes vecadd (~4.2M cyc); bench retires climb with cycles (progressing). Fix: printf-light kernels — **`vecadd_lite`** (multi-warp, no printf) PASSES 9915 cyc, DUT==SimX. Unblocks T4. `vx_spawn`/multi-warp work fine. See `docs/fixes/INV1_kernel_completion_hang.md` (top correction).
 - **INV-2** `assert_dcr_write_timing` fires at startup (3915/3975 ns), inflating RTL error count.
 
 ---
@@ -112,8 +112,8 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | Func cov: warp states | all | 🟡 defined, not closed | `sched_state/divergence/reconverge/barrier/tmc/wspawn` CGs live in `vx_sched_probe.sv` (`988559a`); needs divergent + barrier stimulus |
 | Func cov: memory patterns | aligned/unaligned/contention | 🟡 alignment ✅ | add contention |
 | Func cov: exceptions | all types | ❌ | `exception_cg` + stimulus |
-| Structural line / toggle | >95% / >90% | stmt 93.43% / toggle 69.88% (12-test merge) | close + waivers (see `COVERAGE_STATUS_2026-06-28.md`) |
-| **Functional (covergroup bins)** | 100% | **12.17%** — capped by `axi_transaction_cg` 1699 mostly-unreachable cross bins | **Ahmad `ignore_bins`** = the unlock; then stimulus |
+| Structural line / toggle | >95% / >90% | stmt 93.43% / toggle 69.88% (12-test merge) | close + waivers (see `COVERAGE_STATUS_2026-06-29.md`) |
+| **Functional (covergroup bins)** | 100% | **37.51%** (was 12.17%) — `ignore_bins` removed 1309 unreachable AXI bins; remaining 393 are real gaps | stimulus (AXI stress, riscv-dv breadth, **FPU**) + warp-state needs INV-1 |
 | Scoreboard RTL vs SimX | ≥1 kernel | 🟡 one-directional | SB-DIR bidirectional |
 | Full configurability | cores/clusters/warps/threads | 🟡 ~90% | probe loops ✅ + I2 count asserts ✅; I3 SimX-runtime open |
 | Bench trustworthiness | implicit | ✅ C1/C2/C3/T4 ✅ | Gate 0 — all four Samuel items DONE; SB-DIR (Ahmad) + INV-1 remain |
