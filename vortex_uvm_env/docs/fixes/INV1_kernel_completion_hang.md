@@ -204,10 +204,49 @@ model.
 
 ---
 
+## 7b. Path A progress (2026-06-28) — narrowed to SIMT warp-control
+
+Three concrete results this session:
+
+1. **SimX divergence test is blocked by tooling, not answered.** Standalone
+   `sim/simx/simx` cannot replicate the bench's "map to absolute memory" load:
+   on the bench's `@00000000`-remapped hex it fetches `0xbaadf00d` (poison) at
+   `PC=0x80000000` and dies — code sits at `0x0`, execution starts at
+   `0x80000000`. So "does SimX also hang on vecadd?" remains **unanswered** via
+   this route. (The in-bench DPI SimX handles the mapping, but it only runs at
+   DUT-completion, which never happens here.) A proper divergence test needs the
+   DPI load path or a correctly-based image.
+
+2. **TLS size is sane — not an infinite memset.** From `vecadd.elf`:
+   `__tbss_size = 0x1c` (28 B), `__tdata_size = 0`, `__tbss_offset = 0`. So
+   `__init_tls` is a trivial 28-byte `memset`. The hang is **not** a bogus TLS
+   loop bound.
+
+3. **The spin PC is `vx_tmc zero`** (`0x80000944`) — the instruction a warp uses
+   to deactivate itself at the end of `init_tls_all`:
+   ```asm
+   8000093c: vx_tmc t0       # activate all threads
+   80000940: jal __init_tls  # 28-byte memset (trivial)
+   80000944: vx_tmc zero     # warps parked HERE — trying to deactivate
+   80000948: ret
+   ```
+   The `wspawn`-spawned warps are **stuck right where they should switch off**.
+   This is a **SIMT warp-control / scheduling** behavior (spawned warps not
+   retiring/deactivating), i.e. **microarchitectural** — not an infra, load, or
+   TLS-size bug.
+
+**Revised conclusion:** INV-1 is most likely a SIMT `wspawn`/`tmc` warp-lifecycle
+interaction in the DUT (or a DUT-config/SimX divergence), not something the UVM
+infra alone can fix. Next step requires **waveform inspection of the warp
+scheduler** (`active_warps`/`stalled_warps` via `vx_sched_probe`, and the TMC
+deactivation path) around `0x80000938–0948`, and likely **Steven** (SimX /
+microarch lane) to compare against the golden model. This is being handed toward
+that investigation rather than forced as an infra patch.
+
 ## 8. Status
 
-- Root cause: **corrected and documented** (hostless-kernel `wspawn`/TLS startup
-  hang, not DCR args).
-- Fix: **not yet implemented** — Path A is the next active task.
+- Root cause: **narrowed** — hostless-kernel hang in `wspawn`-spawned warps parked
+  at `vx_tmc zero` (SIMT warp-control), not DCR args, not TLS size.
+- Fix: **not implemented** — needs waveform + likely Steven (SimX/microarch).
 - Spin-off win already banked: the new **P1 commit probe** (`fix_17`) gives an
   instant "retired N instructions" liveness read that made this diagnosis fast.
