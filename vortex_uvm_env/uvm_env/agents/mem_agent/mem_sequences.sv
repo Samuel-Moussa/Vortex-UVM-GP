@@ -5,6 +5,12 @@
 // This file contains a collection of reusable memory sequences that generate
 // various transaction patterns for verification.
 //
+// STATUS (2026-06-28): DORMANT BY CONFIG, not dead code.
+//   The primary config drives the AXI interface, so mem_agent runs PASSIVE
+//   (monitor-only) and NONE of these sequences are started. They become live
+//   only in the non-AXI custom-memory build (USE_AXI_WRAPPER undefined), where
+//   mem_agent is ACTIVE. Keep them for that config; do not delete.
+//
 // Included Sequences:
 //   1. mem_base_sequence          - Abstract base class
 //   2. mem_write_sequence         - Single word write

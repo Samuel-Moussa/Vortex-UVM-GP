@@ -8,9 +8,10 @@
 // Included Sequences:
 //   1. dcr_base_sequence            - Abstract base class with write_dcr helper
 //   2. dcr_startup_config_sequence  - Configure startup PC and argv pointer
-//   3. dcr_minimal_startup_sequence - Minimal config (PC only)
-//   4. dcr_perf_config_sequence     - Performance monitoring configuration
-//   5. dcr_random_sequence          - Randomized DCR traffic
+//   3. dcr_perf_config_sequence     - Performance monitoring configuration
+//   4. dcr_random_sequence          - Randomized DCR traffic
+//   (dcr_minimal_startup_sequence removed 2026-06-28 — redundant subset of
+//    dcr_startup_config_sequence, never started; I5 hygiene.)
 //
 // Usage Example:
 //   dcr_startup_config_sequence seq = dcr_startup_config_sequence::type_id::create("seq");
@@ -169,39 +170,6 @@ class dcr_startup_config_sequence extends dcr_base_sequence;
     endtask
  
 endclass : dcr_startup_config_sequence
- 
-//==============================================================================
-// Minimal Startup Sequence
-// Configures only the startup PC (minimum required configuration)
-//==============================================================================
-class dcr_minimal_startup_sequence extends dcr_base_sequence;
-    `uvm_object_utils(dcr_minimal_startup_sequence)
-    
-    rand bit [63:0] startup_pc;
-    
-    constraint pc_align_c {
-        startup_pc[1:0] == 2'b00;
-    }
-    
-    function new(string name = "dcr_minimal_startup_sequence");
-        super.new(name);
-        startup_pc = 64'h80000000;  // RTL default; overridden from cfg in body()
-    endfunction
-    
-    virtual task body();
-        // FIX 4: cfg populated by pre_body() using m_sequencer context (correct).
-        if (cfg != null && startup_pc == 64'h80000000)
-            startup_pc = cfg.startup_addr;
- 
-        `uvm_info("DCR_SEQ", $sformatf(
-            "Minimal startup configuration: PC=0x%016h", startup_pc), UVM_LOW)
- 
-        // FIX 3: VX_DCR_BASE_* word-address constants
-        write_dcr(VX_DCR_BASE_STARTUP_ADDR0, startup_pc[31:0]);
-        write_dcr(VX_DCR_BASE_STARTUP_ADDR1, startup_pc[63:32]);
-    endtask
- 
-endclass : dcr_minimal_startup_sequence
  
 //==============================================================================
 // Performance Configuration Sequence
