@@ -21,6 +21,7 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 3. **Problem-first, direct, technical.** No filler.
 4. **One checklist box at a time.** Propose → show diff → I confirm → run the acceptance check in sim → update the box → commit. Never mark done on assumption.
 5. **Gate 0 is blocking.** No coverage/regression number means anything until all Gate-0 boxes pass. The negative fault-injection test must stay RED on injection — treat it as the regression guard after every Gate-0 change.
+6. **Never attribute commits/PRs to Claude.** Do NOT add `Co-Authored-By: Claude` (or any Anthropic/Claude co-author) trailer, and never list Claude as a contributor. Commit messages contain only the technical change. (Enforced in user settings via empty `attribution.commit`/`attribution.pr`, but keep this rule regardless.)
 
 ## Session start protocol (do this first, every session)
 1. `git log --oneline -25` and review my colleagues' recent commits (Ahmad/Steven work to this same plan).
@@ -35,7 +36,8 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 
 ---
 
-**Synced-to:** `a42f164c` (2026-06-26) — I5 done; dead files removed, stale // 8 comments fixed
+**Synced-to:** `8200cec` (2026-06-28) — Gate-0 ALL DONE (C1/C2/C3/T4); I1/I2/I5 done; review fixes (sustained busy=0, I2 alias); riscv-dv passing at HEAD. Next [S]: P1-bind (commit_arb_if[*] + UUID assert).
+> NOTE: history was rewritten 2026-06-28 to drop co-author trailers — the old SHAs in the DONE annotations below are pre-rewrite. New SHAs: C1 `5f19a67` · C3 `a46a109` · C2 `b14efc5` · T4 `df6206e` · I1 `c80e336` · I2 `b55f392` · I5 `6838b21` · riscv-dv `5f6ddff`.
 
 ## CHECKLIST — Samuel's tasks (finish top-down)
 
@@ -65,8 +67,8 @@ After every git pull and every git push, run the plan-sync skill before doing ot
   *[DONE 37cfce55 2026-06-26]:* `u_i2_topology_asserts` initial block in `vortex_tb_top.sv`. Reads four plusargs at time=0, compares against RTL macros; `$fatal` on mismatch. Clean run prints `[I2-ASSERT] Topology OK: 1CL 1C 4W 4T`. Negative: `sim-only CLUSTERS=2` on 1-cluster RTL prints `[I2-ASSERT] NUM_CLUSTERS: plusarg=2 but RTL compiled with 1` and aborts.*
 - [ ] **I3 — SimX param-match.** Coordinate config → SimX build/runtime *(with Steven's D-simx)*. *Accept:* SimX instantiated with same cores/clusters as DUT.
 - [x] **I5 — hygiene.** Remove dead files (`vortex_config2.sv`, `vortex_status_if_fixed.sv`); fix stale comments.
-- [ ] **P1-bind — passive commit probe.** `bind` a passive monitor on `commit_arb_if[*]` (observability only, never a checker); add `initial assert ($bits(uuid) > 1)`. *(I build the bind + interface; Ahmad samples it for coverage.)*
-  *PARTIAL — `vx_instr_probe` bound on `VX_dispatch`, `vx_sched_probe` on `VX_schedule`. The commit_arb_if[*] bind and UUID assert are NOT present. IMPLEMENTED-UNVERIFIED on dispatch/sched probes.*
+- [x] **P1-bind — passive commit probe.** `bind` a passive monitor on `commit_arb_if[*]` (observability only, never a checker); add `initial assert ($bits(uuid) > 1)`. *(I build the bind + interface; Ahmad samples it for coverage.)*
+  *[DONE 2026-06-28]:* New `tb/vx_commit_probe.sv` — passive, no modport (read-only), per-lane `retire_fire = valid&&ready` over `[\`ISSUE_WIDTH]`, exposes full `commit_t` (uuid/wid/sid/tmask/PC/wb/rd/data/sop/eop), `initial assert($bits(uuid)>1)` → `$fatal` on degenerate. Bound `bind VX_commit vx_commit_probe u_commit_probe` in `vortex_tb_top.sv` (auto-scales all cores/clusters; no CORE_ID knob — per-core attribution via UCDB hierarchy). Registered in `flists/uvm_env.flist`. Fully parametrized (ISSUE_WIDTH/warps/threads macro+pkg-derived). Accept: riscv-dv → PASS, 0 UVM_ERROR/FATAL, [P1-PROBE] assert silent. **Handover: Ahmad hangs covergroups off this probe.**
 
 ### 🟢 NEW THIS SESSION — riscv-dv pipeline end-to-end
 - [x] **riscv-dv `random_instruction_stress_test` with `riscv_arithmetic_basic_test` — PASSING.**
@@ -88,14 +90,12 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 ## Open Investigation Items
 Issues observed in sim that need root-cause before Gate-0 sign-off. Not yet assigned to a checklist box.
 
-### INV-1 — vecadd `busy` never goes low (completion blocked)
-- **Symptom:** Every vecadd run ends via TIMEOUT, never via `busy=0` fallback or ebreak. `Total Cycles` always equals `TIMEOUT-1`. Doubling the timeout just doubles the cycle count — the program runs indefinitely.
-- **Evidence:** `assert_busy_eventually_idles` fires at `Started: 3895ns + 100000ns window`. `** Error: TIMEOUT after N cycles!` is the only completion path.
-- **Candidates:**
-  1. `vif.status_if.busy` is not properly wired to the DUT `busy` output (check `vortex_if.sv` binding vs. DUT port).
-  2. vecadd genuinely never halts — the kernel loop or MMIO exit sequence hangs in DUT.
-  3. The `busy` signal stays high because a warp is stuck (X-prop, infinite loop, wrong hex load).
-- **Impact:** Blocks all completion testing for vecadd; T4 negative-injection test also meaningless until completion is reliable.
+### INV-1 — kernels never complete (`busy` never idles) — ROOT-CAUSED 2026-06-28
+- **Symptom:** Every `tests/kernel/*` compute kernel (vecadd/fibonacci/functional_mem) ends via TIMEOUT; `Total Cycles == TIMEOUT-1`; doubling timeout doubles cycles. Only `hello` + riscv-dv complete.
+- **ROOT CAUSE (corrected):** these are **hostless** kernels (run `main()` on-device, build their own args, spawn via `VX_CSR_MSCRATCH` — they do NOT read DCR `STARTUP_ARG`). The hang is in **runtime startup: `wspawn`-launched per-warp TLS init** (`init_tls_all`/`__init_tls` memcpy/memset, spin PC `0x80000944`). Core runs (P1 probe: 6608 retires) then spawned warps never converge → `busy` stays high.
+- **NOT the cause (ruled out):** `busy` IS directly wired to the DUT port (tb_top:314/337); `result=0x0 size=0` is the scoreboard compare-window, not kernel args; missing DCR `STARTUP_ARG` only matters for host-driven kernels (`tests/regression/*`), not these.
+- **Full writeup:** `docs/fixes/INV1_kernel_completion_hang.md` (issue → wrong hypothesis → evidence → root cause → solution A/B + RAL + regression assessment).
+- **Next (Path A):** confirm SimX-vs-RTL completion divergence; trace warp activity around `wspawn` via `vx_sched_probe` + waveform at `0x80000938–094c`. **Impact:** blocks T4 negative test until a kernel completes.
 
 ### ~~INV-3~~ — RESOLVED: riscv-dv end-to-end now working
 - **Root causes (all fixed, commit 2ccef437):** SimX SIGABRT on VX_CSR_MISA + unguarded M-mode CSR range; SimX decode abort on RVC compressed instructions (rv32imc→rv32im); RTL assertion on csrw 0x301/0x305 (sed post-process strips them); ecall vs ebreak (DUT probe only sees 0x00100073); UVM `wait_trigger()` stale-event race in `wait_for_completion()`; vacuous-run false error for pure arithmetic programs (no data-region stores).
