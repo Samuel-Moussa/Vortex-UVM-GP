@@ -1,11 +1,12 @@
 # Vortex UVM — Verification Plan (Current Progress)
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
-**Synced-to:** `11f71359` (2026-06-26)
+**Synced-to:** `8200cec` (2026-06-28)  *(history was rewritten 2026-06-28 to drop co-author trailers — all SHAs below are post-rewrite)*
 
 ### Sync changelog
 | Date | SHA | Summary |
 |------|-----|---------|
+| 2026-06-28 | `8200cec` | **FULL re-sync (post history-rewrite).** **Samuel:** Gate-0 complete — **T4 DONE** (`df6206e`); **I2 DONE** (`b55f392`); **I5 DONE** (`6838b21`); review-pass fixes Issue 2 sustained busy=0 + Issue 3 I2 alias (`8063ddc`); 16 per-issue fix docs, project README, riscv-dv setup guide. **Ahmad:** architectural probe + coverage pipeline overhaul (`e547314`), banner relabelled to "interface subtotal" (`cd52792`), CG2 warp/scheduler-state probe (`988559a`), cp_id re-binned to routing field (`70c9a7e`), clean 8-run merge via unique testname → 2246 instances / 70.16% total (`6ca3d87`), C1 AXI ID widening end-to-end (`8bed180`). **Steven:** AXI SVA inline in `vortex_axi_if.sv` validated — `axi_memory_test` PASS, zero SVA fires (`9881e86`); 4 directed tests + kernels (`1fd6b09`, `63361b7`); microarch instruction trace + SimX changes (`ee9b1c0`, `554080e`). Evidence: `results/20260628/run_014053` & `run_022612` riscv-dv → TEST PASSED, 0 UVM_ERROR/FATAL. |
 | 2026-06-26 | `0d5bd080` | FULL sync: file-by-file audit of all Gate-0 and Tier-1 items. C1/C2/C3/T4 confirmed OPEN — no code fix merged yet. NEG and P1 binds IMPLEMENTED-UNVERIFIED (code present, no passing sim log on record). T-axi/T-warp/T-mem/T-barr_sync code committed (`6fe0840`, `841a672`) but SimX-routed verification not confirmed. |
 | 2026-06-26 | `4c36bd82` | **[S] C1 DONE:** VX_MEM_TAG_WIDTH derived from VX_gpu_pkg; elaboration assert; ISS-01 hex load overflow fixed in prepare.sh. hello kernel_launch_test → PASS. |
 | 2026-06-26 | `7764ba14` | **[S] C3 DONE:** ebreak (0x00100073) decoded at fetch stage drives completion as primary; busy=0 and idle-threshold demoted to fallback warnings. hello → PASS. |
@@ -27,19 +28,35 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 
 ---
 
-## Progress snapshot (synced `11f71359`, 2026-06-26)
+## Progress snapshot (synced `8200cec`, 2026-06-28)
 
-**DONE — Gate-0 (evidenced with passing sim logs):**
-- **C1 ✅** `vortex_config.sv` derives `VX_MEM_TAG_WIDTH` from `VX_gpu_pkg::VX_MEM_TAG_WIDTH`; elaboration assert UVM pkg == RTL pkg in `vortex_tb_top.sv`. `kernel_launch_test/hello` → PASS, 0 errors. (`4c36bd82`)
-- **C3 ✅** ebreak `0x00100073` decoded at fetch stage drives completion as primary trigger; `busy=0` and idle-threshold demoted to `** Warning:` fallbacks. Generate loop now OR-s across all cores (`11f71359`). (`7764ba14`, extended `11f71359`)
-- **C2 ✅** `tb_mem_ops%3` fabrication removed; generate loop sums commit handshakes across all `NUM_CLUSTERS × NUM_SOCKETS × SOCKET_SIZE × ISSUE_WIDTH` lanes into `tb_commit_count_cyc` (popcount). IPC is real. (`22115864`, extended `11f71359`)
-- **ISS-01 ✅** `prepare.sh` hex load address overflow fixed (erroneous `+0x80000000` offset removed, CRLF strip, `@80→@00` remap). (`4c36bd82`)
+**DONE — Gate-0 (Samuel; evidenced with passing sim logs):**
+- **C1 ✅** `vortex_config.sv` derives `VX_MEM_TAG_WIDTH` from `VX_gpu_pkg::VX_MEM_TAG_WIDTH`; elaboration assert UVM pkg == RTL pkg in `vortex_tb_top.sv`. `kernel_launch_test/hello` → PASS, 0 errors. Ahmad later widened the AXI ID end-to-end downstream (`8bed180`). (`5f19a67`)
+- **C3 ✅** ebreak `0x00100073` decoded at fetch stage drives completion as primary trigger; `busy=0` and idle-threshold demoted to `** Warning:` fallbacks. Generate loop OR-s across all cores. (`a46a109`, extended `c80e336`)
+- **C2 ✅** `tb_mem_ops%3` fabrication removed; generate loop sums commit handshakes across all `NUM_CLUSTERS × NUM_SOCKETS × SOCKET_SIZE × ISSUE_WIDTH` lanes into `tb_commit_count_cyc` (popcount). IPC is real. (`b14efc5`, extended `c80e336`)
+- **T4 ✅** `simulate.sh` error gate `REAL_UVM_ERRORS=$UVM_ERRORS` — `-2` subtraction removed; verified intact at HEAD after Ahmad's coverage edit to the same file. (`df6206e`)
+- **ISS-01 ✅** `prepare.sh` hex load address overflow fixed (erroneous `+0x80000000` offset removed, CRLF strip, `@80→@00` remap). (`5f19a67`)
 
-**DONE — Tier 1 (probe side of I1):**
-- **I1-probes ✅** `tb_commit_fires_all[TB_NUM_LANES]` and `tb_ebreak_fetch_all[TB_NUM_CORES_T]` driven by `genvar` loops — no more `cluster[0]` hardcodes. Both AXI and non-AXI `ifdef` paths updated. Behaviorally identical for primary config (loop iterates once). (`11f71359`)
+**DONE — Tier 1 configurability (Samuel):**
+- **I1-probes ✅** `tb_commit_fires_all[TB_NUM_LANES]` and `tb_ebreak_fetch_all[TB_NUM_CORES_T]` driven by `genvar` loops — no more `cluster[0]` hardcodes. Both AXI and non-AXI `ifdef` paths updated. (`c80e336`)
+- **I2 ✅** `u_i2_topology_asserts`: NUM_CLUSTERS/CORES/WARPS/THREADS (+ short aliases) read at time=0, compared vs RTL macros, `$fatal` on mismatch; prints `[I2-ASSERT] Topology OK`. (`b55f392`, alias fix `8063ddc`)
+- **I5 ✅** dead files (`vortex_config2.sv`, `vortex_status_if_fixed.sv`) removed; stale `// 8` tag-width comments corrected. (`6838b21`)
+- **Issue 2 ✅ (review fix)** `busy==0` completion now requires sustained de-assertion (`BUSY_LOW_THRESHOLD`, default 100) — a transient gap no longer ends the test. (`8063ddc`)
 
-**DONE — riscv-dv pipeline (new this session):**
-- **riscv-dv `random_instruction_stress_test` / `riscv_arithmetic_basic_test` ✅** — 0 UVM_ERROR, 0 UVM_FATAL, EBREAK at 88387 cycles. Six root causes fixed: SimX M-mode CSR guards, RVC decode crash (rv32im target), RTL CSR assertion (sed strip), ecall→ebreak, UVM stale `wait_trigger()`, vacuous-run false error. Documented per-issue in `docs/fixes/` (fix_06–fix_12). (`4661f7cb`, `2ccef437`)
+**DONE — riscv-dv pipeline (Samuel):**
+- **riscv-dv `random_instruction_stress_test` / `riscv_arithmetic_basic_test` ✅** — 0 UVM_ERROR, 0 UVM_FATAL, ebreak completion. Six root causes fixed: SimX M-mode CSR guards, RVC decode crash (rv32im target), RTL CSR assertion (sed strip), ecall→ebreak, UVM stale `wait_trigger()`, vacuous-run false error. Per-issue docs `fix_06–fix_12`; setup guide `docs/RISCV_DV_GUIDE.md`. Re-confirmed at HEAD: `results/20260628/run_014053` & `run_022612` PASS. (`f545e1a`, `5f6ddff`)
+
+**DONE — Coverage (Ahmad):**
+- **Architectural probe + pipeline overhaul ✅** (`e547314`); **honest banner** — "TOTAL COVERAGE" relabelled "INTERFACE SUBTOTAL, sanity check only", 90% verdict deferred to merged UCDB (`cd52792`).
+- **CG2 warp/scheduler-state probe ✅** via `vx_sched_probe` (`988559a`).
+- **cp_id re-bin ✅** to real routing field — drops 256-bin UUID inflation that suppressed merged % (`70c9a7e`).
+- **Coverage merge ✅** unique per-run testname → clean 8-run single-config merge: 0 errors, 2246 instances, **70.16% total** (`6ca3d87`).
+- **C1 AXI ID widening ✅** end-to-end across `axi_transaction`/`axi_driver`/responder + interfaces (`8bed180`).
+
+**DONE — Tests / SVA / SimX (Steven):**
+- **AXI SVA ✅** inline in `vortex_axi_if.sv` (handshake-stability + burst-legality property groups); validated by `axi_memory_test` → PASS, **zero SVA fires** (report: `docs/AXI_SVA_report.md`). (`9881e86`)
+- **4 directed tests + kernels ✅** committed: `axi_memory_test`, `functional_memory_test`, `warp_scheduling_test`, `barrier_sync_test` (`1fd6b09`, `63361b7`).
+- **SimX microarch trace + DPI changes ✅** instruction-by-instruction trace and SimX edits to verify microarch (`ee9b1c0`, `554080e`).
 
 **DONE — Infrastructure (pre-session):**
 - 5-agent UVM env, virtual sequencer, config-DB plusarg flow.
@@ -50,22 +67,25 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 - Coverage CGs: `mem_operation_cg`, axi/dcr/host/status, `cp_active_warps`.
 - `vx_instr_probe` bound on `VX_dispatch`; `vx_sched_probe` bound on `VX_schedule`.
 
-**IMPLEMENTED-UNVERIFIED (code present; no passing sim log on record):**
-- **`negative_result_test`** — fault injection + inverted verdict. Code correct; no sim log.
-- **`axi_memory_test`** + kernel `axi_traffic.cpp`. Sentinel `0x900DCAFE` present; SimX-routed path unconfirmed.
-- **`functional_memory_test`**, **`warp_scheduling_test`**, **`barrier_sync_test`** — same caveat.
+**VERIFIED this window:** `axi_memory_test` now confirmed PASS via Steven's AXI SVA validation (was IMPLEMENTED-UNVERIFIED).
 
-**OPEN — Gate-0 blockers (T4 is the only remaining Samuel item):**
-- **T4** `simulate.sh:123` `-2` subtraction still present. Must remove.
-- **SB-DIR** `compare_all_written()` one-directional only. *(Ahmad's lane.)*
+**IMPLEMENTED-UNVERIFIED (code present; no passing SimX-routed sim log on record):**
+- **`negative_result_test`** — fault injection + inverted verdict. Code correct; full run blocked by INV-1 (no completing program).
+- **`functional_memory_test`**, **`warp_scheduling_test`**, **`barrier_sync_test`** — committed; SimX-routed end-state pass not yet logged.
 
-**OPEN — other work:**
-- I2: elaboration asserts for NUM_CLUSTERS/NUM_CORES/NUM_WARPS/NUM_THREADS (C1 tag-width assert done; counts not yet).
+**OPEN — Gate-0 sign-off (no remaining Samuel code item):**
+- **SB-DIR** `compare_all_written()` one-directional only — can't detect dropped stores. *(Ahmad's lane; handover `docs/fixes/HANDOVER_Ahmad_scoreboard_dropped_stores.md`.)*
+- **Full negative test** needs a completing program — blocked by **INV-1** (vecadd `busy` never idles).
+
+**OPEN — Samuel's remaining work:**
+- **P1-bind** (next [S] item): passive `commit_arb_if[*]` bind + `assert($bits(uuid)>1)`. *PARTIAL — `vx_instr_probe`/`vx_sched_probe` bound; the `commit_arb_if[*]` bind + UUID assert are NOT present.*
 - I3: SimX param-match at runtime (depends on Steven's D-simx).
-- I5: dead files (`vortex_config2.sv`, `vortex_status_if_fixed.sv`) still in tree.
-- P1-bind: passive `commit_arb_if[*]` bind + UUID assert (for Ahmad's coverage).
 - `cache_coherence_test`, `T-exc`.
-- Config matrix D-matrix, structural coverage closure.
+- D-matrix config matrix; SIGN merged report.
+
+**OPEN — investigations (un-boxed):**
+- **INV-1** vecadd `busy` never idles → every run ends via TIMEOUT; blocks completion + the real negative test.
+- **INV-2** `assert_dcr_write_timing` fires at startup (3915/3975 ns), inflating RTL error count.
 
 ---
 
@@ -73,35 +93,35 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | Founding requirement | Bar | Current | Gap |
 |---|---|---|---|
 | smoke / sanity / kernel_launch | High pass | ✅ | — |
-| functional_memory_test | High pass | ✅ impl (841a672) | verify SimX-routed & close |
-| **axi_memory_test** | High pass | ✅ impl (841a672+6fe0840) | verify SimX-routed & close |
-| warp_scheduling_test | Med | ✅ impl (841a672+6fe0840) | verify & close |
-| barrier_sync_test | Med | ✅ impl (841a672+6fe0840) | verify & close |
-| random_instruction_stress_test | Med | ✅ **PASSING** `2ccef437` | 0 UVM_ERROR; riscv_arithmetic_basic_test verified |
+| functional_memory_test | High pass | ✅ impl (`1fd6b09`) | verify SimX-routed & close |
+| **axi_memory_test** | High pass | ✅ **PASSING** (`1fd6b09`+`9881e86`) | AXI SVA validated, zero fires (Steven). |
+| warp_scheduling_test | Med | ✅ impl (`1fd6b09`+`63361b7`) | verify & close |
+| barrier_sync_test | Med | ✅ impl (`1fd6b09`+`63361b7`) | verify & close |
+| random_instruction_stress_test | Med | ✅ **PASSING** `5f6ddff` | 0 UVM_ERROR; re-confirmed at HEAD (run_014053/run_022612) |
 | cache_coherence_test | Low | ❌ | directed test |
-| Func cov: instruction opcodes | 100% | ❌ | `instr_class_cg` (dispatch probe) |
-| Func cov: warp states | all | 🟡 count only | divergence/barrier states |
+| Func cov: instruction opcodes | 100% | 🟡 defined, not closed | per-class CGs (alu/lsu/sfu/noop) live in `vx_instr_probe.sv`; needs wider riscv-dv ISA stimulus to fill `op_type` bins |
+| Func cov: warp states | all | 🟡 defined, not closed | `sched_state/divergence/reconverge/barrier/tmc/wspawn` CGs live in `vx_sched_probe.sv` (`988559a`); needs divergent + barrier stimulus |
 | Func cov: memory patterns | aligned/unaligned/contention | 🟡 alignment ✅ | add contention |
 | Func cov: exceptions | all types | ❌ | `exception_cg` + stimulus |
 | Structural line / toggle | >95% / >90% | ~94% / ~69% | close + waivers |
 | Scoreboard RTL vs SimX | ≥1 kernel | 🟡 one-directional | SB-DIR bidirectional |
-| Full configurability | cores/clusters/warps/threads | 🟡 ~85% | probe loops done; I2 counts + I3 SimX still open |
-| Bench trustworthiness | implicit | 🟡 C1/C2/C3 ✅ · T4 open | Gate 0 — T4 is last Samuel item |
+| Full configurability | cores/clusters/warps/threads | 🟡 ~90% | probe loops ✅ + I2 count asserts ✅; I3 SimX-runtime open |
+| Bench trustworthiness | implicit | ✅ C1/C2/C3/T4 ✅ | Gate 0 — all four Samuel items DONE; SB-DIR (Ahmad) + INV-1 remain |
 
 ---
 
 ## TIER 0 — TRUST THE BENCH 🔴 (GATE 0; nothing downstream counts first)
 | # | Item | Owner | Status | Notes |
 |---|------|-------|--------|-------|
-| C1 | Tag/ID width derived from RTL | **[S]** | ✅ DONE `4c36bd82` | `VX_MEM_TAG_WIDTH = VX_gpu_pkg::VX_MEM_TAG_WIDTH`; elaboration assert in tb_top; hello PASS. |
-| C3 | Real EBREAK decode drives completion | **[S]** | ✅ DONE `7764ba14`+`11f71359` | fetch decode primary; busy=0 fallback; generate loop covers all cores. |
-| C2 | Real instruction count | **[S]** | ✅ DONE `22115864`+`11f71359` | Commit handshake popcount across all lanes; IPC real. |
-| T4 | Remove `-2` error subtraction | **[S]** | 🔴 OPEN | `simulate.sh:123` `-2` still present. **Next item.** |
-| SB-DIR | Scoreboard bidirectional | **[A]** | 🔴 OPEN | `compare_all_written()` DUT-only. Ahmad's lane. |
-| NEG | Negative injection | **[A]** | ✅ impl | Keep as regression guard after every Gate-0 edit. |
+| C1 | Tag/ID width derived from RTL | **[S]** | ✅ DONE `5f19a67` | `VX_MEM_TAG_WIDTH = VX_gpu_pkg::VX_MEM_TAG_WIDTH`; elaboration assert in tb_top; hello PASS. AXI ID widened end-to-end by Ahmad (`8bed180`). |
+| C3 | Real EBREAK decode drives completion | **[S]** | ✅ DONE `a46a109`+`c80e336` | fetch decode primary; busy=0 fallback (now sustained, `8063ddc`); generate loop covers all cores. |
+| C2 | Real instruction count | **[S]** | ✅ DONE `b14efc5`+`c80e336` | Commit handshake popcount across all lanes; IPC real. |
+| T4 | Remove `-2` error subtraction | **[S]** | ✅ DONE `df6206e` | `REAL_UVM_ERRORS=$UVM_ERRORS`; intact at HEAD after Ahmad's same-file edit. |
+| SB-DIR | Scoreboard bidirectional | **[A]** | 🔴 OPEN | `compare_all_written()` DUT-only. Ahmad's lane (handover written). |
+| NEG | Negative injection | **[A]** | ✅ impl | Regression guard. Full run blocked by INV-1 (no completing program). |
 
-> **🚦 GATE 0:** NEG RED on injection · dropped store fails · no hardcoded subtraction · width assert matches DUT · instr count real.
-> **Samuel's Gate-0 remaining:** T4 only.
+> **🚦 GATE 0:** NEG RED on injection · dropped store fails · no hardcoded subtraction ✅ · width assert matches DUT ✅ · instr count real ✅.
+> **Samuel's Gate-0: ALL FOUR DONE (C1/C2/C3/T4).** Remaining: SB-DIR (Ahmad) + INV-1 (completing program for the negative test).
 
 ---
 
@@ -110,24 +130,24 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 ### Configurability — **[S]**
 | # | Item | pd | Status | Action |
 |---|------|----|--------|--------|
-| I1 | Param→RTL probe consistency | 2 | ✅ DONE `11f71359` (probe side) | Generate loops cover all clusters×sockets×cores×lanes for commit count and ebreak detection. SimX runtime param-match still depends on Steven's D-simx. |
-| I2 | True width/count asserts | 1 | 🟡 PARTIAL | C1 tag-width assert done. NUM_CLUSTERS/NUM_CORES/NUM_WARPS/NUM_THREADS elaboration asserts still open. |
+| I1 | Param→RTL probe consistency | 2 | ✅ DONE `c80e336` (probe side) | Generate loops cover all clusters×sockets×cores×lanes for commit count and ebreak detection. SimX runtime param-match still depends on Steven's D-simx. |
+| I2 | True width/count asserts | 1 | ✅ DONE `b55f392`+`8063ddc` | `u_i2_topology_asserts`: NUM_* + alias plusargs vs RTL macros at time=0, `$fatal` on mismatch. C1 tag-width assert also done. |
 | I3 | SimX param-match | 0.5 | 🔴 OPEN | config → SimX cores/clusters/warps/threads (with **[St]** D-simx). |
-| I5 | Stale comments + dead files | 0.5 | 🔴 OPEN | `vortex_config2.sv`, `vortex_status_if_fixed.sv` still in tree. Fix stale comments. |
+| I5 | Stale comments + dead files | 0.5 | ✅ DONE `6838b21` | dead files removed; `// 8` comments corrected to derived width. |
 
 ### High tests — **[St]** (implemented; verify & close)
 | # | Item | pd | Action |
 |---|------|----|--------|
-| T-axi | `axi_memory_test` + `axi_traffic.cpp` | 0.5 | Implemented (841a672/6fe0840). **Verify it compares DUT-vs-SimX on the result window (not sentinel-only); confirm it passes; close.** |
-| T-fmem | `functional_memory_test` + `functional_mem.cpp` | 0.5 | Implemented. Verify SimX-routed golden check passes; delete `.sv.old`; close. |
+| T-axi | `axi_memory_test` + `axi_traffic.cpp` | 0.5 | ✅ **PASSING** (`1fd6b09`+`63361b7`); AXI SVA validated zero fires (`9881e86`, `docs/AXI_SVA_report.md`). Close. |
+| T-fmem | `functional_memory_test` + `functional_mem.cpp` | 0.5 | Implemented (`1fd6b09`). Verify SimX-routed golden check passes; delete `.sv.old`; close. |
 
 ### Core coverage — **[A]** (P1 bind by **[S]**)
 | # | Item | pd | Action |
 |---|------|----|--------|
-| P1 | Passive commit probe | 1+1 | `bind` on `commit_arb_if[ISSUE_WIDTH]` (post-arb retire; fields uuid/wid/sid/tmask/PC/wb/rd/data/sop/eop). `assert($bits(uuid)>1)`. Feeds count + warp activity. |
+| P1 | Passive commit probe | 1+1 | ✅ **bind side DONE (Samuel, 2026-06-28)** — `tb/vx_commit_probe.sv` bound `bind VX_commit … u_commit_probe`; passive read-only over `[\`ISSUE_WIDTH]`, exposes uuid/wid/sid/tmask/PC/wb/rd/data/sop/eop, `assert($bits(uuid)>1)`. riscv-dv PASS, 0 err, assert silent. **Ahmad: hang covergroups (count + warp activity) off this probe.** |
 | CG1 | `instr_class_cg` | 2 | Opcode class — **off the dispatch probe** (`vx_instr_probe.sv`/`VX_dispatch`), since `commit_t` has no `op_type`. Hook riscv-dv stream. Target 100% opcode/format. |
 | CG-mem | contention coverpoint | 0.5 | Add contention + cross to `mem_operation_cg` (alignment already covered). |
-| COV-pipe | UCDB merge + honest banner | 1.5 | Per-test save, `-du` exclusions (`-reason EOTH`), merge, HTML+cvg; relabel the interface-only in-sim aggregate; extend `report_phase` for new CGs. |
+| COV-pipe | UCDB merge + honest banner | 1.5 | 🟡 PROGRESS — banner relabelled "interface subtotal" (`cd52792`); clean 8-run single-config merge works (unique testname `6ca3d87`): 2246 instances / **70.16% total**; cp_id re-binned (`70c9a7e`). Remaining: `-du` exclusions, HTML+cvg, extend `report_phase` for new CGs. |
 
 > **🚦 GATE 1:** all High tests pass through trusted checker · instr+mem coverage populating · merged report builds · primary config runs from parameters.
 

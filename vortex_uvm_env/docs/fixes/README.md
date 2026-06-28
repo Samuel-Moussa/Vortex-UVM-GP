@@ -22,6 +22,8 @@ Per-issue documentation for all fixes made in this session. Each file covers one
 | [fix_14_I5_hygiene.md](fix_14_I5_hygiene.md) | I5: remove dead files + fix stale `// 8` tag-width comments | a42f164c | None |
 | [fix_15_busy_low_sustained.md](fix_15_busy_low_sustained.md) | Issue 2: busy=0 completion now requires sustained de-assertion (not single cycle) | 19c3d558 | None |
 | [fix_16_i2_alias_gap.md](fix_16_i2_alias_gap.md) | Issue 3: I2 assert now also checks CLUSTERS/CORES/WARPS/THREADS aliases | 19c3d558 | None |
+| [fix_17_P1_commit_probe_bind.md](fix_17_P1_commit_probe_bind.md) | P1-bind: passive `vx_commit_probe` bound on `commit_arb_if[*]` + UUID assert + liveness proof (11498 retires) | (2026-06-28) | **Ahmad** (hangs covergroups off this probe) |
+| [INV1_kernel_completion_hang.md](INV1_kernel_completion_hang.md) | INV-1 investigation: hostless kernels hang in `wspawn`/TLS startup (not DCR args); root cause + solution A/B + RAL + regression assessment | (2026-06-28) | Steven (SimX/microarch — Path A divergence check) |
 
 ## Review artifacts (Opus engineering pass, 2026-06-26)
 
