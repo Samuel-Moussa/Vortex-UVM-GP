@@ -1,12 +1,40 @@
 ---
 issue: INV-1 — kernel `busy` never idles (completion blocked)
-status: ROOT-CAUSED (corrected) — fix not yet implemented
-date: 2026-06-28
+status: SOLVED 2026-06-29 — root cause was vx_printf IO volume, NOT a wspawn/tmc hang
+date: 2026-06-28 (corrected 2026-06-29)
 author: Samuel Moussa
-evidence: live sim logs results/20260628/run_062121 (vecadd) + per-kernel runs; vecadd.dump; vx_start.S
+evidence: native simx completes vecadd (EXIT=0, 4.2M cyc); vecadd_lite (printf-free) PASSES in 9915 cyc, DUT==SimX
 ---
 
 # INV-1 — Kernels never complete (`busy` never idles)
+
+> ## ⚠️ CORRECTION (2026-06-29) — earlier root cause was WRONG
+> The §4/§7 conclusion below ("`wspawn`-spawned worker warps stuck at `vx_tmc
+> zero`, SIMT warp-lifecycle hang → Steven/microarch") is **incorrect**. New
+> evidence:
+> - **Native simx COMPLETES vecadd** (`EXIT=0`, ~4.2M cycles). The spawned warps
+>   ran the kernel (`[+] I am thread 0/1/4/8/12 ...`). So `vx_spawn`/`wspawn`/
+>   multi-warp **works** — it was never the bug.
+> - The 4.2M cycles are **dominated by `vx_printf` console IO** (`dram-mem-req
+>   addr=0x80 type=IO` in a fence loop). vecadd prints per-thread + buffer dumps.
+> - In our bench, retire count **climbs** with cycles (6608@50k → 10322@80k) — it
+>   was **progressing, not hung**; the 50–80k timeout cut a ~4.2M-cycle program at
+>   ~1–2%.
+> - **Proof:** `vecadd_lite` (identical multi-warp `vx_spawn_threads`, printf
+>   removed) **PASSES in 9915 cycles, DUT==SimX, 0 errors**.
+>
+> **Real root cause:** printf-heavy kernels need millions of cycles (console IO);
+> the bench timeout is far too small. **Not** a warp-lifecycle bug, **not**
+> Steven/microarch.
+>
+> **Fix (Samuel's lane):** printf-light kernel variants (e.g. `vecadd_lite`,
+> `fpu_test`) complete in thousands of cycles. Use those for the bench / regression
+> / T4. (Optionally: speed the bench console-MMIO responder, but printf IO is
+> inherently expensive — native simx pays it too.)
+>
+> **Unblocks:** T4 negative test (now has a completing program); printf-light
+> multi-warp kernels for warp-state coverage. The §2–§7 narrative below is kept
+> for the record but is superseded by this correction.
 
 This document walks the full path: the symptom, the **first hypothesis that turned
 out wrong**, how the evidence corrected it, the real root cause, and the planned

@@ -22,7 +22,18 @@ programs we *can't* yet." Together = the full "real kernels run" story.
 
 ---
 
-# THREAD A — INV-1: kernels hang in `wspawn`/`vx_tmc` (warp lifecycle)
+# THREAD A — INV-1: ~~kernels hang in `wspawn`/`vx_tmc`~~ → SOLVED (was vx_printf IO)
+
+> **⚠️ RESOLVED 2026-06-29 — Thread A is NO LONGER yours.** The root cause was
+> **`vx_printf` console-IO volume**, not a warp-lifecycle hang. Native simx
+> completes vecadd (EXIT=0, ~4.2M cycles; spawned threads ran). Our bench retires
+> climb with cycles (progressing, not stuck) — the timeout just cut a multi-million-
+> cycle program at ~1%. **`vecadd_lite`** (same multi-warp spawn, printf removed)
+> PASSES in 9915 cycles, DUT==SimX. `vx_spawn`/`wspawn`/multi-warp work fine — no
+> microarch bug, no waveform needed. The Thread-A text below is retracted; kept for
+> history. **Path B (Thread B) is still yours.**
+
+## (retracted) original Thread A —
 
 ## A.1 Summary
 Every **hostless** compute kernel (`vecadd`, `fibonacci`, `functional_mem`) runs
