@@ -24,9 +24,8 @@ Per-issue documentation for all fixes made in this session. Each file covers one
 | [fix_16_i2_alias_gap.md](fix_16_i2_alias_gap.md) | Issue 3: I2 assert now also checks CLUSTERS/CORES/WARPS/THREADS aliases | 19c3d558 | None |
 | [fix_17_P1_commit_probe_bind.md](fix_17_P1_commit_probe_bind.md) | P1-bind: passive `vx_commit_probe` bound on `commit_arb_if[*]` + UUID assert + liveness proof (11498 retires) | (2026-06-28) | **Ahmad** (hangs covergroups off this probe) |
 | [INV1_kernel_completion_hang.md](INV1_kernel_completion_hang.md) | INV-1 investigation: hostless kernels hang in `wspawn`/TLS startup (not DCR args); root cause + solution A/B + RAL + regression assessment | (2026-06-28) | Steven (SimX/microarch — Path A divergence check) |
-| [HANDOVER_Steven_INV1_wspawn_tmc.md](HANDOVER_Steven_INV1_wspawn_tmc.md) | **Steven start-here:** INV-1 repro + evidence + ruled-out list + exact waveform/SimX-divergence asks for the `wspawn`/`vx_tmc` warp-lifecycle hang | (2026-06-28) | **Steven** (owns INV-1 now) |
+| [HANDOVER_Steven_kernel_execution.md](HANDOVER_Steven_kernel_execution.md) | **Steven start-here (merged):** Thread A INV-1 (`wspawn`/`vx_tmc` hang — repro/evidence/ruled-out/waveform+SimX asks) + Thread B Path B host-driven launch (half-built `host_*` seqs, SimX-mirroring, regression). Supersedes the two prior Steven handovers. | (2026-06-28) | **Steven** (owns kernel execution: INV-1 + Path B SimX half) |
 | [HANDOVER_Ahmad_unused_axi_dcr_sequences.md](HANDOVER_Ahmad_unused_axi_dcr_sequences.md) | **Ahmad:** dead-sequence audit Bucket (c) — wire unused AXI/DCR stress+random seqs into a coverage test to fill empty `axi_transaction_cg`/`dcr_config_cg` bins | (2026-06-28) | **Ahmad** (coverage) |
-| [HANDOVER_Steven_pathB_host_launch.md](HANDOVER_Steven_pathB_host_launch.md) | **Steven (united w/ INV-1):** Path B host-driven launch + Bucket (b) half-built `host_*` sequences; SimX-mirroring + regression integration | (2026-06-28) | **Steven** (SimX/regression half of Path B) |
 
 ## Review artifacts (Opus engineering pass, 2026-06-26)
 
