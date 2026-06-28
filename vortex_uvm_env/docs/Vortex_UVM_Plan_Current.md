@@ -78,13 +78,15 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 - **Full negative test** needs a completing program — blocked by **INV-1** (vecadd `busy` never idles).
 
 **OPEN — Samuel's remaining work:**
-- **P1-bind** (next [S] item): passive `commit_arb_if[*]` bind + `assert($bits(uuid)>1)`. *PARTIAL — `vx_instr_probe`/`vx_sched_probe` bound; the `commit_arb_if[*]` bind + UUID assert are NOT present.*
+- **P1-bind** ✅ DONE (`1ae658f`) — passive `commit_arb_if[*]` probe bound + UUID assert + liveness proof (11498 retires). Ahmad now samples it.
+- **PathB-launch (PARKED, not started)** — host-driven kernel launch so `tests/regression/*` (sgemm/sort/conv3/…) become runnable: bump-allocate device addrs → backdoor-write inputs + kernel binary + `kernel_arg_t` (mem_model `write_block`) → set `cfg.startup_arg_addr` so dcr_driver writes real `STARTUP_ARG0/1` (today hardcoded 0, dcr_driver.sv:120-121) → mirror the same setup into SimX RAM. **RAL** (`uvm_reg_block` over DCR) belongs here. Pilot one kernel end-to-end first. *Deferred by Samuel's decision 2026-06-28 — revisit after INV-1/coverage.*
+- **I6 — XLEN 32/64 configurability (NEW, open)** — RTL (`XLEN_32/64`) + UVM widths (`vortex_config.sv:68-73`) already support both, but the build flow hardcodes RV32 (`prepare.sh:304,408` → `--target=rv32im`, `-mabi=ilp32`) and there is no `--xlen` run-knob. Wire XLEN end-to-end (run flag → `+define XLEN_64` + rv64 march/mabi + SimX xlen) to make the env truly 32/64-switchable. *(Samuel — configurability lane.)*
 - I3: SimX param-match at runtime (depends on Steven's D-simx).
 - `cache_coherence_test`, `T-exc`.
 - D-matrix config matrix; SIGN merged report.
 
 **OPEN — investigations (un-boxed):**
-- **INV-1** vecadd `busy` never idles → every run ends via TIMEOUT; blocks completion + the real negative test.
+- **INV-1** — ROOT-CAUSED (SIMT warp-control: `wspawn`'d warps parked at `vx_tmc zero`; not 32/64, not DCR args, not TLS size). Handed to Steven for waveform/microarch. Blocks the real T4 negative test. See `docs/fixes/INV1_kernel_completion_hang.md`.
 - **INV-2** `assert_dcr_write_timing` fires at startup (3915/3975 ns), inflating RTL error count.
 
 ---
@@ -134,6 +136,7 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | I2 | True width/count asserts | 1 | ✅ DONE `b55f392`+`8063ddc` | `u_i2_topology_asserts`: NUM_* + alias plusargs vs RTL macros at time=0, `$fatal` on mismatch. C1 tag-width assert also done. |
 | I3 | SimX param-match | 0.5 | 🔴 OPEN | config → SimX cores/clusters/warps/threads (with **[St]** D-simx). |
 | I5 | Stale comments + dead files | 0.5 | ✅ DONE `6838b21` | dead files removed; `// 8` comments corrected to derived width. |
+| I6 | XLEN 32/64 configurability | 1.5 | 🔴 OPEN (NEW) | RTL + UVM widths already 64-ready (`vortex_config.sv:68-73`); build flow hardcodes RV32 (`prepare.sh:304,408`) and no `--xlen` knob. Wire run-flag → `+define XLEN_64` + rv64 march/mabi + SimX xlen. |
 
 ### High tests — **[St]** (implemented; verify & close)
 | # | Item | pd | Action |
@@ -178,6 +181,7 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 ## TIER 3 — SCALE, CLOSE, SIGN-OFF 🟠
 | # | Item | Owner | pd | Action |
 |---|------|-------|----|--------|
+| PathB-launch | Host-driven kernel launch (enables `tests/regression/*`) | **[S]** | 3+ | **PARKED 2026-06-28.** Mirror runtime `vx_start`: bump-alloc device addrs → backdoor-write inputs + kernel binary + `kernel_arg_t` (mem_model `write_block`) → set `cfg.startup_arg_addr` → dcr_driver writes real `STARTUP_ARG0/1` (today 0) → mirror into SimX RAM. Model DCR as **RAL** (`uvm_reg_block`). Pilot one kernel end-to-end (vecadd-reg or sgemm), then template. Design captured in chat; revisit after INV-1/coverage. |
 | D-simx | SimX cluster runtime + exit-code | **[St]** | 2 | Dynamic `NUM_CLUSTERS` / per-config `.so`. Gates matrix. |
 | D-matrix | Config matrix run | **[S]** | 1.5 | 1C/1W … 2CL/2C/4W via param harness. |
 | A1 | Software regression breadth | **[St]** (+[A] windows) | 2 | ≥3 kernels + RISC-V conformance subset, result windows. |
