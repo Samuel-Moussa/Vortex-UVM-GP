@@ -825,6 +825,14 @@ module vortex_tb_top;
         .reset      (reset),
         .dispatch_if(dispatch_if)
     );
+
+    // P1-bind: passive commit/retire probe into every VX_commit instance
+    // (observability only; Ahmad samples commit_arb_if for coverage).
+    bind VX_commit vx_commit_probe u_commit_probe (
+        .clk          (clk),
+        .reset        (reset),
+        .commit_arb_if(commit_arb_if)
+    );
     
 
     //==========================================================================

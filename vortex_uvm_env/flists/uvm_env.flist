@@ -43,6 +43,7 @@ $VORTEX_UVM_HOME/tb/mem_model.sv
 # White-box architectural instruction coverage (ARCH-COV / instr_class_cg / Warp/scheduler-state functional coverage)
 $VORTEX_UVM_HOME/tb/vx_instr_probe.sv
 $VORTEX_UVM_HOME/tb/vx_sched_probe.sv
+$VORTEX_UVM_HOME/tb/vx_commit_probe.sv
 
 # 5. Agent packages (each self-contained)
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent_pkg.sv
