@@ -6,6 +6,7 @@
 ### Sync changelog
 | Date | SHA | Summary |
 |------|-----|---------|
+| 2026-06-28 | (coverage) | **Coverage baseline measured** (`COVERAGE_STATUS_2026-06-28.md`). 12-UCDB merge: total 70.11%, statements 93.43%, branches 86.32%, toggles 69.88%, **functional bins 12.17%**. Functional is capped by `axi_transaction_cg` (1699 mostly-unreachable cross bins) → **Ahmad `ignore_bins` is the unlock**. Full kernel sweep: hello/fibonacci PASS, 6 spawn-kernels TIMEOUT (INV-1). riscv-dv sweep: jump_stress PASS; loop/no_fence **SimX SIGABRT (real SimX bug → Steven)**; privileged profiles inapplicable. Warp-state/divergence coverage gated on INV-1. |
 | 2026-06-28 | `8200cec` | **FULL re-sync (post history-rewrite).** **Samuel:** Gate-0 complete — **T4 DONE** (`df6206e`); **I2 DONE** (`b55f392`); **I5 DONE** (`6838b21`); review-pass fixes Issue 2 sustained busy=0 + Issue 3 I2 alias (`8063ddc`); 16 per-issue fix docs, project README, riscv-dv setup guide. **Ahmad:** architectural probe + coverage pipeline overhaul (`e547314`), banner relabelled to "interface subtotal" (`cd52792`), CG2 warp/scheduler-state probe (`988559a`), cp_id re-binned to routing field (`70c9a7e`), clean 8-run merge via unique testname → 2246 instances / 70.16% total (`6ca3d87`), C1 AXI ID widening end-to-end (`8bed180`). **Steven:** AXI SVA inline in `vortex_axi_if.sv` validated — `axi_memory_test` PASS, zero SVA fires (`9881e86`); 4 directed tests + kernels (`1fd6b09`, `63361b7`); microarch instruction trace + SimX changes (`ee9b1c0`, `554080e`). Evidence: `results/20260628/run_014053` & `run_022612` riscv-dv → TEST PASSED, 0 UVM_ERROR/FATAL. |
 | 2026-06-26 | `0d5bd080` | FULL sync: file-by-file audit of all Gate-0 and Tier-1 items. C1/C2/C3/T4 confirmed OPEN — no code fix merged yet. NEG and P1 binds IMPLEMENTED-UNVERIFIED (code present, no passing sim log on record). T-axi/T-warp/T-mem/T-barr_sync code committed (`6fe0840`, `841a672`) but SimX-routed verification not confirmed. |
 | 2026-06-26 | `4c36bd82` | **[S] C1 DONE:** VX_MEM_TAG_WIDTH derived from VX_gpu_pkg; elaboration assert; ISS-01 hex load overflow fixed in prepare.sh. hello kernel_launch_test → PASS. |
@@ -111,7 +112,8 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | Func cov: warp states | all | 🟡 defined, not closed | `sched_state/divergence/reconverge/barrier/tmc/wspawn` CGs live in `vx_sched_probe.sv` (`988559a`); needs divergent + barrier stimulus |
 | Func cov: memory patterns | aligned/unaligned/contention | 🟡 alignment ✅ | add contention |
 | Func cov: exceptions | all types | ❌ | `exception_cg` + stimulus |
-| Structural line / toggle | >95% / >90% | ~94% / ~69% | close + waivers |
+| Structural line / toggle | >95% / >90% | stmt 93.43% / toggle 69.88% (12-test merge) | close + waivers (see `COVERAGE_STATUS_2026-06-28.md`) |
+| **Functional (covergroup bins)** | 100% | **12.17%** — capped by `axi_transaction_cg` 1699 mostly-unreachable cross bins | **Ahmad `ignore_bins`** = the unlock; then stimulus |
 | Scoreboard RTL vs SimX | ≥1 kernel | 🟡 one-directional | SB-DIR bidirectional |
 | Full configurability | cores/clusters/warps/threads | 🟡 ~90% | probe loops ✅ + I2 count asserts ✅; I3 SimX-runtime open |
 | Bench trustworthiness | implicit | ✅ C1/C2/C3/T4 ✅ | Gate 0 — all four Samuel items DONE; SB-DIR (Ahmad) + INV-1 remain |
