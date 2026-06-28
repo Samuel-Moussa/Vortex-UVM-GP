@@ -13,10 +13,22 @@ tb_top/dut elaboration), third-party (cvfpu/ramulator) waived via
    FP divergence (1-ULP rounding + denormal FTZ).
 3. `~/.bashrc` env fix so `make sim` works in tool/non-login shells.
 
-**Latest merged totals (19 UCDBs, incl. fpu_test):** statements **94.29%**,
-branches 86.83%, toggles 70.76%, functional bins **37.83%**, total **70.92%**.
-riscv-dv is SATURATED (6 fresh seeds added 0 bins) — remaining functional gaps
-need FP-multi-warp (INV-1), TCU/mem ignores, and DCR variety, not more riscv-dv.
+**Latest merged totals (incl. fpu_test + diverge_lite):** statements **94.48%**,
+branches 86.83%, toggles 70.98%, functional bins **39.74%**, total **71.43%**.
+
+**INV-1 SOLVED (2026-06-29):** the "hang" was `vx_printf` IO volume, not a wspawn
+bug — printf-light multi-warp kernels complete fast. This unblocked:
+- **T4 negative test** — `negative_result_test PROGRAM_NAME=vecadd_lite` proves the
+  checker catches an injected fault (Gate-0 milestone).
+- **Warp-state coverage** — `diverge_lite` (divergent multi-warp) lifted
+  `warp_divergence_cg` 34%→81%, `warp_reconverge_cg` 15%→80%, `sched_state` →90%.
+
+Coverage progression this session: functional bins **9.7% → 37.5%** (ignore_bins)
+**→ 39.74%** (FP + divergent kernels); statements **92.6% → 94.48%**.
+
+riscv-dv is SATURATED (more seeds add 0). Remaining functional gaps: `wspawn_cg`/
+`tmc_cg` (more spawn-pattern variety), FP-multi-warp (multi-thread FP kernel),
+TCU/mem legit ignores, DCR variety, AXI routing/response.
 
 ---
 
