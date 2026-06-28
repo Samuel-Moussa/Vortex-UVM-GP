@@ -55,8 +55,10 @@ After every git pull and every git push, run the plan-sync skill before doing ot
   *Multi-core fix [DONE 11f71359 2026-06-26]:* `tb_commit_fires_all[TB_NUM_LANES]` generate loop sums ALL clusters×sockets×cores×lanes via `tb_commit_count_cyc` popcount. Correct for any config now.
 - [x] **T4 — honest error gate.** `simulate.sh` (~line 123): gate on the true `UVM_ERROR` count; remove the `-2` subtraction.
   *Accept:* a deliberately injected error fails the run; clean run = 0 errors with no subtraction.
-  *[DONE e087a78f 2026-06-26]:* `REAL_UVM_ERRORS=$UVM_ERRORS` — no subtraction. hello + riscv-dv stress → PASS. negative_result_test/vecadd → FAILS (exit code 2). Note: vecadd fails via TIMEOUT (INV-1, pre-existing) not MEM MISMATCH; injection armed but vecadd never completes. T4 acceptance met.
-- [ ] **GATE 0 sign-off:** negative test RED on injection · dropped-store fails (Ahmad's SB-DIR) · no hardcoded subtraction ✅ · width assert matches DUT ✅ · instr count real ✅.
+  *[DONE e087a78f 2026-06-26]:* `REAL_UVM_ERRORS=$UVM_ERRORS` — no subtraction.
+  *[FULLY VALIDATED 2026-06-29]:* `negative_result_test PROGRAM_NAME=vecadd_lite` → fault injected at 0x800075d8 (matched pre-injection, LSB flipped post), **checker DETECTED it → "Verdicts are not vacuous", TEST PASSED**. Clean vecadd_lite → 0 errors. The injection now runs on a COMPLETING program (INV-1 solved) — the real negative-test acceptance, blocked project-wide until now.
+- [ ] **GATE 0 sign-off:** negative test proven (checker catches injected fault on vecadd_lite ✅ 2026-06-29) · dropped-store fails (Ahmad's SB-DIR — still open) · no hardcoded subtraction ✅ · width assert matches DUT ✅ · instr count real ✅.
+  *Only remaining Gate-0 blocker: SB-DIR (Ahmad's lane). All Samuel Gate-0 items + the negative-test validation are DONE.*
   *Samuel's Gate-0 items ALL DONE. Remaining blockers: SB-DIR (Ahmad) and full negative test with a completing program (vecadd INV-1 open).*
 
 ### 🟠 TIER 1 — configurability + probe bind
