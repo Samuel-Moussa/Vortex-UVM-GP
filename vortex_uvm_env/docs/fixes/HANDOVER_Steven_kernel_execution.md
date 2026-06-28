@@ -82,6 +82,17 @@ spawns via `vx_spawn_threads`→`VX_CSR_MSCRATCH`; they never read DCR `STARTUP_
    Use the **DPI SimX path** or a correctly-based image. SimX completes + RTL hangs
    → DUT/config issue; both hang → shared kernel/runtime issue.
 
+## A.5b Sharpened by full kernel sweep (2026-06-28)
+All 8 `tests/kernel/*` run through the bench: **`hello` + `fibonacci` PASS via
+ebreak** (single-threaded, never call `vx_spawn_threads`); **vecadd, conform,
+axi_traffic, functional_mem, warp_test, barrier_test all TIMEOUT** (all call
+`vx_spawn_threads`). Since every kernel boots through the **same** `wspawn
+init_tls_all` and the single-threaded ones finish, **the boot wspawn works** — the
+hang is the **worker warps spawned by `vx_spawn_threads`** (second wspawn), which
+re-enter `init_tls_all` and park at `vx_tmc zero`. **Focus the waveform on the
+`vx_spawn_threads` wspawn, not the boot one.** (fibonacci completes at ~28k cycles
+→ spawners genuinely hang, not merely slow.)
+
 ## A.6 Leading hypothesis
 SIMT warp-lifecycle: `wspawn`'d warps reach `vx_tmc zero` but the
 thread-mask-clear / warp-deactivation doesn't retire them, so `per_cluster_busy`

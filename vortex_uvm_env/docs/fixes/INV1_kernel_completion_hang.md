@@ -243,6 +243,26 @@ deactivation path) around `0x80000938–0948`, and likely **Steven** (SimX /
 microarch lane) to compare against the golden model. This is being handed toward
 that investigation rather than forced as an infra patch.
 
+## 7c. Sharpened by full kernel sweep (2026-06-28) — spawning vs non-spawning
+
+Ran all 8 `tests/kernel/*` kernels through the bench (TIMEOUT=80000):
+
+| Result | Kernels | Trait |
+|---|---|---|
+| ✅ PASS via **ebreak** | `hello`, `fibonacci` | single-threaded — never call `vx_spawn_threads` |
+| ✗ TIMEOUT (hang) | `vecadd`, `conform`, `axi_traffic`, `functional_mem`, `warp_test`, `barrier_test` | all call `vx_spawn_threads` (spawn worker warps) |
+
+**Key inference:** every kernel boots through the **same** `wspawn init_tls_all` in
+`vx_start.S`. hello/fibonacci complete, so the **boot-time wspawn path is fine**.
+The hang is therefore **not** the boot TLS init — it is the **worker warps spawned
+later by `vx_spawn_threads`** (which re-enter `init_tls_all` per-warp and park at
+`vx_tmc zero`). So INV-1 narrows to: *`vx_spawn_threads`-spawned worker warps fail
+to retire/deactivate.* (fibonacci also confirms not all long runs are infinite —
+it completes at ~28k cycles; the spawners genuinely hang, not merely slow.)
+
+Steven: focus the waveform on the **second** wspawn (from `vx_spawn_threads`), not
+the boot one — the boot one demonstrably works.
+
 ## 8. Status
 
 - Root cause: **narrowed** — hostless-kernel hang in `wspawn`-spawned warps parked
