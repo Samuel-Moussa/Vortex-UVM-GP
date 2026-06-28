@@ -90,12 +90,13 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 ## Open Investigation Items
 Issues observed in sim that need root-cause before Gate-0 sign-off. Not yet assigned to a checklist box.
 
-### INV-1 — kernels never complete (`busy` never idles) — ROOT-CAUSED 2026-06-28
-- **Symptom:** Every `tests/kernel/*` compute kernel (vecadd/fibonacci/functional_mem) ends via TIMEOUT; `Total Cycles == TIMEOUT-1`; doubling timeout doubles cycles. Only `hello` + riscv-dv complete.
-- **ROOT CAUSE (corrected):** these are **hostless** kernels (run `main()` on-device, build their own args, spawn via `VX_CSR_MSCRATCH` — they do NOT read DCR `STARTUP_ARG`). The hang is in **runtime startup: `wspawn`-launched per-warp TLS init** (`init_tls_all`/`__init_tls` memcpy/memset, spin PC `0x80000944`). Core runs (P1 probe: 6608 retires) then spawned warps never converge → `busy` stays high.
-- **NOT the cause (ruled out):** `busy` IS directly wired to the DUT port (tb_top:314/337); `result=0x0 size=0` is the scoreboard compare-window, not kernel args; missing DCR `STARTUP_ARG` only matters for host-driven kernels (`tests/regression/*`), not these.
-- **Full writeup:** `docs/fixes/INV1_kernel_completion_hang.md` (issue → wrong hypothesis → evidence → root cause → solution A/B + RAL + regression assessment).
-- **Next (Path A):** confirm SimX-vs-RTL completion divergence; trace warp activity around `wspawn` via `vx_sched_probe` + waveform at `0x80000938–094c`. **Impact:** blocks T4 negative test until a kernel completes.
+### INV-1 — kernels never complete (`busy` never idles) — SOLVED 2026-06-29
+- **Symptom:** `tests/kernel/*` compute kernels (vecadd/conform/axi_traffic/functional_mem/warp_test/barrier_test) end via TIMEOUT. hello + fibonacci complete.
+- **REAL ROOT CAUSE (corrected 2026-06-29):** **`vx_printf` console-IO volume**, NOT a hang. These kernels print per-thread + buffers; each char is a fenced MMIO write. Native simx COMPLETES vecadd (EXIT=0, ~4.2M cycles, threads ran). In our bench retires CLIMB with cycles (6608@50k→10322@80k) = progressing, not stuck. The 50–80k timeout cut a ~4.2M-cycle program at ~1–2%.
+- **WRONG earlier hypothesis (retracted):** "wspawn worker warps stuck at vx_tmc zero / SIMT lifecycle bug → Steven." `vx_spawn`/multi-warp works fine (native simx proves it).
+- **FIX (Samuel):** printf-light kernel variants complete in ~10k cycles. **`vecadd_lite`** (same multi-warp spawn, no printf) → PASS, 9915 cycles, DUT==SimX, 0 errors. `fpu_test` similarly. 
+- **Unblocks:** T4 negative test (vecadd_lite is a completing program); printf-light divergent kernels for warp-state coverage.
+- **Full writeup:** `docs/fixes/INV1_kernel_completion_hang.md` (top correction block).
 
 ### ~~INV-3~~ — RESOLVED: riscv-dv end-to-end now working
 - **Root causes (all fixed, commit 2ccef437):** SimX SIGABRT on VX_CSR_MISA + unguarded M-mode CSR range; SimX decode abort on RVC compressed instructions (rv32imc→rv32im); RTL assertion on csrw 0x301/0x305 (sed post-process strips them); ecall vs ebreak (DUT probe only sees 0x00100073); UVM `wait_trigger()` stale-event race in `wait_for_completion()`; vacuous-run false error for pure arithmetic programs (no data-region stores).
