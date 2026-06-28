@@ -160,6 +160,18 @@ than writing new ones; their param surfaces already exist.)
 
 ---
 
+# THREAD C — SimX SIGABRT on SimX-safe riscv-dv profiles (new, 2026-06-28)
+
+During the coverage sweep, `riscv_loop_test` and `riscv_no_fence_test` made **SimX
+SIGABRT** ("Bad handle or reference") at `simx_run()` (`simx_pkg.sv:48`) — but the
+**DUT completed fine** (ebreak detected; the crash is when the scoreboard runs
+SimX to completion for the compare). These are **SimX-safe profiles** (plain
+loops / no-fence), so unlike the privileged profiles this is a **real SimX bug**,
+not an inapplicable case. The privileged profiles (`illegal_instr`,
+`full_interrupt`, `rand_instr`) aborting SimX is expected.
+Repro: `make sim TEST=random_instruction_stress_test PROGRAM=riscv_loop_test RISCV_DV_REGEN=1`.
+Details + numbers: `../COVERAGE_STATUS_2026-06-28.md`.
+
 # Shared pointers
 - Full INV-1 investigation: `INV1_kernel_completion_hang.md`
 - P1 probe (diagnostic aid): `fix_17_P1_commit_probe_bind.md`, `tb/vx_commit_probe.sv`
