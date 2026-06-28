@@ -85,6 +85,12 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 - `cache_coherence_test`, `T-exc`.
 - D-matrix config matrix; SIGN merged report.
 
+**Dead-sequence audit (2026-06-28):** only 6 of 23 agent sequence classes are started. Dispositions:
+- **(a) mem_\* (6)** — dormant by config (mem_agent passive in AXI mode); kept, header note added. ✅
+- **(b) host load/read/configure/complete (4)** — Path-B scaffolding → **handed to Steven** (`HANDOVER_Steven_pathB_host_launch.md`).
+- **(c) AXI single/write-read/burst-write/random/stress + dcr_random** — unused-but-useful stimulus → **handed to Ahmad** for coverage (`HANDOVER_Ahmad_unused_axi_dcr_sequences.md`).
+- **redundant** `dcr_minimal_startup_sequence` — deleted (I5 hygiene). ✅
+
 **OPEN — investigations (un-boxed):**
 - **INV-1** — ROOT-CAUSED (SIMT warp-control: `wspawn`'d warps parked at `vx_tmc zero`; not 32/64, not DCR args, not TLS size). Handed to Steven for waveform/microarch. Blocks the real T4 negative test. See `docs/fixes/INV1_kernel_completion_hang.md`.
 - **INV-2** `assert_dcr_write_timing` fires at startup (3915/3975 ns), inflating RTL error count.
