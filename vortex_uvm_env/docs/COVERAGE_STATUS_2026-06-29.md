@@ -1,9 +1,22 @@
-# Coverage Status & Closure Plan — 2026-06-28
+# Coverage Status & Closure Plan — 2026-06-28 → 2026-06-29
 
-Baseline measurement toward the goal of **100% functional coverage** and
-**≥95% code coverage**. Numbers are from a controlled 12-UCDB merge (AXI config,
-single tb_top/dut elaboration), third-party (cvfpu/ramulator) waived via
+Progress toward the goal of **100% functional coverage** and **≥95% code
+coverage**. Numbers are from a controlled 12-UCDB merge (AXI config, single
+tb_top/dut elaboration), third-party (cvfpu/ramulator) waived via
 `scripts/coverage_exclude.do`.
+
+**Fixes applied 2026-06-29:**
+1. `ignore_bins` on `axi_transaction_cg` unreachable AXI bins → functional bins
+   **12.17% → 37.51%** (§1b).
+2. **Directed FPU kernel** (`fpu_test`, fix_18) → `instr_class_cg_fpu` **0% → 25%**
+   AND lifted code coverage (FPU RTL exercised). Also surfaced a real DUT-vs-SimX
+   FP divergence (1-ULP rounding + denormal FTZ).
+3. `~/.bashrc` env fix so `make sim` works in tool/non-login shells.
+
+**Latest merged totals (19 UCDBs, incl. fpu_test):** statements **94.29%**,
+branches 86.83%, toggles 70.76%, functional bins **37.83%**, total **70.92%**.
+riscv-dv is SATURATED (6 fresh seeds added 0 bins) — remaining functional gaps
+need FP-multi-warp (INV-1), TCU/mem ignores, and DCR variety, not more riscv-dv.
 
 ---
 
@@ -27,6 +40,40 @@ jump_stress, unaligned_load_store, non_compressed_instr).
 Consistent with Ahmad's earlier 8-run merge (~70%).
 
 ---
+
+## 1b. Fix: ignore_bins on unreachable AXI bins (2026-06-29) — verified
+
+**What:** Added `ignore_bins` to `axi_transaction_cg` (`vortex_coverage_collector.sv`)
+for the AXI bins Vortex can never produce — its master emits **single-beat FIXED
+bursts only** (VX_axi_adapter, RTL pin 7a52ee5):
+- `cp_burst`: `ignore_bins` INCR, WRAP (only FIXED reachable)
+- `cp_len`: `ignore_bins` `[1:255]` (only single-beat reachable)
+
+These propagate through the crosses (`cross_type_burst_size`, `cross_type_len`,
+`cross_len_addr`), removing ~1,300 unreachable bins. Flagged in-code for Ahmad's
+review (coverage lane). Trip-wire noted: revert if VX_axi_adapter ever emits
+multi-beat bursts.
+
+**Result (same 12-test set, re-run + re-merge):**
+
+| Metric | Before | **After** |
+|---|---|---|
+| Covergroup total bins | 1938 | **629** (−1309 unreachable) |
+| Bins hit | 236 | 236 (unchanged) |
+| **Functional bins %** | 12.17% | **37.51%** |
+| Covergroups | 60.09% | 61.89% |
+| Total (filtered) | 70.11% | 70.36% |
+
+Honest gain — same hits, smaller *reachable* denominator. Code coverage unchanged
+(ignore_bins only affects functional counting). The remaining 393 missing bins are
+now **genuinely reachable** gaps, not noise.
+
+**Remaining functional gaps (real, post-fix):** `cp_id_route` routing combos,
+`cp_size`, `cp_bresp`/`cp_rresp0` variety (→ AXI stress seqs, Ahmad bucket-c),
+instr_class alu/lsu/sfu breadth (→ more riscv-dv), **FPU class (real gap — FPU is
+ENABLED, do NOT ignore)**, warp-state/divergence (**blocked by INV-1**).
+Further legit ignores Ahmad may add: `cp_size` non-native sizes, `mem_usage_cp`
+(AXI mode), `tcu_cg` (TCU disabled).
 
 ## 2. The dominant functional-coverage finding
 
