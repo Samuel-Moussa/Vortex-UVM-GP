@@ -1,0 +1,40 @@
+QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
+Start time: 02:45:39 on Jun 29,2026
+vcover report -details -code bcst /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/cov/merged.ucdb 
+Coverage Report by instance with details
+
+=================================================================================
+=== Instance: /vortex_tb_top/dut/g_mem_adapter[0]/mem_data_adapter/req_out_buf
+=== Design Unit: work.VX_elastic_buffer
+=================================================================================
+Statement Coverage:
+    Enabled Coverage              Bins      Hits    Misses  Coverage
+    ----------------              ----      ----    ------  --------
+    Statements                       1         1         0   100.00%
+
+================================Statement Details================================
+
+Statement Coverage for instance /vortex_tb_top/dut/g_mem_adapter[0]/mem_data_adapter/req_out_buf --
+
+    Line         Item                      Count     Source 
+    ----         ----                      -----     ------ 
+  File /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/libs/VX_elastic_buffer.sv
+    40              1                      33869     
+Toggle Coverage:
+    Enabled Coverage              Bins      Hits    Misses  Coverage
+    ----------------              ----      ----    ------  --------
+    Toggles                          4         3         1    75.00%
+
+================================Toggle Details================================
+
+Toggle Coverage for instance /vortex_tb_top/dut/g_mem_adapter[0]/mem_data_adapter/req_out_buf --
+
+                                              Node      1H->0L      0L->1H                          "Coverage"
+                                              ---------------------------------------------------------------
+                    g_passthru/genblk2/__unused[0]          19           0                               50.00 
+
+Total Node Count     =          2 
+Toggled Node Count   =          1 
+Untoggled Node Count =          1 
+
+Toggle Coverage      =      75.00% (3 of 4 bins)
