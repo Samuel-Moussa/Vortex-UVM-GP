@@ -255,12 +255,30 @@ from `VX_MEM_TAG_WIDTH` → any config elaborates. (Extends C1 to the AXI agent.
    one number.** SIGN must report **per-config** functional+code coverage + matrix
    status. (The 1-core combined headline stays the clean 43.31%; the matrix is a
    separate per-config artifact.)
-2. **Multi-core verification is currently VACUOUS.** Both A and B ran to ebreak
-   but the scoreboard reported `data_compared=0` (all captured writes skipped as
-   stack/MMIO + poison; result-region `g_dst` not compared). Coverage is valid
-   (config bins come from launch plusargs + execution probes) but DUT==SimX is not
-   verified at multi-core — the AXI-monitor result capture / SimX shared-mem
-   readback needs fixing before a real multi-config sign-off.
+2. **Multi-core `data_compared=0` ROOT-CAUSED + FIXED (build wiring, Samuel lane).**
+   A/B (warps=2, threads≤2) showed `data_compared=0`: the DUT side is CORRECT
+   (result writes captured in shadow, in range) but every word was poison-skipped
+   because **SimX returned `baadf00d` for the whole data region** — SimX itself
+   FAILED to run (`[SimX-DPI] Run status: -1`).
+   - **Real root cause (gdb, terminating throw):** `std::vector<vortex::IBuffer>::
+     at(2)` overrun in `vortex::Core::issue()` (`sim/simx/core.cpp:345`). SimX
+     sizes `ibuffers_` at RUNTIME (`arch.num_warps()`) but bounds the issue loop
+     with COMPILE-TIME macros (`PER_ISSUE_WARPS`, `ISSUE_WIDTH=UP(NUM_WARPS/16)`).
+     The DPI build linked the prebuilt `sim/simx/obj/*.o` (compiled with default
+     `NUM_WARPS=4` → `PER_ISSUE_WARPS=4`) while passing `-DNUM_*` only to the DPI
+     wrapper. At run warps=2, `ibuffers_` has size 2 but the loop runs `wid` 0..3
+     → `.at(2)` aborts. (The earlier "Ramulator AllBankRefresh map.at" throw is
+     internally caught — a red herring; NOT the cause. NOT a Ramulator bug.)
+   - **FIX (commit `1ce1e9f`):** `prepare.sh` now rebuilds the SimX core objects
+     with `CONFIGS=$ARCH_FLAGS` before the DPI link, so compile-time macros match
+     the run config. The simx Makefile keys a CONFIG_FILE off CONFIGS → recompiles
+     only on config change.
+   - **PROOF:** the previously-crashing 4C/2W config now → **TEST PASSED,
+     data_compared=84, skipped_poison=0, 0 UVM_ERROR**; 2C/4W/4T → 140 comparisons.
+     Multi-core now verifies DUT==SimX at ANY NUM_WARPS/NUM_THREADS.
+   - **D-matrix is now fully verifiable** — `cp_num_warps.low{1-2}` and
+     `cp_num_threads.t1{1}`/`t2{2}` can be VERIFIED (not coverage-only); re-run the
+     matrix configs to fold verified config bins.
 
 ## 5. Handover asks
 
