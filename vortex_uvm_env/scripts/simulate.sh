@@ -30,6 +30,15 @@ SIM_OPTS="$SIM_OPTS +NUM_THREADS=$NUM_THREADS"
 SIM_OPTS="$SIM_OPTS +TIMEOUT=$TIMEOUT_CYCLES"
 SIM_OPTS="$SIM_OPTS +STARTUP_ADDR=$STARTUP_ADDR_HEX"   # FIX A: no 0x prefix
 
+# Regression harness: program kind selects the kernel_arg_t layout in
+# regression_test.sv; dogfood sub-kernel selector is optional.
+if [[ -n "$PROGRAM_KIND" ]]; then
+    SIM_OPTS="$SIM_OPTS +PROGRAM_KIND=$PROGRAM_KIND"
+fi
+if [[ -n "$DOGFOOD_TESTID" ]]; then
+    SIM_OPTS="$SIM_OPTS +DOGFOOD_TESTID=$DOGFOOD_TESTID"
+fi
+
 
 # FIX: USE_AXI_WRAPPER must be a runtime plusarg so apply_plusargs()
 #      can read it via $test$plusargs("USE_AXI_WRAPPER").

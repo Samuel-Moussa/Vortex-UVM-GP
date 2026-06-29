@@ -139,6 +139,8 @@ PROGRAM=""
 PROGRAM_HEX=""
 PROGRAM_TYPE=""       # vortex | riscv-test | riscv-dv | custom-hex | custom-elf | custom-bin
 PROGRAM_SOURCE=""
+PROGRAM_KIND=""
+DOGFOOD_TESTID=""
 
 # GPU configuration — must match vortex_config.sv apply_plusargs() names exactly
 NUM_CLUSTERS=1
@@ -185,25 +187,27 @@ ORIGINAL_CMD="$0 $*"
 
 for arg in "$@"; do
     case $arg in
-        --test=*)         TEST_NAME="${arg#*=}" ;;
-        --program=*)      PROGRAM="${arg#*=}" ;;
-        --interface=*)    MEMORY_INTERFACE="${arg#*=}" ;;
-        --clusters=*)     NUM_CLUSTERS="${arg#*=}" ;;
-        --cores=*)        NUM_CORES="${arg#*=}" ;;
-        --warps=*)        NUM_WARPS="${arg#*=}" ;;
-        --threads=*)      NUM_THREADS="${arg#*=}" ;;
-        --timeout=*)      TIMEOUT_CYCLES="${arg#*=}" ;;
-        --startup-addr=*) STARTUP_ADDR="${arg#*=}" ;;
-        --stress-iter=*)  STRESS_ITER="${arg#*=}" ;;
-        --no-compile)     NO_COMPILE=1 ;;
-        --no-waves)       NO_WAVES=1 ;;
-        --cov-report)     PER_RUN_COV_REPORT=1 ;;
-        --gui)            GUI_MODE=1 ;;
-        --clean)          CLEAN=1 ;;
-        --verbose)        VERBOSE=1 ;;
-        --debug-addr)     DEBUG_ADDR_CALC=1 ;;
-        --no-tcu)         NO_TCU=1 ;;
-        --help|-h)        usage ;;
+        --test=*)           TEST_NAME="${arg#*=}" ;;
+        --program=*)        PROGRAM="${arg#*=}" ;;
+        --program-kind=*)   PROGRAM_KIND="${arg#*=}" ;;
+        --dogfood-testid=*) DOGFOOD_TESTID="${arg#*=}" ;;
+        --interface=*)      MEMORY_INTERFACE="${arg#*=}" ;;
+        --clusters=*)       NUM_CLUSTERS="${arg#*=}" ;;
+        --cores=*)          NUM_CORES="${arg#*=}" ;;
+        --warps=*)          NUM_WARPS="${arg#*=}" ;;
+        --threads=*)        NUM_THREADS="${arg#*=}" ;;
+        --timeout=*)        TIMEOUT_CYCLES="${arg#*=}" ;;
+        --startup-addr=*)   STARTUP_ADDR="${arg#*=}" ;;
+        --stress-iter=*)    STRESS_ITER="${arg#*=}" ;;
+        --no-compile)       NO_COMPILE=1 ;;
+        --no-waves)         NO_WAVES=1 ;;
+        --cov-report)       PER_RUN_COV_REPORT=1 ;;
+        --gui)              GUI_MODE=1 ;;
+        --clean)            CLEAN=1 ;;
+        --verbose)          VERBOSE=1 ;;
+        --debug-addr)       DEBUG_ADDR_CALC=1 ;;
+        --no-tcu)           NO_TCU=1 ;;
+        --help|-h)          usage ;;
         *)
             print_error "Unknown option: $arg"
             echo "Use --help for usage information"
@@ -234,7 +238,7 @@ if [[ "$MEMORY_INTERFACE" != "axi" && "$MEMORY_INTERFACE" != "mem" ]]; then
 fi
 
 # Check if this test requires a program
-TESTS_NEEDING_PROGRAM=("vortex_smoke_test" "functional_memory_test" "kernel_launch_test")
+TESTS_NEEDING_PROGRAM=("vortex_smoke_test" "functional_memory_test" "kernel_launch_test" "regression_test" "axi_memory_test" "barrier_sync_test" "negative_result_test" "random_instruction_stress_test" "warp_scheduling_test")
 NEEDS_PROGRAM=0
 for t in "${TESTS_NEEDING_PROGRAM[@]}"; do
     if [[ "$TEST_NAME" == "$t" ]]; then NEEDS_PROGRAM=1; break; fi

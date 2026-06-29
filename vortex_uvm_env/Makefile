@@ -36,6 +36,12 @@ THREADS       ?= 4
 TIMEOUT       ?= 1000000
 STARTUP_ADDR  ?= 0x80000000
 
+# ── Regression-program support (kernel_arg_t / MSCRATCH harness) ──────────────
+PROGRAM_KIND  ?=
+DOGFOOD_TESTID ?=
+# Regression programs all build tests/regression/<kind>/kernel.elf
+REGRESSION_DIR ?= $(VORTEX_HOME)/tests/regression
+
 # ── Coverage merge selection (override on command line) ───────────────────────
 # RUNS  = explicit run dirs under results/ to stage, space-separated, e.g.
 #         make cov-merge RUNS="20260620/run_A_kernel_launch_test 20260620/run_B_..."
@@ -63,6 +69,14 @@ ifneq ($(TEST),)
 endif
 ifneq ($(PROGRAM),)
     _FLAGS += --program=$(PROGRAM)
+endif
+ifneq ($(PROGRAM_KIND),)
+    _FLAGS  += --program-kind=$(PROGRAM_KIND)
+    # default the binary to the matching kind unless PROGRAM was given explicitly
+    PROGRAM ?= $(REGRESSION_DIR)/$(PROGRAM_KIND)/kernel.elf
+endif
+ifneq ($(DOGFOOD_TESTID),)
+    _FLAGS += --dogfood-testid=$(DOGFOOD_TESTID)
 endif
 _FLAGS += --interface=$(INTERFACE)
 _FLAGS += --clusters=$(CLUSTERS)
