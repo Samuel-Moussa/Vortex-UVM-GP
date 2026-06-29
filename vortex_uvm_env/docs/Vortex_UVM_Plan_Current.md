@@ -1,11 +1,12 @@
 # Vortex UVM — Verification Plan (Current Progress)
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
-**Synced-to:** `8200cec` (2026-06-28)  *(history was rewritten 2026-06-28 to drop co-author trailers — all SHAs below are post-rewrite)*
+**Synced-to:** `7ea95d2` (2026-06-29)  *(history was rewritten 2026-06-28 to drop co-author trailers — all SHAs below are post-rewrite)*
 
 ### Sync changelog
 | Date | SHA | Summary |
 |------|-----|---------|
+| 2026-06-29 | `7ea95d2` | **INV-1 SOLVED + T4 PROVEN + coverage push.** INV-1 root cause was **`vx_printf` IO volume**, NOT a wspawn/tmc hang (retracted) — native simx completes vecadd (~4.2M cyc); printf-light kernels complete. New `tests/kernel/{vecadd_lite,diverge_lite,fpu_test,fpu_mt}`. **T4 proven:** `negative_result_test PROGRAM_NAME=vecadd_lite` → checker catches injected fault. **Coverage:** functional bins **9.7%→41.54%** (AXI `ignore_bins` fix_18, TCU covergroup guard, FP + divergent kernels); fpu_cg 0→75%, warp divergence 34→81%, reconverge 15→80%; statements 94.14%, total 72.05%. Combined report: `cov/combined_report_2026-06-29/`. riscv-dv saturated. FP-compare divergence (1-ULP/denormal) → Ahmad/Steven. **Gate-0: all Samuel items + negative test done; only SB-DIR (Ahmad) remains.** |
 | 2026-06-28 | (coverage) | **Coverage baseline measured** (`COVERAGE_STATUS_2026-06-28.md`). 12-UCDB merge: total 70.11%, statements 93.43%, branches 86.32%, toggles 69.88%, **functional bins 12.17%**. Functional is capped by `axi_transaction_cg` (1699 mostly-unreachable cross bins) → **Ahmad `ignore_bins` is the unlock**. Full kernel sweep: hello/fibonacci PASS, 6 spawn-kernels TIMEOUT (INV-1). riscv-dv sweep: jump_stress PASS; loop/no_fence **SimX SIGABRT (real SimX bug → Steven)**; privileged profiles inapplicable. Warp-state/divergence coverage gated on INV-1. |
 | 2026-06-28 | `8200cec` | **FULL re-sync (post history-rewrite).** **Samuel:** Gate-0 complete — **T4 DONE** (`df6206e`); **I2 DONE** (`b55f392`); **I5 DONE** (`6838b21`); review-pass fixes Issue 2 sustained busy=0 + Issue 3 I2 alias (`8063ddc`); 16 per-issue fix docs, project README, riscv-dv setup guide. **Ahmad:** architectural probe + coverage pipeline overhaul (`e547314`), banner relabelled to "interface subtotal" (`cd52792`), CG2 warp/scheduler-state probe (`988559a`), cp_id re-binned to routing field (`70c9a7e`), clean 8-run merge via unique testname → 2246 instances / 70.16% total (`6ca3d87`), C1 AXI ID widening end-to-end (`8bed180`). **Steven:** AXI SVA inline in `vortex_axi_if.sv` validated — `axi_memory_test` PASS, zero SVA fires (`9881e86`); 4 directed tests + kernels (`1fd6b09`, `63361b7`); microarch instruction trace + SimX changes (`ee9b1c0`, `554080e`). Evidence: `results/20260628/run_014053` & `run_022612` riscv-dv → TEST PASSED, 0 UVM_ERROR/FATAL. |
 | 2026-06-26 | `0d5bd080` | FULL sync: file-by-file audit of all Gate-0 and Tier-1 items. C1/C2/C3/T4 confirmed OPEN — no code fix merged yet. NEG and P1 binds IMPLEMENTED-UNVERIFIED (code present, no passing sim log on record). T-axi/T-warp/T-mem/T-barr_sync code committed (`6fe0840`, `841a672`) but SimX-routed verification not confirmed. |
@@ -71,12 +72,12 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 **VERIFIED this window:** `axi_memory_test` now confirmed PASS via Steven's AXI SVA validation (was IMPLEMENTED-UNVERIFIED).
 
 **IMPLEMENTED-UNVERIFIED (code present; no passing SimX-routed sim log on record):**
-- **`negative_result_test`** — fault injection + inverted verdict. Code correct; full run blocked by INV-1 (no completing program).
+- **`negative_result_test`** — ✅ PROVEN 2026-06-29 on `vecadd_lite` (completing program): checker catches injected fault, verdicts not vacuous.
 - **`functional_memory_test`**, **`warp_scheduling_test`**, **`barrier_sync_test`** — committed; SimX-routed end-state pass not yet logged.
 
 **OPEN — Gate-0 sign-off (no remaining Samuel code item):**
 - **SB-DIR** `compare_all_written()` one-directional only — can't detect dropped stores. *(Ahmad's lane; handover `docs/fixes/HANDOVER_Ahmad_scoreboard_dropped_stores.md`.)*
-- **Full negative test** needs a completing program — blocked by **INV-1** (vecadd `busy` never idles).
+- **Full negative test** — ✅ DONE: `negative_result_test PROGRAM_NAME=vecadd_lite` catches the injected fault (INV-1 solved → completing program available).
 
 **OPEN — Samuel's remaining work:**
 - **P1-bind** ✅ DONE (`1ae658f`) — passive `commit_arb_if[*]` probe bound + UUID assert + liveness proof (11498 retires). Ahmad now samples it.
@@ -113,7 +114,7 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | Func cov: memory patterns | aligned/unaligned/contention | 🟡 alignment ✅ | add contention |
 | Func cov: exceptions | all types | ❌ | `exception_cg` + stimulus |
 | Structural line / toggle | >95% / >90% | stmt 93.43% / toggle 69.88% (12-test merge) | close + waivers (see `COVERAGE_STATUS_2026-06-29.md`) |
-| **Functional (covergroup bins)** | 100% | **37.51%** (was 12.17%) — `ignore_bins` removed 1309 unreachable AXI bins; remaining 393 are real gaps | stimulus (AXI stress, riscv-dv breadth, **FPU**) + warp-state needs INV-1 |
+| **Functional (covergroup bins)** | 100% | **41.54%** (9.7%→ via AXI ignore_bins + TCU guard + FP/divergent kernels) | multi-warp FP, spawn/DCR variety, Zicond/LSU; legit ignores (mem/cp_size) + FP tol → Ahmad |
 | Scoreboard RTL vs SimX | ≥1 kernel | 🟡 one-directional | SB-DIR bidirectional |
 | Full configurability | cores/clusters/warps/threads | 🟡 ~90% | probe loops ✅ + I2 count asserts ✅; I3 SimX-runtime open |
 | Bench trustworthiness | implicit | ✅ C1/C2/C3/T4 ✅ | Gate 0 — all four Samuel items DONE; SB-DIR (Ahmad) + INV-1 remain |
@@ -128,10 +129,10 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | C2 | Real instruction count | **[S]** | ✅ DONE `b14efc5`+`c80e336` | Commit handshake popcount across all lanes; IPC real. |
 | T4 | Remove `-2` error subtraction | **[S]** | ✅ DONE `df6206e` | `REAL_UVM_ERRORS=$UVM_ERRORS`; intact at HEAD after Ahmad's same-file edit. |
 | SB-DIR | Scoreboard bidirectional | **[A]** | 🔴 OPEN | `compare_all_written()` DUT-only. Ahmad's lane (handover written). |
-| NEG | Negative injection | **[A]** | ✅ impl | Regression guard. Full run blocked by INV-1 (no completing program). |
+| NEG | Negative injection | **[A]** | ✅ PROVEN 2026-06-29 | Catches injected fault on vecadd_lite (INV-1 solved). Regression guard live. |
 
 > **🚦 GATE 0:** NEG RED on injection · dropped store fails · no hardcoded subtraction ✅ · width assert matches DUT ✅ · instr count real ✅.
-> **Samuel's Gate-0: ALL FOUR DONE (C1/C2/C3/T4).** Remaining: SB-DIR (Ahmad) + INV-1 (completing program for the negative test).
+> **Samuel's Gate-0: ALL DONE (C1/C2/C3/T4 + negative test proven on vecadd_lite).** Only remaining Gate-0 blocker: SB-DIR (Ahmad).
 
 ---
 
