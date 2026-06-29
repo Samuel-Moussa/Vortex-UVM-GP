@@ -431,18 +431,25 @@ if [[ -n "$PROGRAM" ]]; then
                 # `j write_tohost` would delete the sub-programs and break linking for
                 # loop/jump profiles. vx_tmc 0 retires the warp right at test_done, so
                 # write_tohost is never reached and is left untouched.
+                # Bounded + portable: buffer the test_done block and inject on its
+                # ecall/ebreak terminator (plain match — gawk treats \b as backspace,
+                # not a word boundary, so it is NOT used). If the terminator is not
+                # within a few lines (unexpected exit shape), flush the buffer
+                # UNCHANGED — never run to EOF deleting the rest of the file.
                 awk '
-                  /^test_done:/ { inblk = 1 }
+                  /^test_done:/ && !injected { inblk = 1; buf = ""; cnt = 0 }
                   inblk {
-                    if ($0 ~ /\b(ecall|ebreak)\b/) {
+                    buf = buf $0 "\n"; cnt++;
+                    if ($0 ~ /ebreak/ || $0 ~ /ecall/) {
                       print "test_done:";
                       print "                  la x31, vortex_sig";
                       for (i = 1; i <= 30; i++)
                         print "                  sw x" i ", " (i-1)*4 "(x31)";
                       print "                  .insn r 0x0B, 0, 0, x0, x0, x0";  # vx_tmc 0 — retire warp
                       print "_vortex_done:     j _vortex_done";                 # safety (unreached after retire)
-                      inblk = 0; injected = 1;
+                      inblk = 0; injected = 1; next;
                     }
+                    if (cnt >= 6) { printf "%s", buf; inblk = 0; next; }        # not the exit block — emit unchanged
                     next;
                   }
                   { print }
