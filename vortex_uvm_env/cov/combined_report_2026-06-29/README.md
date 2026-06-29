@@ -1,18 +1,18 @@
 # Combined Coverage Report — 2026-06-29
 
-Merged from **19 UCDBs** (AXI config, single tb_top/dut elaboration), third-party
-(cvfpu/ramulator) waived via `scripts/coverage_exclude.do`, AXI unreachable bins
-`ignore_bins`'d (single-beat FIXED — see fix_18 / COVERAGE_STATUS).
+Merged from **12 UCDBs** (new TCU-guarded probe, AXI config, single tb_top/dut
+elaboration), third-party (cvfpu/ramulator) waived via `scripts/coverage_exclude.do`,
+AXI unreachable bins `ignore_bins`'d (single-beat FIXED — see fix_18 / COVERAGE_STATUS).
 
 ## Totals (BY INSTANCES, 2247 instances)
 | Metric | Hit/Total | Coverage |
 |---|---|---|
-| **Functional (covergroup bins)** | 256 / 629 | **40.69%** |
-| Statements | 9097 / 9628 | **94.48%** |
-| Branches | 6986 / 8034 | 86.95% |
-| Conditions | 616 / 941 | 65.46% |
-| Toggles | 377583 / 531920 | 70.98% |
-| **Total (filtered)** | — | **71.44%** |
+| **Functional (covergroup bins)** | 258 / 621 | **41.54%** (TCU covergroup guarded) |
+| Statements | 9064 / 9628 | **94.14%** |
+| Branches | 6978 / 8034 | 86.85% |
+| Conditions | 639 / 941 | 67.90% |
+| Toggles | 378160 / 531920 | 71.09% |
+| **Total (filtered)** | — | **72.05%** |
 
 ## Merged test set
 - Kernels: hello, vecadd, fibonacci, conform (kernel_launch_test)

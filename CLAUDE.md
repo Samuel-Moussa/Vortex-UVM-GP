@@ -23,6 +23,16 @@ After every git pull and every git push, run the plan-sync skill before doing ot
 5. **Gate 0 is blocking.** No coverage/regression number means anything until all Gate-0 boxes pass. The negative fault-injection test must stay RED on injection — treat it as the regression guard after every Gate-0 change.
 6. **Never attribute commits/PRs to Claude.** Do NOT add `Co-Authored-By: Claude` (or any Anthropic/Claude co-author) trailer, and never list Claude as a contributor. Commit messages contain only the technical change. (Enforced in user settings via empty `attribution.commit`/`attribution.pr`, but keep this rule regardless.)
 
+## Token & credit discipline (ALWAYS apply — this is expensive otherwise)
+Cost drivers here: (a) long 8h+ sessions, (b) >150k context, (c) repeated sim runs/merges. Rules:
+1. **Announce + justify anything expensive BEFORE doing it**, and prefer to confirm: a sim run, a full regression/coverage sweep, a multi-run background batch, a coverage merge, a history rewrite. Say e.g. "this is a ~N-min sim run" or "this commit is ready — want me to commit?" Don't silently launch costly work.
+2. **Never re-run a sim whose UCDB/result already exists** — analyze the existing `results/<run>/reports/coverage.ucdb` or logs instead. Re-merge existing UCDBs rather than re-running tests, unless a covergroup/RTL change forces regen (say so).
+3. **Don't re-read files** already in context (the harness tracks edits — Edit/Write won't silently fail). Read **targeted line ranges**, not whole files. Grep with tight patterns + `head`/`tail` caps; never dump big logs/reports.
+4. **Batch independent tool calls** in one turn; avoid one-call-at-a-time chains. **One commit per logical change**, batched; report it in one line, don't over-explain.
+5. **Don't narrate options I won't take.** When there's enough to act, act. No exhaustive surveys.
+6. **Long context is the top cost** — at natural checkpoints suggest `/compact`; when switching tasks suggest `/clear`. Flag when context is getting large.
+7. **Commits are cheap; confirm intent, not mechanics.** Tell me "committed `<sha>`" in one line. For pushes/force-pushes/expensive reruns, confirm first.
+
 ## Session start protocol (do this first, every session)
 1. `git log --oneline -25` and review my colleagues' recent commits (Ahmad/Steven work to this same plan).
 2. For anything touching shared state (scoreboard, coverage collector, config), `git diff` the relevant recent commits to see what already landed — **then reconcile the checklist below** (a box my colleagues completed may already be done in-tree; don't redo it).
