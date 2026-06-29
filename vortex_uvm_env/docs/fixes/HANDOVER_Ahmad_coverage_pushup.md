@@ -118,19 +118,41 @@ count, per-warp/sid activity, writeback-reg distribution. (Samuel built the bind
 ## 6. How to measure (reproduce the 47.20%)
 ```bash
 cd vortex_uvm_env
-# re-run the suite (compile once, sim-only per test) then merge:
-bash /path/to/scratchpad/run_suite.sh        # or run tests manually
-scripts/merge_coverage.sh --fresh
-scripts/merge_coverage.sh --collect <results/<run> ...>
-# report: cov/report/{functional.txt,summary.txt,html/}  (and cov/merged.ucdb)
+scripts/run_suite.sh                              # 1CL/1C/4W/4T (compile once, sim-only rest, auto-merge)
+CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 scripts/run_suite.sh   # any config (warps/threads >= 2)
+# report: cov/report/{functional.txt,summary.txt,html/}  +  cov/merged.ucdb
 ```
-Keep configs at **1C/4W/4T** for the headline (single-config = no instance
-inflation). **Never blend configs into one UCDB** (vcover-6821 width-toggle
-conflicts + per-core instance inflation make the % DROP — report per-config).
+`scripts/run_suite.sh` (installed this session) runs kernels + directed + all
+riscv-dv, skips runs that produce no UCDB, and merges. Keep the **headline at
+1C/4W/4T** (single-config = no instance inflation). **Never blend configs into one
+UCDB** (vcover-6821 width-toggle conflicts + per-core instance inflation make the %
+DROP — report per-config).
+
+## 7. riscv-dv profile status (which contribute, which fail, why, owner)
+Of the 18 rv32imc profiles, **only ~3–4 produce coverage today**; the rest fail for
+classifiable reasons. This bounds how much riscv-dv can add to functional coverage.
+
+| Profile | Result | Cause / disposition | Owner |
+|---|---|---|---|
+| `arithmetic_basic` | ✅ PASS (UCDB) | baseline ALU stream | — |
+| `ebreak_debug_mode` | ✅ PASS (UCDB) | completes via ebreak | — |
+| `loop` | ✅ PASS (UCDB) | now passes (per-config SimX rebuild fixed its earlier SIGABRT) | — |
+| `jump_stress`, `unaligned_load_store`, `ebreak` | ⚠️ ran, **Test failed (code 1/3)** | completed but UVM_ERROR (DUT-vs-SimX mismatch / exit path) — **investigate**; may yield UCDB if it reaches coverage-save | Steven (SimX) / Samuel (prepare post-proc) |
+| `full_interrupt`, `illegal_instr`, `mmu_stress`, `pmp` | ✗ **Fatal in sim → coverage save disabled** | privileged / trap / MMU instrs Vortex's user-mode model doesn't implement — **inapplicable** (expected). Could be skipped from the suite. | n/a (inapplicable) |
+| `no_fence`, `non_compressed`, `rand_instr`, `rand_jump` | ✗ **Fatal in sim** | *should* be applicable → likely SimX abort or RTL assertion on a generated instr; needs the `prepare.sh` sed post-process to cover more cases, or a SimX fix | Steven (SimX) / Samuel (prepare) |
+| `csr`, `instr_base`, `mem_region_stress` | ✗ **riscv-dv generation failed** | not in the rv32imc generator config / unsupported knobs | Samuel (riscv-dv setup) |
+| `hint_instr` | ✗ **asm not generated** | generator produced no `asm_test/` output | Samuel (riscv-dv setup) |
+
+**Coverage takeaway:** riscv-dv is effectively **saturated** for this env — the
+contributing profiles add ALU/jump/loop breadth but nothing new functionally beyond
+a few `instr_class`/`cp_id_route` values. **Do not block coverage closure on the
+failing profiles** — the inapplicable (privileged) ones should simply be excluded;
+the SimX-fatal ones are Steven's; the gen-failed ones are a riscv-dv-setup tail.
+The real functional gains are §1–§4, not more riscv-dv seeds.
 
 ---
 
-## 7. Suggested order (fastest % per effort)
+## 8. Suggested order (fastest % per effort)
 1. **§1 config/structural ignores** (mem_usage, spawn_cnt, bar_scope/size, lsu ld/sd) — quick, denominator drops, several coverpoints jump to 100%.
 2. **§3 status_performance + divergence-depth stimulus** — biggest *reachable* chunk; coordinate a couple directed kernels with Samuel.
 3. **§2 cp_id_route** (option A decode or stimulus) — the last big AXI piece.
