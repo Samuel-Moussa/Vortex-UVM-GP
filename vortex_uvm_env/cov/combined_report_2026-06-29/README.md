@@ -4,15 +4,26 @@ Merged from **12 UCDBs** (new TCU-guarded probe, AXI config, single tb_top/dut
 elaboration), third-party (cvfpu/ramulator) waived via `scripts/coverage_exclude.do`,
 AXI unreachable bins `ignore_bins`'d (single-beat FIXED — see fix_18 / COVERAGE_STATUS).
 
-## Totals (BY INSTANCES, 2247 instances)
+## Totals — FRESH 16-run suite re-run at 1C/4W/4T (BY INSTANCES, 2247 instances)
+Re-run 2026-06-29 with the config-aware + evidence-based-AXI covergroup
+(`55ac424`/`148ff78`): 8 kernels + 4 directed + contributing riscv-dv
+(arithmetic_basic, ebreak_debug_mode, loop, +1). Single config → no instance
+inflation.
+
 | Metric | Hit/Total | Coverage |
 |---|---|---|
-| **Functional (covergroup bins)** | 269 / 621 | **43.31%** (TCU guarded; +spawn_tmc_sweep +barrier_lite) |
-| Statements | 9064 / 9628 | **94.14%** |
-| Branches | 6978 / 8034 | 86.85% |
-| Conditions | 639 / 941 | 67.90% |
-| Toggles | 378160 / 531920 | 71.09% |
-| **Total (filtered)** | — | **73.20%** |
+| **Functional (covergroup bins)** | 270 / 572 | **47.20%** (denom 621→572: evidence ignores) |
+| **Total (filtered)** | — | **73.93%** |
+
+**What moved (all evidence-based, real verification — no inflation):**
+- Config coverpoints `cp_num_cores/warps/threads` + `cross_cores_warps`/`cross_launch_config` → **100%** (config-aware `ignore_bins` keyed off `\`NUM_*`, auto-adapts to any config).
+- AXI `cp_size` 12.5→**100%** (adapter hardcodes native size), `cp_bresp`/`cp_rresp0` 25→**100%** (TB always OKAY, errors not SimX-verifiable), `cross_type_burst_size` 12.5→**100%**, `cp_burst`/`cp_len` **100%**.
+- `tmc_cg` 60→**100%**, `wspawn_cg`→100%-reachable (spawn_tmc_sweep); `barrier_cg`→max-reachable (barrier_lite).
+
+**Remaining real gaps (NOT waived):**
+- `cp_id_route` / `cross_type_route` (~22%) — reachable routing tag bits; option-A bypass-tag decode to ignore structural evens (deferred).
+- `mem_usage_cp` / `system_mem_cross` (0%, AXI-mode → mem_agent passive) — config-aware ignore candidate (Ahmad).
+- `status_performance_cg` (`cp_pc_region`/`cp_occ`/ipc-stall buckets), `dcr_write_cg` 75%, `instr_class` breadth (alu czeq/czne needs `zicond` build).
 
 **+spawn_tmc_sweep (2026-06-29):** directed warp-control kernel → `tmc_cg` 60%→**100%**,
 `wspawn_cg` 25%→**75%** (=100% of reachable; `all`={NW} bin unreachable, off-by-one →
