@@ -188,6 +188,7 @@ class vortex_config extends uvm_object;
     int unsigned        mem_tag_width;    // always VX_MEM_TAG_WIDTH (= VX_gpu_pkg::VX_MEM_TAG_WIDTH)
 
     rand bit [63:0]     startup_addr;
+    bit [63:0]          startup_arg = 64'h0;   // kernel-arg ptr -> MSCRATCH at reset; 0 = none
     rand bit [63:0]     stack_base_addr;
     rand bit [63:0]     io_base_addr;
     rand bit [63:0]     io_addr_end;
@@ -304,6 +305,13 @@ class vortex_config extends uvm_object;
 
     rand bit [63:0]     result_base_addr;
     rand int unsigned   result_size_bytes;
+
+    // Set by the regression test for kernels that invoke vx_spawn_threads().
+    // Such kernels stage their scheduler args on the runtime stack (local mem
+    // @ ~0xffff0000), which is NOT replicated into SimX, so DUT/SimX cannot be
+    // made bit-equivalent without lockstep co-sim. The scoreboard treats these
+    // as UNVERIFIABLE rather than PASS/FAIL. (See VERIFICATION_PLAN.md Future Work.)
+    bit                 is_spawn_kernel;
 
     //==========================================================================
     // SCOREBOARD
@@ -763,6 +771,7 @@ class vortex_config extends uvm_object;
         clear_memory_on_reset = 1;
         result_base_addr    = startup_addr + 64'h100000;
         result_size_bytes   = 1024;
+        is_spawn_kernel     = 0;   // regression_test overrides per program kind
 
         // --- Scoreboard ---
         enable_scoreboard  = 1;
