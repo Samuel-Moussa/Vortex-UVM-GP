@@ -408,9 +408,9 @@ if [[ -n "$PROGRAM" ]]; then
                 # Pure-arithmetic riscv-dv tests compute only in registers and write
                 # nothing to memory → the black-box end-state scoreboard has nothing
                 # to compare (vacuous pass). Make them self-checking like a kernel:
-                # replace the stock exit block (test_done..j write_tohost) with a dump
-                # of x1..x30 to a linked .data buffer (vortex_sig), then vx_tmc 0 to
-                # retire the warp. DUT and SimX run identical code → identical buffer
+                # replace just the test_done exit (test_done: li gp,N; ecall/ebreak)
+                # with a dump of x1..x30 to a linked .data buffer (vortex_sig), then
+                # vx_tmc 0 to retire the warp. DUT and SimX run identical code → buffer
                 # → real DUT-vs-SimX comparison. Three things make this work:
                 #   1. LINKED buffer (not a bare absolute addr): Vortex L1 is
                 #      write-allocate, so the first store to a fresh line issues a
@@ -425,19 +425,22 @@ if [[ -n "$PROGRAM" ]]; then
                 #   3. NO fence (would stall the warp before it can retire).
                 # x31 is the base pointer (la). write_tohost/_exit labels are kept (a
                 # trap handler does `la x20, write_tohost`) but share the retire path.
+                # Replace ONLY the 3-line test_done exit block (test_done: li gp,N;
+                # ecall/ebreak). riscv-dv places the sub_N sub-programs and the
+                # write_tohost handshake AFTER test_done, so spanning the range up to
+                # `j write_tohost` would delete the sub-programs and break linking for
+                # loop/jump profiles. vx_tmc 0 retires the warp right at test_done, so
+                # write_tohost is never reached and is left untouched.
                 awk '
                   /^test_done:/ { inblk = 1 }
                   inblk {
-                    if ($0 ~ /j[ \t]+write_tohost/) {
+                    if ($0 ~ /\b(ecall|ebreak)\b/) {
                       print "test_done:";
                       print "                  la x31, vortex_sig";
                       for (i = 1; i <= 30; i++)
                         print "                  sw x" i ", " (i-1)*4 "(x31)";
-                      print "write_tohost:";
-                      print "_exit:";
-                      print "_vortex_done:";
                       print "                  .insn r 0x0B, 0, 0, x0, x0, x0";  # vx_tmc 0 — retire warp
-                      print "                  j _vortex_done";                  # safety (unreached after retire)
+                      print "_vortex_done:     j _vortex_done";                 # safety (unreached after retire)
                       inblk = 0; injected = 1;
                     }
                     next;
