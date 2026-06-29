@@ -7,12 +7,16 @@ AXI unreachable bins `ignore_bins`'d (single-beat FIXED — see fix_18 / COVERAG
 ## Totals (BY INSTANCES, 2247 instances)
 | Metric | Hit/Total | Coverage |
 |---|---|---|
-| **Functional (covergroup bins)** | 258 / 621 | **41.54%** (TCU covergroup guarded) |
+| **Functional (covergroup bins)** | 266 / 621 | **42.83%** (TCU covergroup guarded; +spawn_tmc_sweep) |
 | Statements | 9064 / 9628 | **94.14%** |
 | Branches | 6978 / 8034 | 86.85% |
 | Conditions | 639 / 941 | 67.90% |
 | Toggles | 378160 / 531920 | 71.09% |
-| **Total (filtered)** | — | **72.05%** |
+| **Total (filtered)** | — | **73.02%** |
+
+**+spawn_tmc_sweep (2026-06-29):** directed warp-control kernel → `tmc_cg` 60%→**100%**,
+`wspawn_cg` 25%→**75%** (=100% of reachable; `all`={NW} bin unreachable, off-by-one →
+Ahmad). Functional bins 258→266 (+8), total 72.05%→73.02%.
 
 ## Merged test set
 - Kernels: hello, vecadd, fibonacci, conform (kernel_launch_test)
