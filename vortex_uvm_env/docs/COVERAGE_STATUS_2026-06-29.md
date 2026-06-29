@@ -224,6 +224,44 @@ are correct, or (b) **ignore writeback of read-only `.got`/`.rodata` words the
 DUT never genuinely stored**. Until then barrier_lite's *coverage* is valid
 (collected before the verdict; barriers executed correctly).
 
+## 4d. Config matrix (D-matrix) — multi-core runs (2026-06-29)
+
+The config-dependent coverpoints (`host_operation_cg.cp_num_cores`/`cp_num_warps`/
+`cp_num_threads`, each previously 33% = the 1-core/4-warp/4-thread value only) are
+**unreachable in the primary config by construction** — they need other configs.
+Ran the matrix via `make sim ... CORES=n WARPS=n THREADS=n` (recompiles RTL +
+rebuilds SimX + matching plusargs; I2 asserts confirm RTL==UVM):
+
+| Config | Result | New bins |
+|---|---|---|
+| 1C/4W/4T (primary) | baseline | single, mid, t4 |
+| **4C/2W/1T** (A) | ebreak, I2 OK | `cp_num_cores.sm`, `cp_num_warps.low`, `cp_num_threads.t1` |
+| **8C/8W/2T** (B) | ebreak, I2 OK | `cp_num_cores.lg`, `cp_num_warps.high`, `cp_num_threads.t2` |
+
+Across the matrix: **`cp_num_cores`, `cp_num_warps`, `cp_num_threads` all reach
+100%**. Crosses `cross_cores_warps`/`cross_launch_config` at 33% (need ~9 config
+combos each to fully close — diminishing returns).
+
+**Infra unblocked (committed `cf1a827`):** multi-core was blocked by the AXI
+`ID_WIDTH` hardcoded default (vsim-8451 virtual-interface resolution). Now derives
+from `VX_MEM_TAG_WIDTH` → any config elaborates. (Extends C1 to the AXI agent.)
+
+**Two D-matrix infra findings (Samuel lane, for SIGN sign-off):**
+1. **Cross-config UCDB merge is INVALID.** Merging configs raises `vcover-6821`
+   object-type mismatches — config-dependent signal widths (e.g.
+   `schedule_if/data.wid` width tracks NUM_WARPS) make toggle/code-coverage nodes
+   structurally incompatible, and per-core probes multiply instances (1-core 2247
+   instances → 4-core 3590 → distorts BY-INSTANCE %). **Do NOT blend configs into
+   one number.** SIGN must report **per-config** functional+code coverage + matrix
+   status. (The 1-core combined headline stays the clean 43.31%; the matrix is a
+   separate per-config artifact.)
+2. **Multi-core verification is currently VACUOUS.** Both A and B ran to ebreak
+   but the scoreboard reported `data_compared=0` (all captured writes skipped as
+   stack/MMIO + poison; result-region `g_dst` not compared). Coverage is valid
+   (config bins come from launch plusargs + execution probes) but DUT==SimX is not
+   verified at multi-core — the AXI-monitor result capture / SimX shared-mem
+   readback needs fixing before a real multi-config sign-off.
+
 ## 5. Handover asks
 
 - **Ahmad:** (1) `ignore_bins`/`illegal_bins` on `axi_transaction_cg` unreachable
