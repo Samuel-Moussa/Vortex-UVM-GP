@@ -104,6 +104,16 @@ else
         cd "$SIMX_REF_DIR" || exit 1
         ARCH_FLAGS="-DNUM_CLUSTERS=${NUM_CLUSTERS} -DNUM_CORES=${NUM_CORES}"
         ARCH_FLAGS="$ARCH_FLAGS -DNUM_WARPS=${NUM_WARPS} -DNUM_THREADS=${NUM_THREADS}"
+        # Rebuild the SimX CORE objects with the per-config macros, not just the DPI
+        # wrapper. SimX sizes ibuffers_/etc. at runtime from arch.num_warps() but
+        # bounds its issue loops with COMPILE-TIME macros (PER_ISSUE_WARPS,
+        # ISSUE_WIDTH = UP(NUM_WARPS/16)). If obj/*.o were built with a different
+        # NUM_WARPS than the run config, Core::issue() over-indexes ibuffers_ and
+        # SimX aborts (vector::_M_range_check) — leaving memory poison and a vacuous
+        # scoreboard. The simx Makefile keys a CONFIG_FILE off CONFIGS, so this only
+        # recompiles when the config actually changes. (Fixes multi-config SimX;
+        # enables the D-matrix to verify at any NUM_WARPS/NUM_THREADS.)
+        make -C "$VORTEX_HOME/sim/simx" CONFIGS="$ARCH_FLAGS" 2>&1
         make build \
             VORTEX_HOME="$VORTEX_HOME" \
             QUESTA_HOME="$QUESTA_HOME" \
