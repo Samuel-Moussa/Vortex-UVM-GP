@@ -187,6 +187,21 @@ class vortex_coverage_collector extends uvm_component;
   localparam int UUID_W    = VX_gpu_pkg::UUID_WIDTH;                 // 44 (debug)
   localparam int ROUTE_W   = AXI_ID_W - UUID_W;                      // ~6 reachable bits
 
+  // -------------------------------------------------------------------------
+  // Compile-time hardware config (from +define+NUM_* — the SAME values this run
+  // is built/elaborated with; see the I2 topology asserts). These drive
+  // config-AWARE ignore_bins so EVERY build counts only the coverpoints that are
+  // reachable in THIS config and auto-ignores the bins that belong to other
+  // configs (structurally unreachable here). One definition adapts to ANY config
+  // in the sweep — no per-config editing — so each run's reachable functional
+  // set can hit 100%. (Across the matrix, every config bin is covered by the run
+  // whose build matches it.)
+  // -------------------------------------------------------------------------
+  localparam int CFG_CLUSTERS = `NUM_CLUSTERS;
+  localparam int CFG_CORES    = `NUM_CORES;
+  localparam int CFG_WARPS    = `NUM_WARPS;
+  localparam int CFG_THREADS  = `NUM_THREADS;
+
   covergroup axi_transaction_cg;
     option.per_instance = 1;
 
@@ -206,10 +221,15 @@ class vortex_coverage_collector extends uvm_component;
         bins nonzero  = {1'b1};
     }
 
+    // NOTE [Samuel 2026-06-28, REVIEW: Ahmad — coverage lane]: Vortex's AXI master
+    // (VX_axi_adapter, RTL pin 7a52ee5) emits ONLY single-beat FIXED bursts. So
+    // INCR/WRAP and any AWLEN/ARLEN>0 are UNREACHABLE in this config — ignore_bins
+    // them so they don't cap functional coverage. Trip-wire: if VX_axi_adapter
+    // ever moves to multi-beat bursts, remove these ignores.
     cp_burst: coverpoint current_axi.burst {
       bins fixed = {axi_transaction::AXI_FIXED};
-      bins incr  = {axi_transaction::AXI_INCR};
-      bins wrap  = {axi_transaction::AXI_WRAP};
+      ignore_bins unreachable_burst = {axi_transaction::AXI_INCR,
+                                       axi_transaction::AXI_WRAP};
     }
 
     cp_size: coverpoint current_axi.size {
@@ -222,9 +242,8 @@ class vortex_coverage_collector extends uvm_component;
 
     cp_len: coverpoint current_axi.len {
       bins single = {8'h00};
-      bins sh[]   = {[8'h01:8'h03]};
-      bins med[]  = {[8'h04:8'h0F]};
-      bins lng[]  = {[8'h10:8'hFF]};
+      // single-beat only — multi-beat unreachable (see NOTE above).
+      ignore_bins unreachable_len = {[8'h01:8'hFF]};
     }
 
     // Coarse address-region coverpoint to differentiate workloads by touched
@@ -235,12 +254,16 @@ class vortex_coverage_collector extends uvm_component;
     }
 
     // Write response — only valid for write transactions
+    // NOTE [REVIEW: Ahmad — coverage lane]: the memory model never returns an
+    // error response, so EXOKAY/SLVERR/DECERR are UNREACHABLE without an AXI
+    // error-injection sequence. Ignore them so OKAY-only = 100% of reachable.
+    // Trip-wire: if an error-injection seq is added, remove these ignores.
     cp_bresp: coverpoint current_axi.bresp
         iff (current_axi.trans_type == axi_transaction::AXI_WRITE) {
       bins okay   = {axi_transaction::AXI_OKAY};
-      bins exokay = {axi_transaction::AXI_EXOKAY};
-      bins slverr = {axi_transaction::AXI_SLVERR};
-      bins decerr = {axi_transaction::AXI_DECERR};
+      ignore_bins no_error_injection = {axi_transaction::AXI_EXOKAY,
+                                        axi_transaction::AXI_SLVERR,
+                                        axi_transaction::AXI_DECERR};
     }
 
     // Read response first beat — only valid for read transactions with data
@@ -248,9 +271,9 @@ class vortex_coverage_collector extends uvm_component;
         iff (current_axi.trans_type == axi_transaction::AXI_READ
              && current_axi.rresp.size() > 0) {
       bins okay   = {axi_transaction::AXI_OKAY};
-      bins exokay = {axi_transaction::AXI_EXOKAY};
-      bins slverr = {axi_transaction::AXI_SLVERR};
-      bins decerr = {axi_transaction::AXI_DECERR};
+      ignore_bins no_error_injection = {axi_transaction::AXI_EXOKAY,
+                                        axi_transaction::AXI_SLVERR,
+                                        axi_transaction::AXI_DECERR};
     }
 
     // Crosses to expose differences in transaction type, length, and burst behavior.
@@ -316,6 +339,10 @@ class vortex_coverage_collector extends uvm_component;
       bins single = {32'd1};
       bins sm     = {[32'd2:32'd4]};
       bins lg     = {[32'd5:32'd8]};
+      // Config-aware: only the bucket containing the COMPILED NUM_CORES is
+      // reachable this build; other-config values are unreachable -> ignore so
+      // they leave the denominator. Auto-adapts to any config.
+      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_CORES);
     }
 
     cp_num_warps: coverpoint current_host.num_warps
@@ -323,6 +350,7 @@ class vortex_coverage_collector extends uvm_component;
       bins low  = {[32'd1:32'd2]};
       bins mid  = {[32'd3:32'd4]};
       bins high = {[32'd5:32'd8]};
+      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_WARPS);
     }
 
     cp_num_threads: coverpoint current_host.num_threads
@@ -330,6 +358,7 @@ class vortex_coverage_collector extends uvm_component;
       bins t1 = {32'd1};
       bins t2 = {32'd2};
       bins t4 = {32'd4};
+      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_THREADS);
     }
 
     cp_completion: coverpoint current_host.completion_flag
