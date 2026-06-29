@@ -109,7 +109,8 @@ class dcr_driver extends uvm_driver #(dcr_transaction);
             bit [63:0] argv_ptr;
 
             startup_pc = cfg.startup_addr;
-            argv_ptr   = 64'h0;
+            //  was: argv_ptr = 64'h0;
+            argv_ptr = cfg.startup_arg;   // pull kernel-arg pointer from cfg (0 for self-contained programs)
 
             `uvm_info("DCR_DRV", $sformatf(
                 "Applying bootstrap DCRs during reset: PC=0x%016h argv=0x%016h",
