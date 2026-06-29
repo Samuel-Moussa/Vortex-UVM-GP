@@ -7,16 +7,24 @@ AXI unreachable bins `ignore_bins`'d (single-beat FIXED — see fix_18 / COVERAG
 ## Totals (BY INSTANCES, 2247 instances)
 | Metric | Hit/Total | Coverage |
 |---|---|---|
-| **Functional (covergroup bins)** | 266 / 621 | **42.83%** (TCU covergroup guarded; +spawn_tmc_sweep) |
+| **Functional (covergroup bins)** | 269 / 621 | **43.31%** (TCU guarded; +spawn_tmc_sweep +barrier_lite) |
 | Statements | 9064 / 9628 | **94.14%** |
 | Branches | 6978 / 8034 | 86.85% |
 | Conditions | 639 / 941 | 67.90% |
 | Toggles | 378160 / 531920 | 71.09% |
-| **Total (filtered)** | — | **73.02%** |
+| **Total (filtered)** | — | **73.20%** |
 
 **+spawn_tmc_sweep (2026-06-29):** directed warp-control kernel → `tmc_cg` 60%→**100%**,
 `wspawn_cg` 25%→**75%** (=100% of reachable; `all`={NW} bin unreachable, off-by-one →
 Ahmad). Functional bins 258→266 (+8), total 72.05%→73.02%.
+
+**+barrier_lite (2026-06-29):** directed barrier kernel; `barrier_cg` 55% to max-reachable
+(`cp_bar_id` **100%**, `cp_bar_event` **100%**, `cp_bar_scope` 50%=100% reachable [global
+needs GBAR/multi-core], `cp_bar_size` 75%=100% reachable [size[0]=1-warp noop]). Functional
+bins 266 to 269 (+3), total 73.02% to 73.20%. NOTE: barrier_lite trips ONE benign scoreboard
+MEM MISMATCH at the .got tail (DUT cache writeback zero-clobbers a read-only GOT word; SimX
+flat memory keeps it; shadow_memory has no image preload). Coverage is valid; scoreboard
+gate is an Ahmad ask (see COVERAGE_STATUS sec 4c).
 
 ## Merged test set
 - Kernels: hello, vecadd, fibonacci, conform (kernel_launch_test)
