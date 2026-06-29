@@ -161,13 +161,41 @@ All 8 saved UCDBs (coverage collected regardless of verdict).
 
 ---
 
+## 4b. Directed warp-control kernel — `spawn_tmc_sweep` (2026-06-29)
+
+New printf-free directed kernel `tests/kernel/spawn_tmc_sweep` drives the raw
+`vx_wspawn`/`vx_tmc` primitives across every spawn count and thread-mask
+occupancy (following the runtime's `process_threads_stub` + `vx_wspawn(1,0)`
+collapse handshake, so no warp is left running across a re-spawn). PASS, ebreak
+completion, DUT==SimX (mem comparisons passed), 0 errors.
+
+| Covergroup | Before | After (this run) |
+|---|---|---|
+| `tmc_cg.cp_tmc_occ` | 60% | **100%** (deactivate/one/partial[2]/partial[3]/full all hit) |
+| `wspawn_cg.cp_spawn_cnt` | 25% | **75% = 100% of REACHABLE** (one, some[2], some[3]) |
+
+**Covergroup off-by-one found (→ Ahmad):** `wspawn_cg.cp_spawn_cnt` bins
+`{ one={1}; some[]={[2:NW-1]}; all={NW} }` but the probe samples
+`$countones(warp_ctl_if.wspawn.wmask)` and the wmask **excludes the issuing
+warp** — so it ranges `0..NW-1` and the `all={NW}` bin is **unreachable by
+construction** (you can never spawn all NW warps; warp 0 is never in the mask).
+`vx_wspawn(4)` on the 4-warp config registers as `some[3]`, not `all`. Fix:
+redefine `all` to `{NW-1}` (or `ignore_bins all`). After that, `wspawn_cg`
+reads 100%. Trip-wire: revert if wspawn semantics ever include the issuer.
+
+**LSU unreachable (→ Ahmad):** `lsu_class_cg.cp_lsu_op` `ld`/`sd` are RV64-only
+(load/store doubleword) — unreachable in the RV32 config. `ignore_bins` them;
+the 6 RV32 ops (lb/lh/lw/sb/sh/sw) are all hit (reported 75% = 6/8, 100% of
+reachable).
+
 ## 5. Handover asks
 
 - **Ahmad:** (1) `ignore_bins`/`illegal_bins` on `axi_transaction_cg` unreachable
   crosses + always-zero coverpoints — biggest functional unlock; (2) toggle/line
-  waivers for the code-coverage targets. (See also
-  `HANDOVER_Ahmad_unused_axi_dcr_sequences.md` for stimulus to fill reachable AXI
-  bins.)
+  waivers for the code-coverage targets; (3) **`wspawn_cg.cp_spawn_cnt` `all`
+  off-by-one** + **`lsu_class_cg` `ld`/`sd` RV64-only** ignore_bins (§4b). (See
+  also `HANDOVER_Ahmad_unused_axi_dcr_sequences.md` for stimulus to fill
+  reachable AXI bins.)
 - **Steven:** `riscv_loop_test` and `riscv_no_fence_test` SIGABRT SimX at
   `simx_run()` although the DUT completes — these are SimX-safe profiles, so it's
   a **real SimX bug**, not an inapplicable-profile case. Plus INV-1 (gates
