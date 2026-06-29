@@ -202,6 +202,30 @@ class vortex_coverage_collector extends uvm_component;
   localparam int CFG_WARPS    = `NUM_WARPS;
   localparam int CFG_THREADS  = `NUM_THREADS;
 
+  // AXI native transfer size — the DUT's VX_axi_adapter HARDCODES awsize/arsize =
+  // CLOG2(DATA_SIZE) (VX_axi_adapter.sv:263,298), i.e. one full-bus-width beat;
+  // sub-word access is via WSTRB, never via AxSIZE. So ONLY this size is reachable.
+  // Derived from VX_MEM_DATA_WIDTH so it stays correct if the bus width changes.
+  localparam int AXI_NATIVE_SIZE = $clog2(VX_gpu_pkg::VX_MEM_DATA_WIDTH/8);  // =6 for 512b
+
+  // ==========================================================================
+  // AXI reachability map (investigated 2026-06-29 vs VX_axi_adapter.sv RTL +
+  // axi_driver.sv TB slave). ignore_bins are applied ONLY to STRUCTURALLY
+  // UNREACHABLE bins (real verification — never to inflate the %). Each waiver
+  // cites its evidence + a trip-wire:
+  //   cp_burst    : ignore INCR/WRAP   — adapter awburst/arburst = 2'b00 (264/299)
+  //   cp_len      : ignore len>0       — adapter awlen/arlen = 8'b0     (262/297)
+  //   cp_size     : ignore != native   — adapter awsize/arsize = CLOG2(DATA_SIZE) (263/298)
+  //   cp_bresp,
+  //   cp_rresp0   : ignore non-OKAY    — TB slave drives 2'b00 always (axi_driver
+  //                                      100/216/250); no error-injection test; AXI
+  //                                      errors are NOT modeled by SimX, so they are
+  //                                      not black-box verifiable (would diverge).
+  // REACHABLE — covered by stimulus, NOT ignored (ignoring would hide a real gap):
+  //   cp_id_route, cross_type_route : routing IDs (MSHR/bank/requester tag bits)
+  //     genuinely occur with memory traffic; need varied access patterns / more
+  //     outstanding requests to fill — a stimulus task, not a waiver.
+  // ==========================================================================
   covergroup axi_transaction_cg;
     option.per_instance = 1;
 
@@ -211,7 +235,8 @@ class vortex_coverage_collector extends uvm_component;
     }
 
     // Routing/structural sub-field only (low ROUTE_W bits). Every value here is a
-    // real outstanding-slot / requester / NC-path destination — all reachable.
+    // real outstanding-slot / requester / NC-path destination — all REACHABLE,
+    // so NOT ignored: fill by stimulus (varied memory traffic), never by waiver.
     cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0];
 
     // Is the high UUID field actually populated (debug tag present, non-zero)?
@@ -232,12 +257,18 @@ class vortex_coverage_collector extends uvm_component;
                                        axi_transaction::AXI_WRAP};
     }
 
+    // NOTE [REVIEW: Ahmad — coverage lane]: VX_axi_adapter hardcodes
+    // awsize/arsize = CLOG2(DATA_SIZE) (RTL lines 263/298) — the DUT emits ONLY
+    // the full-bus-width transfer size (AXI_NATIVE_SIZE; =6 for 512b). All other
+    // AxSIZE values are structurally impossible (sub-word is via WSTRB). Ignore
+    // them. Trip-wire: revert if the adapter ever emits variable AxSIZE.
     cp_size: coverpoint current_axi.size {
       bins byte_1   = {3'h0};
       bins byte_2   = {3'h1};
       bins byte_4   = {3'h2};
       bins byte_8   = {3'h3};
       bins larger[] = {[3'h4:3'h7]};
+      ignore_bins non_native = {[3'h0:3'h7]} with (item != AXI_NATIVE_SIZE);
     }
 
     cp_len: coverpoint current_axi.len {
