@@ -31,7 +31,13 @@
 interface automatic vortex_axi_if #(
     parameter ADDR_WIDTH            = 32,    // byte address (32 RV32, 48 RV64)
     parameter DATA_WIDTH            = 512,   // FIX: was 64 — must be VX_MEM_DATA_WIDTH = 512
-    parameter ID_WIDTH              = 50,    // overridden at instantiation = VX_MEM_TAG_WIDTH
+    // Default derives from the DUT-config-derived tag width so virtual-interface handles
+    // declared WITHOUT an override (axi_monitor/axi_driver `virtual vortex_axi_if.* vif;`)
+    // match the instance at ANY config. A hardcoded 50 only resolved at 1C/4W/4T (where
+    // VX_MEM_TAG_WIDTH==50); other configs (e.g. 4C/2W/1T) resize the instance and vsim
+    // failed virtual-interface resolution (vsim-8451). C1 derived the DUT side; this
+    // closes it on the AXI-agent side.
+    parameter ID_WIDTH              = vortex_config_pkg::AXI_ID_WIDTH, // = VX_gpu_pkg::VX_MEM_TAG_WIDTH (derived)
     parameter bit ENABLE_FULL_AXI_CHECKS = 1'b1  // set 0 to silence Groups A/C/D/E/F; existing handshake checks stay on
 ) (
     input logic clk,
