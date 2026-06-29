@@ -272,6 +272,13 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
             end
 
             else if (gi == C_TCU) begin : g_tcu
+                // NOTE [Samuel 2026-06-29, REVIEW: Ahmad — coverage lane]: TCU is
+                // a config-optional EX unit (EXT_TCU_ENABLE, OFF by default). The
+                // TCU slot still exists in NUM_EX_UNITS but never dispatches when
+                // disabled, so its covergroup was an UNREACHABLE 0% block (~195
+                // bins) inflating the functional denominator. Only build it when
+                // TCU is actually enabled.
+`ifdef EXT_TCU_ENABLE
                 noop_class_cg cg = new("tcu");
                 always @(posedge clk) begin
                     if (!reset && dispatch_if[gi].valid && dispatch_if[gi].ready) begin
@@ -281,6 +288,7 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
                         );
                     end
                 end
+`endif
             end
 
         end
