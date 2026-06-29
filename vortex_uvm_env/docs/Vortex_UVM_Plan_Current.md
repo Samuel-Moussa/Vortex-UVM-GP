@@ -1,11 +1,12 @@
 # Vortex UVM — Verification Plan (Current Progress)
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
-**Synced-to:** `7ea95d2` (2026-06-29)  *(history was rewritten 2026-06-28 to drop co-author trailers — all SHAs below are post-rewrite)*
+**Synced-to:** `148ff78` (2026-06-29)  *(history was rewritten 2026-06-28 to drop co-author trailers — all SHAs below are post-rewrite)*
 
 ### Sync changelog
 | Date | SHA | Summary |
 |------|-----|---------|
+| 2026-06-29 | `148ff78` | **Multi-config UNBLOCKED + config-aware coverage + evidence-based AXI ignores (Samuel).** **Configurability/I3 DONE:** (1) `axi_if` default `ID_WIDTH` now derives from `VX_MEM_TAG_WIDTH` (`cf1a827`) — fixes vsim-8451 virtual-interface bind so ANY config elaborates; (2) `prepare.sh` rebuilds SimX **core objects** per-config with `CONFIGS=$ARCH_FLAGS` (`1ce1e9f`) — SimX bounded its issue loop with compile-time `PER_ISSUE_WARPS` while sizing `ibuffers_` at runtime, so default-NUM_WARPS objects crashed (`vector::_M_range_check` in `Core::issue`) at warps/threads<4; now multi-config VERIFIES (2C/4W/4T→140 cmp PASS, 4C/2W→PASS, 2CL/2C/4W/4T→252 cmp PASS). NOT a Ramulator/SimX-core bug. **D-matrix run:** 4C/2W/1T, 8C/8W/2T, 2CL/2C/4W/4T → `cp_num_cores/warps/threads` all reach 100% across the matrix. **Cross-config UCDB merge is INVALID** (vcover-6821 width-dependent toggles + per-core instance inflation 2247→8260, drops BY-INSTANCE %) → SIGN reports **per-config**, not blended. **Config-aware coverage (`55ac424`):** `cp_num_cores/warps/threads` carry `ignore_bins ... with (item != CFG_*)` keyed off compile-time `\`NUM_*` → each build counts ONLY its reachable bins, auto-adapts to any config (crosses too) → those coverpoints + `cross_cores_warps`/`cross_launch_config` = 100%. **Evidence-based AXI ignores (`148ff78`):** investigated `VX_axi_adapter.sv`+`axi_driver.sv` — `cp_size` (adapter hardcodes awsize=CLOG2(DATA_SIZE)→native only) 12.5→100%, `cp_burst`/`cp_len` (FIXED/single) 100%, `cp_bresp`/`cp_rresp0` (TB slave always OKAY, no error-injection test, AXI errors not SimX-verifiable) 25→100%, `cross_type_burst_size` 12.5→100%. **`cp_id_route`/`cross_type_route` NOT waived** (real verification): genuinely reachable routing tag bits, ~22% — empirical shows even-≥4 values structurally absent (config bypass-tag encoding, NUM_DCACHES=0) → **option A: decode bypass-tag layout to prove/ignore the structural evens (deferred).** New kernels `spawn_tmc_sweep` (tmc_cg 60→100, wspawn reachable 100%), `barrier_lite` (barrier_cg→max-reachable; surfaced scoreboard GOT/cache-writeback false-mismatch → Ahmad). Ahmad's AXI_ID "only low 6 matter" confirmed correct (44-bit UUID + 6 routing; already binned that way). Full-suite re-run at 1C/4W/4T (all kernels+directed+18 riscv-dv profiles) in progress to remeasure combined. |
 | 2026-06-29 | `7ea95d2` | **INV-1 SOLVED + T4 PROVEN + coverage push.** INV-1 root cause was **`vx_printf` IO volume**, NOT a wspawn/tmc hang (retracted) — native simx completes vecadd (~4.2M cyc); printf-light kernels complete. New `tests/kernel/{vecadd_lite,diverge_lite,fpu_test,fpu_mt}`. **T4 proven:** `negative_result_test PROGRAM_NAME=vecadd_lite` → checker catches injected fault. **Coverage:** functional bins **9.7%→41.54%** (AXI `ignore_bins` fix_18, TCU covergroup guard, FP + divergent kernels); fpu_cg 0→75%, warp divergence 34→81%, reconverge 15→80%; statements 94.14%, total 72.05%. Combined report: `cov/combined_report_2026-06-29/`. riscv-dv saturated. FP-compare divergence (1-ULP/denormal) → Ahmad/Steven. **Gate-0: all Samuel items + negative test done; only SB-DIR (Ahmad) remains.** |
 | 2026-06-28 | (coverage) | **Coverage baseline measured** (`COVERAGE_STATUS_2026-06-28.md`). 12-UCDB merge: total 70.11%, statements 93.43%, branches 86.32%, toggles 69.88%, **functional bins 12.17%**. Functional is capped by `axi_transaction_cg` (1699 mostly-unreachable cross bins) → **Ahmad `ignore_bins` is the unlock**. Full kernel sweep: hello/fibonacci PASS, 6 spawn-kernels TIMEOUT (INV-1). riscv-dv sweep: jump_stress PASS; loop/no_fence **SimX SIGABRT (real SimX bug → Steven)**; privileged profiles inapplicable. Warp-state/divergence coverage gated on INV-1. |
 | 2026-06-28 | `8200cec` | **FULL re-sync (post history-rewrite).** **Samuel:** Gate-0 complete — **T4 DONE** (`df6206e`); **I2 DONE** (`b55f392`); **I5 DONE** (`6838b21`); review-pass fixes Issue 2 sustained busy=0 + Issue 3 I2 alias (`8063ddc`); 16 per-issue fix docs, project README, riscv-dv setup guide. **Ahmad:** architectural probe + coverage pipeline overhaul (`e547314`), banner relabelled to "interface subtotal" (`cd52792`), CG2 warp/scheduler-state probe (`988559a`), cp_id re-binned to routing field (`70c9a7e`), clean 8-run merge via unique testname → 2246 instances / 70.16% total (`6ca3d87`), C1 AXI ID widening end-to-end (`8bed180`). **Steven:** AXI SVA inline in `vortex_axi_if.sv` validated — `axi_memory_test` PASS, zero SVA fires (`9881e86`); 4 directed tests + kernels (`1fd6b09`, `63361b7`); microarch instruction trace + SimX changes (`ee9b1c0`, `554080e`). Evidence: `results/20260628/run_014053` & `run_022612` riscv-dv → TEST PASSED, 0 UVM_ERROR/FATAL. |
@@ -79,13 +80,19 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 - **SB-DIR** `compare_all_written()` one-directional only — can't detect dropped stores. *(Ahmad's lane; handover `docs/fixes/HANDOVER_Ahmad_scoreboard_dropped_stores.md`.)*
 - **Full negative test** — ✅ DONE: `negative_result_test PROGRAM_NAME=vecadd_lite` catches the injected fault (INV-1 solved → completing program available).
 
+**DONE this session (Samuel, 2026-06-29 — see top changelog `148ff78`):**
+- **I3 SimX param-match ✅** (`cf1a827` AXI ID_WIDTH derive + `1ce1e9f` per-config SimX object rebuild) — multi-config now elaborates AND verifies (2C/4W/4T, 2CL/2C/4W/4T, 4C/2W).
+- **D-matrix runs ✅ (partial)** — 3 configs run+verified; config bins → 100% across matrix; cross-config-merge-invalidity established (report per-config).
+- **Config-aware coverage ✅** (`55ac424`) — `cp_num_*` auto-adapt per config to 100%. **Evidence-based AXI ignores ✅** (`148ff78`) — size/burst/len/resp → 100% from RTL evidence.
+- **Directed kernels ✅** — `spawn_tmc_sweep` (tmc/wspawn), `barrier_lite` (barrier_cg).
+
 **OPEN — Samuel's remaining work:**
-- **P1-bind** ✅ DONE (`1ae658f`) — passive `commit_arb_if[*]` probe bound + UUID assert + liveness proof (11498 retires). Ahmad now samples it.
-- **PathB-launch (PARKED, not started)** — host-driven kernel launch so `tests/regression/*` (sgemm/sort/conv3/…) become runnable: bump-allocate device addrs → backdoor-write inputs + kernel binary + `kernel_arg_t` (mem_model `write_block`) → set `cfg.startup_arg_addr` so dcr_driver writes real `STARTUP_ARG0/1` (today hardcoded 0, dcr_driver.sv:120-121) → mirror the same setup into SimX RAM. **RAL** (`uvm_reg_block` over DCR) belongs here. Pilot one kernel end-to-end first. *Deferred by Samuel's decision 2026-06-28 — revisit after INV-1/coverage.*
-- **I6 — XLEN 32/64 configurability (NEW, open)** — RTL (`XLEN_32/64`) + UVM widths (`vortex_config.sv:68-73`) already support both, but the build flow hardcodes RV32 (`prepare.sh:304,408` → `--target=rv32im`, `-mabi=ilp32`) and there is no `--xlen` run-knob. Wire XLEN end-to-end (run flag → `+define XLEN_64` + rv64 march/mabi + SimX xlen) to make the env truly 32/64-switchable. *(Samuel — configurability lane.)*
-- I3: SimX param-match at runtime (depends on Steven's D-simx).
-- `cache_coherence_test`, `T-exc`.
-- D-matrix config matrix; SIGN merged report.
+- **cp_id_route tag-decode (option A, deferred)** — decode the bypass-tag layout (`NUM_DCACHES=0` path) to PROVE which routing values are structural (even-≥4 absent empirically) → ignore those, fill the rest by stimulus. Until then `cp_id_route`/`cross_type_route` are the AXI residual (~22%). Do NOT waive without proof.
+- **SIGN — per-config merged report** — the matrix can't blend into one UCDB (vcover-6821); aggregate **per-config** pass rate + functional/code + matrix status.
+- **I6 — XLEN 32/64 configurability** — build flow hardcodes RV32 (`prepare.sh` `--target=rv32im`/`-mabi=ilp32`); wire an `--xlen` knob (`+define XLEN_64` + rv64 march/mabi + SimX xlen). *(configurability lane.)*
+- **T-exc** exception/interrupt stimulus (drive `exception_cg`); **T-cache** `cache_coherence_test`.
+- **PathB-launch (PARKED)** — host-driven launch for `tests/regression/*`: bump-alloc device addrs → backdoor-write inputs+binary+`kernel_arg_t` → set `cfg.startup_arg_addr` → real `STARTUP_ARG0/1` → mirror into SimX RAM; DCR as **RAL**. Pilot one kernel first. *Revisit after coverage.*
+- **P1-bind** ✅ DONE (`1ae658f`).
 
 **Dead-sequence audit (2026-06-28):** only 6 of 23 agent sequence classes are started. Dispositions:
 - **(a) mem_\* (6)** — dormant by config (mem_agent passive in AXI mode); kept, header note added. ✅
@@ -114,9 +121,9 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | Func cov: memory patterns | aligned/unaligned/contention | 🟡 alignment ✅ | add contention |
 | Func cov: exceptions | all types | ❌ | `exception_cg` + stimulus |
 | Structural line / toggle | >95% / >90% | stmt 93.43% / toggle 69.88% (12-test merge) | close + waivers (see `COVERAGE_STATUS_2026-06-29.md`) |
-| **Functional (covergroup bins)** | 100% | **41.54%** (9.7%→ via AXI ignore_bins + TCU guard + FP/divergent kernels) | multi-warp FP, spawn/DCR variety, Zicond/LSU; legit ignores (mem/cp_size) + FP tol → Ahmad |
-| Scoreboard RTL vs SimX | ≥1 kernel | 🟡 one-directional | SB-DIR bidirectional |
-| Full configurability | cores/clusters/warps/threads | 🟡 ~90% | probe loops ✅ + I2 count asserts ✅; I3 SimX-runtime open |
+| **Functional (covergroup bins)** | 100% | **per-config, on reachable** — config/AXI coverpoints now config-aware & evidence-ignored → `cp_num_cores/warps/threads`, crosses, `cp_size`, `cp_burst/len`, `cp_bresp/rresp0`, `cross_type_burst_size` all **100%**; new combined % being remeasured (was 41.54%). | residual: `cp_id_route`/`cross_type_route` (option A tag-decode), instr_class breadth, Zicond czeq/czne (needs `zicond` build) |
+| Scoreboard RTL vs SimX | ≥1 kernel | 🟡 one-directional + **GOT/cache-writeback false-mismatch found** (barrier_lite) | SB-DIR bidirectional + preload shadow / ignore read-only `.got` words → Ahmad |
+| Full configurability | cores/clusters/warps/threads | ✅ **~100%** | probe loops ✅ + I2 asserts ✅ + I3 SimX param-match ✅ (multi-config verifies); only XLEN 32/64 (I6) open |
 | Bench trustworthiness | implicit | ✅ C1/C2/C3/T4 ✅ | Gate 0 — all four Samuel items DONE; SB-DIR (Ahmad) + INV-1 remain |
 
 ---
@@ -143,7 +150,7 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 |---|------|----|--------|--------|
 | I1 | Param→RTL probe consistency | 2 | ✅ DONE `c80e336` (probe side) | Generate loops cover all clusters×sockets×cores×lanes for commit count and ebreak detection. SimX runtime param-match still depends on Steven's D-simx. |
 | I2 | True width/count asserts | 1 | ✅ DONE `b55f392`+`8063ddc` | `u_i2_topology_asserts`: NUM_* + alias plusargs vs RTL macros at time=0, `$fatal` on mismatch. C1 tag-width assert also done. |
-| I3 | SimX param-match | 0.5 | 🔴 OPEN | config → SimX cores/clusters/warps/threads (with **[St]** D-simx). |
+| I3 | SimX param-match | 0.5 | ✅ DONE `cf1a827`+`1ce1e9f` (2026-06-29) | config → RTL (`+define`) + SimX (`-DNUM_*`, **core objects rebuilt per-config**) + runtime plusargs, all matched (I2 asserts confirm). Multi-config VERIFIES: 2C/4W/4T 140 cmp, 2CL/2C/4W/4T 252 cmp, 4C/2W PASS. Fixed AXI ID_WIDTH virtual-iface bind + SimX `Core::issue` over-index at warps/threads<4. |
 | I5 | Stale comments + dead files | 0.5 | ✅ DONE `6838b21` | dead files removed; `// 8` comments corrected to derived width. |
 | I6 | XLEN 32/64 configurability | 1.5 | 🔴 OPEN (NEW) | RTL + UVM widths already 64-ready (`vortex_config.sv:68-73`); build flow hardcodes RV32 (`prepare.sh:304,408`) and no `--xlen` knob. Wire run-flag → `+define XLEN_64` + rv64 march/mabi + SimX xlen. |
 
@@ -180,8 +187,10 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 ### Remaining coverage — **[A]**
 | # | Item | pd | Action |
 |---|------|----|--------|
-| CG2 | warp-**state** coverage | 2.5 | split/join depth, reconvergence, barrier hold/release via passive scheduler probe. Closes "all warp states." |
+| CG2 | warp-**state** coverage | 2.5 | split/join depth, reconvergence, barrier hold/release via passive scheduler probe. Closes "all warp states." Samuel's `spawn_tmc_sweep`/`barrier_lite` already drove tmc/wspawn/barrier→100%-reachable. |
 | CG3 | `exception_cg` | 1.5 | trap/exception type + EBREAK, fed by T-exc. Closes "all exception types." |
+| SB-GOT | scoreboard read-only `.got` false-mismatch | 0.5 | **NEW (found by Samuel via barrier_lite):** DUT cache writeback zero-clobbers a read-only GOT word the program never stores; `shadow_memory` has no image preload → false MEM MISMATCH. Fix: preload shadow from program image, or ignore writeback of never-stored read-only `.got`/`.rodata` words (like existing stack/poison gates). See `COVERAGE_STATUS_2026-06-29.md` §4c. |
+| AXI-route | `cp_id_route` structural-ignore confirm | 0.5 | Samuel ignored size/burst/len/resp (evidence-based) + sign-off needed on the config-aware `ignore_bins` (`55ac424`/`148ff78`). Remaining: confirm/decode the bypass-tag so the even-≥4 `cp_id_route` values can be ignored (option A) — needs AXI/tag judgment. |
 
 > **🚦 GATE 2:** all 8 founding tests pass · all 4 functional-coverage targets populated.
 
@@ -191,8 +200,8 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | # | Item | Owner | pd | Action |
 |---|------|-------|----|--------|
 | PathB-launch | Host-driven kernel launch (enables `tests/regression/*`) | **[S]** | 3+ | **PARKED 2026-06-28.** Mirror runtime `vx_start`: bump-alloc device addrs → backdoor-write inputs + kernel binary + `kernel_arg_t` (mem_model `write_block`) → set `cfg.startup_arg_addr` → dcr_driver writes real `STARTUP_ARG0/1` (today 0) → mirror into SimX RAM. Model DCR as **RAL** (`uvm_reg_block`). Pilot one kernel end-to-end (vecadd-reg or sgemm), then template. Design captured in chat; revisit after INV-1/coverage. |
-| D-simx | SimX cluster runtime + exit-code | **[St]** | 2 | Dynamic `NUM_CLUSTERS` / per-config `.so`. Gates matrix. |
-| D-matrix | Config matrix run | **[S]** | 1.5 | 1C/1W … 2CL/2C/4W via param harness. |
+| D-simx | SimX cluster runtime + exit-code | **[St]** | 2 | ✅ **largely DONE via Samuel's per-config SimX object rebuild** (`1ce1e9f`): per-config `.so` with matching `NUM_CLUSTERS/CORES/WARPS/THREADS`; 2CL/2C/4W/4T verifies (252 cmp). Steven residual: SimX `loop`/`no_fence` SIGABRT + exit-code polish. |
+| D-matrix | Config matrix run | **[S]** | 1.5 | 🟡 **IN PROGRESS** — 4C/2W/1T, 8C/8W/2T, 2CL/2C/4W/4T run + verified; `cp_num_cores/warps/threads`→100% across matrix. **Cross-config merge INVALID** (vcover-6821 + instance inflation) → report **per-config**, not one blended UCDB. Remaining: formalize per-config matrix table in SIGN. |
 | A1 | Software regression breadth | **[St]** (+[A] windows) | 2 | ≥3 kernels + RISC-V conformance subset, result windows. |
 | COV-close | Coverage closure loop | **[A]** | 2 | Holes → bias riscv-dv / add directed → re-run → re-merge to func 100% / line>95% / toggle>90% (waivers). |
 | TOG | Toggle/line push | **[A]** | 1 | Close cheap toggles; document third-party waivers. |
