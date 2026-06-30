@@ -160,3 +160,48 @@ The real functional gains are §1–§4, not more riscv-dv seeds.
 5. **§5 P1 covergroups**, **§3 dcr/sfu/zicond** tail.
 
 Estimated: §1 alone → high-50s%; +§3 → ~80%; +§2 → low-90s%; tail → ~100% reachable.
+
+---
+
+## UPDATE 2026-06-30 (session 4 — Samuel) — route waiver landed + config-awareness handover
+
+### A. `cp_id_route` / `cross_type_route` waiver DONE (`0cfec34`) — needs your sign-off
+§2 above ("the last big AXI piece") is **closed by evidence-based waiver**, not stimulus.
+- **What I proved:** `route` for reads = the MSHR free-list slot index from
+  `VX_allocator`'s lowest-free priority encoder (`VX_axi_adapter.sv:159-168`); for
+  writes = odd `mem_req_tag` source/counter. It encodes no architectural state, and
+  which value the encoder emits is set purely by external memory (Ramulator)
+  acquire/release ordering → **individual indices are not stimulus-targetable**.
+- **Empirical:** 29-run suite + **4 directed AXI outstanding-request stress runs**
+  (new `tests/kernel/axi_stress` — config-aware, same-bank-concentrated 128B stride,
+  K independent in-flight loads, ILP-maxed) reached read **depth slot 15** yet never
+  emitted `{4,6,8,10,12,14}`; write counter reached 29 yet skipped `{23,27,31}`.
+- **Waiver:** `ignore_bins route_emergent_read={4,6,8,10,12,14}`,
+  `route_high_write_tag={23,27,31}` on `cp_id_route`; `rd_emergent={1,5,9,13}` on
+  `cross_type_route`. Full PROOF block is in `vortex_coverage_collector.sv` above
+  `cp_id_route`. → both coverpoints reach **100% of reachable bins** on re-merge.
+- **Your call:** sign off the proof, or tighten if you want a stricter model. The
+  `axi_stress` kernel stays in-tree as the reproducible evidence (not added to
+  `run_suite` — it contributes **0 new route bins**, all already covered).
+
+### B. Make the collector FULLY config-aware (the parts still hardcoded to 1CL/1C/4W/4T)
+Audited 2026-06-30. Config-aware TODAY: `cp_num_cores/warps/threads` (`CFG_*` macros),
+AXI/MEM widths (`AXI_ID_W=$bits(id)`, `ROUTE_W=AXI_ID_W-UUID_W`, `AXI_NATIVE_SIZE`).
+Still **hardcoded to the primary config** (trip-wire flagged) — coverage-lane fixes:
+1. **Route-tag ignore *values*** (`cp_id_route`/`cross_type_route`, lines ~277-280 /
+   ~359-367): literals `{16,18,..}`, `{4,6,8,10,12,14}`, `{23,27,31}`, `{1,5,9,13}`
+   are tied to `TAG_BUFFER_SIZE=16` / `ROUTE_W=6`. The slice width adapts but the
+   values don't. **Derive them from `TAG_BUFFER_SIZE`/`ROUTE_W`** (or guard the
+   covergroup to the validated config) so a wider tag doesn't mis-ignore.
+2. **`cp_active_warps`** (line ~536): `many={5,6,7,8}` hardcodes a ≤8-warp ceiling —
+   **make the bins span `` `NUM_WARPS ``** (also only 16.66% covered — needs a
+   sampling-cadence fix too, see C).
+3. **Clusters not gated/covered:** `CFG_CLUSTERS` is declared but unused and there is
+   **no `cp_num_clusters` coverpoint** — add one mirroring `cp_num_cores`
+   (`ignore_bins ... with (item != CFG_CLUSTERS)`).
+
+### C. `cp_active_warps` 16.66% — likely sampling cadence, not stimulus
+Only 1 of 6 bins hit despite multi-warp kernels. `count_active_warps()` is sampled at
+one point (probably end/idle) so it never sees the 1→2→3→4 ramp/drain. Needs periodic
+sampling (or sample on warp-mask change) — coverage-collector lane. Flagging for you;
+I can supply ramping/divergent stimulus once the sampling captures transients.
