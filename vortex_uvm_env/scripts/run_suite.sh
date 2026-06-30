@@ -38,6 +38,9 @@ stage()  {
 runk() { echo "=== $1 kernel $2 ==="; make "$1" TEST=kernel_launch_test PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/k_$2.log" 2>&1; stage; }
 rund() { echo "=== sim-only $1 ($2) ==="; make sim-only TEST="$1" PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/d_$1.log" 2>&1; stage; }
 runrv(){ echo "=== sim-only riscv-dv $1 ==="; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=200000 >"$LOGDIR/rv_$1.log" 2>&1; stage; }
+# regression (Ahmad's MSCRATCH kernel-launch harness): basic verifies DUT-vs-SimX;
+# diverge/sgemm/dogfood run-to-completion co-sim but classify UNVERIFIABLE (spawn).
+runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST=regression_test PROGRAM_KIND="$1" ${2:-} $CFG TIMEOUT=10000000 >"$LOGDIR/r_$1.log" 2>&1; stage; }
 
 # ---- kernels (first does full compile) ----
 runk sim      hello           100000
@@ -49,6 +52,11 @@ rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
 rund warp_scheduling_test   warp_test       150000
 rund barrier_sync_test      barrier_test    150000
+# ---- regression kernel-launch harness (Ahmad) ----
+runr basic
+runr diverge
+runr sgemm
+runr dogfood "DOGFOOD_TESTID=4"
 # ---- riscv-dv: ALL profiles (many privileged/trap ones get skipped — see
 #      HANDOVER_Ahmad_coverage_pushup.md "riscv-dv profile status" for why) ----
 for P in riscv_arithmetic_basic_test riscv_jump_stress_test riscv_unaligned_load_store_test \
