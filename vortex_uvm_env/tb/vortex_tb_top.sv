@@ -471,6 +471,11 @@ module vortex_tb_top;
     // of the pipeline-probe block below (declared here at module scope).
     wire [31:0] tb_status_pc;
     assign vif.status_if.pc              = tb_status_pc;
+    // Pipeline stall flags for cp_fetch_stall / cp_memory_stall (driven from the
+    // icache/dcache req-stall probes inside each ifdef branch below; core[0]).
+    wire tb_fetch_stall, tb_memory_stall;
+    assign vif.status_if.fetch_stall     = tb_fetch_stall;
+    assign vif.status_if.memory_stall    = tb_memory_stall;
 
     always @(posedge clk) begin
         if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 &&
@@ -570,6 +575,8 @@ module vortex_tb_top;
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
         wire dcache_stalled = dcache_req_valid && !dcache_req_ready;
+        assign tb_fetch_stall  = icache_stalled;   // drive status_if.fetch_stall  (cp_fetch_stall)
+        assign tb_memory_stall = dcache_stalled;   // drive status_if.memory_stall (cp_memory_stall)
         wire icache_firing = icache_req_valid && icache_req_ready;
         wire dcache_firing = dcache_req_valid && dcache_req_ready;
 
@@ -660,6 +667,8 @@ module vortex_tb_top;
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
         wire dcache_stalled = dcache_req_valid && !dcache_req_ready;
+        assign tb_fetch_stall  = icache_stalled;   // drive status_if.fetch_stall  (cp_fetch_stall)
+        assign tb_memory_stall = dcache_stalled;   // drive status_if.memory_stall (cp_memory_stall)
 
         always @(posedge clk) begin
             if (!reset_n) begin
