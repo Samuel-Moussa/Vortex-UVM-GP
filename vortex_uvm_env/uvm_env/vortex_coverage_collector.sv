@@ -237,7 +237,22 @@ class vortex_coverage_collector extends uvm_component;
     // Routing/structural sub-field only (low ROUTE_W bits). Every value here is a
     // real outstanding-slot / requester / NC-path destination — all REACHABLE,
     // so NOT ignored: fill by stimulus (varied memory traffic), never by waiver.
-    cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0];
+    // Route field = id[ROUTE_W-1:0] (ROUTE_W=6 here). Evidence-based STRUCTURAL
+    // ignores, decoded 2026-06-30 (DBG_ROUTE probe over the 29-run suite +
+    // VX_axi_adapter.sv); full writeup: Vortex_UVM_Plan_Current.md "COVERAGE GAP MAP".
+    //   * Reads : arid = tbuf_waddr = CLOG2(TAG_BUFFER_SIZE=16)=4-bit index -> route in [0,15].
+    //   * Writes: awid = mem_req_tag -> route always ODD (bit0=1) across all 29 runs
+    //             incl. random riscv-dv.
+    //   => route>=32 (bit5) NEVER set (route content <=5 bits); even values>=16
+    //      are reachable by neither path (reads<=15, writes odd) -> UNREACHABLE.
+    //   Reachable-but-unhit (NOT ignored, need stimulus): even tbuf slots
+    //      4,6,8,10,12,14 and odd writes 23,27,31 -> AXI outstanding-request stress.
+    //   TRIP-WIRE: validated for ROUTE_W==6 (1CL/1C/4W/4T). A wider config grows
+    //      VX_MEM_TAG_WIDTH -> re-derive before trusting these ignores.
+    cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0] {
+      ignore_bins route_msb_unreachable = {[32:63]};                 // bit5 never set
+      ignore_bins route_even_ge16       = {16,18,20,22,24,26,28,30}; // reads<=15, writes odd
+    }
 
     // Is the high UUID field actually populated (debug tag present, non-zero)?
     // 2 honest bins — confirms tracing tag is live without binning its value.
@@ -311,7 +326,15 @@ class vortex_coverage_collector extends uvm_component;
     cross_type_burst_size: cross cp_type, cp_burst, cp_size;
     cross_type_len: cross cp_type, cp_len;
     cross_len_addr: cross cp_len, cp_addr_region;
-    cross_type_route : cross cp_type, cp_id_route;
+    // Inherits cp_id_route's ignores; plus type-specific structural unreachables:
+    //   reads use a 4-bit tbuf index (route<=15) -> READ x route[17..31] impossible;
+    //   writes are odd -> WRITE x even route impossible.
+    cross_type_route : cross cp_type, cp_id_route {
+      ignore_bins rd_above_tbuf = binsof(cp_type.read) &&
+                                  binsof(cp_id_route) intersect {[17:31]};
+      ignore_bins wr_even       = binsof(cp_type.write) &&
+                                  binsof(cp_id_route) intersect {0,2,4,6,8,10,12,14};
+    }
   endgroup : axi_transaction_cg
 
   // --------------------------------------------------------------------------

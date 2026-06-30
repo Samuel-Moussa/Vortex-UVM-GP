@@ -36,7 +36,8 @@ Functional **48.95%** (280/572 bins), total 72.77% — dominated by the `vortex_
   - **Hit set:** 0,1,2,3,5,7,9,11,13,15,17,19,21,25,29 (15/64).
   - **STRUCTURAL (waivable, config-aware, with trip-wire):** route≥32 (bit5); even≥16 (16,18,20,22,24,26,28,30 — reads≤15 exclude, writes odd exclude).
   - **STIMULUS (reachable, NOT waivable):** even tbuf slots 4,6,8,10,12,14 (need more outstanding reads); odd writes 23,27,31 (more write-tag variety). → needs an **AXI outstanding-request stress test**.
-  - **TODO next session:** (a) add config-aware `ignore_bins` to `cp_id_route`+`cross_type_route` for route≥32 & even≥16 (cite this evidence + trip-wire on TAG_BUFFER_SIZE/MEM_TAG_WIDTH); (b) write the outstanding-request stress test to fill the reachable residual. Then both → ~100%.
+  - **(a) DONE (commit pending this session):** config-aware `ignore_bins` on `cp_id_route` (route≥32 + even≥16) and `cross_type_route` (READ×[17:31], WRITE×even) → `cp_id_route` 64→24 bins (≈62.5% after suite merge, was 23.4%), `cross_type_route` 128→32 bins. Validated: vecadd_lite compiles+PASS, denominator shrank, hits preserved.
+  - **(b) TODO next session:** write the AXI outstanding-request stress test to fill the 9 reachable-but-unhit values (tbuf slots 4,6,8,10,12,14 + odd writes 23,27,31) → cp_id_route/cross_type_route → ~100%.
 
 **2. status_performance stalls execute/decode/issue (50%), `cross_stall_types`/`cross_ipc_stalls`** — need RTL taps for the 3 remaining stall types (only icache→fetch, dcache→memory probed). Ahmad status-agent + RTL.
 **3. `cp_pc_region` text_high (≥0x80010000)** — needs a kernel with larger text.
