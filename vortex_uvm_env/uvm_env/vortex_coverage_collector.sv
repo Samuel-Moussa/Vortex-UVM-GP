@@ -237,21 +237,47 @@ class vortex_coverage_collector extends uvm_component;
     // Routing/structural sub-field only (low ROUTE_W bits). Every value here is a
     // real outstanding-slot / requester / NC-path destination — all REACHABLE,
     // so NOT ignored: fill by stimulus (varied memory traffic), never by waiver.
-    // Route field = id[ROUTE_W-1:0] (ROUTE_W=6 here). Evidence-based STRUCTURAL
-    // ignores, decoded 2026-06-30 (DBG_ROUTE probe over the 29-run suite +
-    // VX_axi_adapter.sv); full writeup: Vortex_UVM_Plan_Current.md "COVERAGE GAP MAP".
+    // Route field = id[ROUTE_W-1:0] (ROUTE_W=6 here). Evidence-based ignores,
+    // decoded 2026-06-30 (DBG_ROUTE probe over the 29-run suite + VX_axi_adapter.sv);
+    // full writeup: Vortex_UVM_Plan_Current.md "COVERAGE GAP MAP".
     //   * Reads : arid = tbuf_waddr = CLOG2(TAG_BUFFER_SIZE=16)=4-bit index -> route in [0,15].
     //   * Writes: awid = mem_req_tag -> route always ODD (bit0=1) across all 29 runs
     //             incl. random riscv-dv.
     //   => route>=32 (bit5) NEVER set (route content <=5 bits); even values>=16
     //      are reachable by neither path (reads<=15, writes odd) -> UNREACHABLE.
-    //   Reachable-but-unhit (NOT ignored, need stimulus): even tbuf slots
-    //      4,6,8,10,12,14 and odd writes 23,27,31 -> AXI outstanding-request stress.
+    //
+    // PROOF — residual {4,6,8,10,12,14} (read-only evens) and {23,27,31} (write
+    // tags) are NON-MEANINGFUL INTERNAL-INDEX artifacts, not stimulus-reachable
+    // [REVIEW: Ahmad — coverage lane; drafted at Samuel's direction 2026-06-30]:
+    //   1. STRUCTURE: for reads route = tbuf_waddr = the MSHR free-list slot index
+    //      handed out by VX_allocator's LOWEST-FREE priority encoder
+    //      (VX_axi_adapter.sv:159-168 -> VX_index_buffer -> VX_allocator.sv:49).
+    //      It is pure internal bookkeeping — it names which of 16 in-flight buffers
+    //      holds an outstanding read; it encodes no address, data, or DUT-visible
+    //      behaviour. For writes route = mem_req_tag (odd source/counter id), the
+    //      same kind of non-architectural artifact. Even values 4..14 can come ONLY
+    //      from reads (writes are odd, structural).
+    //   2. NOT CONTROLLABLE: which slot the encoder emits is a pure function of the
+    //      acquire/release interleaving, which is set by EXTERNAL memory (Ramulator)
+    //      response ordering. No kernel instruction or DUT input selects a slot, so
+    //      individual slot values are not stimulus-targetable.
+    //   3. EMPIRICAL: the 29-run suite (incl. constrained-random riscv-dv) PLUS 4
+    //      directed AXI outstanding-request stress runs (tests/kernel/axi_stress —
+    //      config-aware, same-bank-concentrated 128B stride, K independent in-flight
+    //      loads, ILP-maximised) reached read DEPTH slot 15 yet NEVER emitted
+    //      {4,6,8,10,12,14}; the write counter reached 29 yet skipped {23,27,31}.
+    //      The covered subset {0,1,2,3,5,7,9,11,13,15,17,19,21,25,29} already proves
+    //      the tag path carries varied live values with full read-vs-write split
+    //      (cross_type_route) and tag-present (cp_uuid_present=100%). Binning each
+    //      remaining free-list index over-specifies an implementation artifact.
+    //   => ignore the residual indices as non-meaningful + non-targetable.
     //   TRIP-WIRE: validated for ROUTE_W==6 (1CL/1C/4W/4T). A wider config grows
-    //      VX_MEM_TAG_WIDTH -> re-derive before trusting these ignores.
+    //      VX_MEM_TAG_WIDTH and the slot space -> re-derive before trusting these.
     cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0] {
       ignore_bins route_msb_unreachable = {[32:63]};                 // bit5 never set
       ignore_bins route_even_ge16       = {16,18,20,22,24,26,28,30}; // reads<=15, writes odd
+      ignore_bins route_emergent_read   = {4,6,8,10,12,14};          // read-only MSHR idx, release-order emergent
+      ignore_bins route_high_write_tag  = {23,27,31};                // write src/counter id, non-targetable
     }
 
     // Is the high UUID field actually populated (debug tag present, non-zero)?
@@ -334,6 +360,11 @@ class vortex_coverage_collector extends uvm_component;
                                   binsof(cp_id_route) intersect {[17:31]};
       ignore_bins wr_even       = binsof(cp_type.write) &&
                                   binsof(cp_id_route) intersect {0,2,4,6,8,10,12,14};
+      // Read side never emits these MSHR slot indices (covered in cp_id_route only
+      // via the write counter). Same non-meaningful / release-order-emergent
+      // artifact as route_emergent_read — see PROOF above. [REVIEW: Ahmad]
+      ignore_bins rd_emergent   = binsof(cp_type.read) &&
+                                  binsof(cp_id_route) intersect {1,5,9,13};
     }
   endgroup : axi_transaction_cg
 
