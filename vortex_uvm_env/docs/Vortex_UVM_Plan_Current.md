@@ -27,8 +27,8 @@
 
 ---
 
-## 🎯 COVERAGE GAP MAP — RESUME HERE (2026-06-30, post `a3ce838`)
-Functional **48.95%** (280/572 bins), total 72.77% — dominated by the `vortex_coverage_collector` interface CGs (341 bins, 28.7%). Done this session: `cp_pc_region` 0→66% (PC wired), `cp_fetch_stall`/`cp_memory_stall` 50→100% (stalls wired). Remaining, prioritized:
+## 🎯 COVERAGE GAP MAP — RESUME HERE (2026-06-30, post `0cfec34`)
+**Covergroup functional bins 72.70% (301/414), filtered 73.16%, 2247 instances** — re-merged session 4 after route waiver + host_coverage. `cp_id_route`/`cross_type_route` now **100%**. (Was 48.95%/280-572 pre-session-3-decode; the denominator shrank as structurally-unreachable bins were proven & waived.) Remaining <100%, prioritized:
 
 **1. `cp_id_route` (23%) + `cross_type_route` (16%) — ~157 bins, BIGGEST.** Route = `current_axi.id[ROUTE_W-1:0]`, ROUTE_W=6 (AXI_ID_W 50 − UUID 44). **Decoded empirically (DBG_ROUTE probe, vecadd_lite) + RTL (`VX_axi_adapter.sv`):**
   - **Reads** (`arid=tbuf_waddr`): route = `CLOG2(TAG_BUFFER_SIZE=16)`=4-bit tbuf index → **∈[0,15]** (structural).
