@@ -47,6 +47,7 @@ package vortex_test_pkg;
     `include "vortex_functional_mem_vseq.sv"
     `include "kernel_launch_vseq.sv"
     `include "random_instr_stress_vseq.sv"          // ← NEW
+    `include "host_coverage_vseq.sv"                // ← NEW (coverage push)
 
     //==========================================================================
     // Include Test Files
@@ -55,6 +56,7 @@ package vortex_test_pkg;
     `include "vortex_sanity_test.sv"
     `include "vortex_smoke_test.sv"
     `include "kernel_launch_test.sv"
+    `include "host_coverage_test.sv"                // ← NEW (extends kernel_launch_test)
     `include "negative_result_test.sv"
     `include "random_instruction_stress_test.sv"    // ← NEW
     `include "warp_scheduling_test.sv"
