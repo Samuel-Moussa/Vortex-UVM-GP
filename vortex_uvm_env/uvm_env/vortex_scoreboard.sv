@@ -54,6 +54,13 @@ class vortex_scoreboard extends uvm_scoreboard;
   // Key = byte-aligned 32-bit address, Value = 64-bit data word.
   //==========================================================================
   bit [63:0] shadow_memory [bit [31:0]];
+  // Per-slot byte-valid mask, keyed identically to shadow_memory. Bit[lane]=1
+  // iff the DUT actually wrote that byte. Lets compare_all_written restrict the
+  // DUT-vs-SimX compare to bytes the DUT really stored — sub-word stores (sb/sh)
+  // into preinitialized .data otherwise read back as 0 in the sparse shadow while
+  // SimX returns the merge of store + .data init, a false mismatch. For full
+  // 8-byte writes the mask is 0xFF and the compare is byte-identical to before.
+  bit [7:0]  shadow_valid  [bit [31:0]];
   localparam bit [31:0] RAM_BASE   = 32'h8000_0000;  // program / data / heap start
   localparam bit [31:0] DATA_LIMIT = 32'h8800_0000;  // upper bound of output region (excludes stack @0xfffd_xxxx+ and MMIO)
   localparam bit [31:0] POISON     = 32'hBAAD_F00D;  // SimX uninitialized-memory fill
@@ -263,6 +270,7 @@ class vortex_scoreboard extends uvm_scoreboard;
             else                                    wdata = '0;
             wdata[lane*8 +: 8] = tr.data[i*8 +: 8];
             shadow_memory[waddr[31:0]] = wdata;
+            shadow_valid[waddr[31:0]][lane] = 1'b1;
 
             if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes))
               `uvm_info("SCOREBOARD", $sformatf(
@@ -318,6 +326,7 @@ class vortex_scoreboard extends uvm_scoreboard;
 
             wdata[lane*8 +: 8] = beat_data[i*8 +: 8];
             shadow_memory[waddr[31:0]] = wdata;
+            shadow_valid[waddr[31:0]][lane] = 1'b1;
 
             if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes)) begin
               `uvm_info("SCOREBOARD",
@@ -605,6 +614,20 @@ class vortex_scoreboard extends uvm_scoreboard;
       if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) begin
         num_skipped_poison++;
         continue;
+      end
+
+      // ---- Byte-valid gate: compare ONLY the lanes the DUT actually wrote.
+      //      Sub-word stores (sb/sh) into preinitialized .data leave the other
+      //      lanes of the 8-byte slot at 0 in the sparse shadow, while SimX
+      //      returns store-bytes merged with the .data init pattern. Masking
+      //      both sides to the written lanes removes that false mismatch. For a
+      //      full 8-byte write the mask is 0xFF and this is a no-op. ----
+      if (shadow_valid.exists(addr)) begin
+        for (int b = 0; b < 8; b++)
+          if (!shadow_valid[addr][b]) begin
+            dut_word [b*8 +: 8] = 8'h00;
+            simx_word[b*8 +: 8] = 8'h00;
+          end
       end
 
       // NEG: inject ONLY on a word that currently MATCHES, so the forced
