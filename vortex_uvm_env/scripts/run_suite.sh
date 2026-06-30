@@ -63,6 +63,7 @@ rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
 rund warp_scheduling_test   warp_test       150000
 rund barrier_sync_test      barrier_test    150000
+rund host_coverage_test     vecadd_lite     200000   # DCR/host coverage sweep (dcr_config_cg)
 # ---- regression kernel-launch harness (Ahmad) ----
 runr basic
 runr diverge
