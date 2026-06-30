@@ -465,7 +465,12 @@ module vortex_tb_top;
     assign vif.status_if.ebreak_detected = tb_execution_complete && axi_channels_idle && mem_channels_idle;
     assign vif.status_if.cycle_count     = tb_cycle_count;
     assign vif.status_if.instr_count     = tb_instr_count;
-    assign vif.status_if.pc              = 32'h0;
+    // Real fetched-instruction PC (core[0]) so cp_pc_region samples the actual
+    // program text region instead of a constant 0 (was hardcoded 0 -> cp_pc_region
+    // 0% ZERO). tb_status_pc is driven from fetch_pc_full inside each ifdef branch
+    // of the pipeline-probe block below (declared here at module scope).
+    wire [31:0] tb_status_pc;
+    assign vif.status_if.pc              = tb_status_pc;
 
     always @(posedge clk) begin
         if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 &&
@@ -552,6 +557,7 @@ module vortex_tb_top;
 
         assign fetch_valid   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
+        assign tb_status_pc  = fetch_pc_full[31:0];  // drive status_if.pc for cp_pc_region
         assign fetch_instr   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         // DCACHE is an array; measure the first port (0)
@@ -643,6 +649,7 @@ module vortex_tb_top;
 
         assign fetch_valid   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
+        assign tb_status_pc  = fetch_pc_full[31:0];  // drive status_if.pc for cp_pc_region
         assign fetch_instr   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         assign dcache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;

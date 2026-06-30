@@ -37,7 +37,18 @@ stage()  {
 }
 runk() { echo "=== $1 kernel $2 ==="; make "$1" TEST=kernel_launch_test PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/k_$2.log" 2>&1; stage; }
 rund() { echo "=== sim-only $1 ($2) ==="; make sim-only TEST="$1" PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/d_$1.log" 2>&1; stage; }
-runrv(){ echo "=== sim-only riscv-dv $1 ==="; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=200000 >"$LOGDIR/rv_$1.log" 2>&1; stage; }
+# riscv-dv regenerates the generator into a shared work dir guarded by a Questa
+# _lock. A killed/crashed prior gen can leave a STALE lock (dead owner pid) that
+# makes the next gen wait ~16 min then fail. Clear it if its owner is dead.
+clear_stale_dv_lock(){
+  local L="${RISCV_DV_HOME:-$HOME/riscv-dv}/work/_lock"
+  [ -f "$L" ] || return 0
+  local p; p=$(grep -oE 'pid = [0-9]+' "$L" 2>/dev/null | grep -oE '[0-9]+')
+  if [ -n "$p" ] && ! ps -p "$p" >/dev/null 2>&1; then
+    echo "  (clearing stale riscv-dv vlog lock, dead owner pid=$p)"; rm -f "$L"
+  fi
+}
+runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=200000 >"$LOGDIR/rv_$1.log" 2>&1; stage; }
 # regression (Ahmad's MSCRATCH kernel-launch harness): basic verifies DUT-vs-SimX;
 # diverge/sgemm/dogfood run-to-completion co-sim but classify UNVERIFIABLE (spawn).
 runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST=regression_test PROGRAM_KIND="$1" ${2:-} $CFG TIMEOUT=10000000 >"$LOGDIR/r_$1.log" 2>&1; stage; }
