@@ -26,8 +26,8 @@ COV_MERGE  := scripts/merge_coverage.sh
 # ── GPU / Test configuration (override on command line) ───────────────────────
 TEST          ?=
 KERNEL_32_PROGRAM_DIR ?= $(VORTEX_HOME)/tests/kernel
-PROGRAM_NAME  ?= 
-PROGRAM       ?= $(KERNEL_32_PROGRAM_DIR)/$(PROGRAM_NAME)/$(PROGRAM_NAME).elf
+PROGRAM_NAME  ?=
+# PROGRAM is defaulted below, AFTER PROGRAM_KIND is known (regression vs kernel).
 INTERFACE     ?= axi
 CLUSTERS      ?= 1
 CORES         ?= 1
@@ -41,6 +41,15 @@ PROGRAM_KIND  ?=
 DOGFOOD_TESTID ?=
 # Regression programs all build tests/regression/<kind>/kernel.elf
 REGRESSION_DIR ?= $(VORTEX_HOME)/tests/regression
+
+# ── Default PROGRAM (an explicit PROGRAM= on the cmd line still wins via ?=) ──
+# A regression kind maps to tests/regression/<kind>/kernel.elf; otherwise fall
+# back to the kernel program path. Done here so PROGRAM_KIND is already known.
+ifneq ($(PROGRAM_KIND),)
+    PROGRAM   ?= $(REGRESSION_DIR)/$(PROGRAM_KIND)/kernel.elf
+else
+    PROGRAM   ?= $(KERNEL_32_PROGRAM_DIR)/$(PROGRAM_NAME)/$(PROGRAM_NAME).elf
+endif
 
 # ── Coverage merge selection (override on command line) ───────────────────────
 # RUNS  = explicit run dirs under results/ to stage, space-separated, e.g.
@@ -72,8 +81,6 @@ ifneq ($(PROGRAM),)
 endif
 ifneq ($(PROGRAM_KIND),)
     _FLAGS  += --program-kind=$(PROGRAM_KIND)
-    # default the binary to the matching kind unless PROGRAM was given explicitly
-    PROGRAM ?= $(REGRESSION_DIR)/$(PROGRAM_KIND)/kernel.elf
 endif
 ifneq ($(DOGFOOD_TESTID),)
     _FLAGS += --dogfood-testid=$(DOGFOOD_TESTID)

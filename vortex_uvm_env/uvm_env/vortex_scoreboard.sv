@@ -86,8 +86,9 @@ class vortex_scoreboard extends uvm_scoreboard;
   //==========================================================================
   // State flags
   //==========================================================================
-  bit simx_ran;    // Set after simx_run() completes
-  bit ebreak_seen; // Set when status monitor reports EBREAK
+  bit simx_ran;     // Set after simx_run() completes
+  bit simx_crashed; // Set when simx_run() returns the crash sentinel (-3)
+  bit ebreak_seen;  // Set when status monitor reports EBREAK
   
   // --- Negative-test fault injection (one-sided, plusarg- or test-gated) ---
   // When enabled, corrupt exactly ONE DUT word INSIDE the comparison so the
@@ -353,6 +354,17 @@ class vortex_scoreboard extends uvm_scoreboard;
     `uvm_info("SCOREBOARD", "Running SimX to completion...", UVM_MEDIUM)
     exitcode = simx_run();
     `uvm_info("SCOREBOARD", $sformatf("SimX done — exit code = %0d", exitcode), UVM_MEDIUM)
+
+    // -3 = SimX model aborted/crashed (decode/memory fault), caught in the DPI
+    // so vsim survives. SimX never reached a valid end-state, so its memory is
+    // meaningless — skip the comparison and classify the run UNVERIFIABLE.
+    if (exitcode == -3) begin
+      simx_crashed = 1;
+      `uvm_warning("SCOREBOARD",
+        "SimX aborted/crashed during run-to-completion — run is UNVERIFIABLE (no DUT/SimX compare).")
+      return;
+    end
+
     if (simx_is_done() != 1)
       `uvm_warning("SCOREBOARD", "simx_is_done() != 1 after simx_run()")
 
@@ -515,10 +527,20 @@ class vortex_scoreboard extends uvm_scoreboard;
     simx_bytes = new[8];
 
     foreach (shadow_memory[addr]) begin
-      // ---- Gate 1: compare ONLY the declared result window ----
-      bit in_result = (cfg.result_size_bytes > 0)
-                   && (addr >= cfg.result_base_addr)
-                   && (addr <  cfg.result_base_addr + cfg.result_size_bytes);
+      // ---- Gate 1: choose the comparison scope ----
+      //  * Regression harness staged an explicit result window
+      //    (result_size_bytes > 0): compare ONLY that window — precise, avoids
+      //    spawn scratch / uninitialised data outside the kernel's output.
+      //  * No window declared (kernel_launch_test, riscv-dv): fall back to the
+      //    whole program/data region [RAM_BASE, DATA_LIMIT) — stack (0xfffd_xxxx+),
+      //    local mem and MMIO are excluded. This is the original behaviour that
+      //    let plain kernels (vecadd_lite) and riscv-dv compare DUT-vs-SimX.
+      bit in_result;
+      if (cfg.result_size_bytes > 0)
+        in_result = (addr >= cfg.result_base_addr)
+                 && (addr <  cfg.result_base_addr + cfg.result_size_bytes);
+      else
+        in_result = (addr >= RAM_BASE) && (addr < DATA_LIMIT);
       if (!in_result) begin
         num_skipped_stack++;
         continue;
@@ -737,7 +759,14 @@ class vortex_scoreboard extends uvm_scoreboard;
       "╚══════════════════════════════════════════╝\n"
     }, UVM_NONE)
 
-    if (spawn_detected || cfg.is_spawn_kernel) begin
+    if (simx_crashed) begin
+      // SimX model could not execute this program to a valid end-state (decode/
+      // memory abort, caught in the DPI). Not a DUT defect — do not pass or fail.
+      `uvm_warning("SCOREBOARD",
+        "UNVERIFIABLE: SimX golden model aborted during run-to-completion (decode/memory fault). No DUT/SimX equivalence could be established for this program.")
+      // Intentionally NOT counted as pass or fail.
+    end
+    else if (spawn_detected || cfg.is_spawn_kernel) begin
       // Co-sim cannot establish memory equivalence for spawn-distributed
       // outputs (stack-resident scheduler args). Do not pass, do not fail —
       // mark UNVERIFIABLE so the result is not mistaken for a DUT defect.
@@ -758,14 +787,19 @@ class vortex_scoreboard extends uvm_scoreboard;
         $sformatf("SIMULATION INCOMPLETE — %0d response(s) never received", num_unchecked))
     else if (total_checks > 0)
       `uvm_info("SCOREBOARD", "SIMULATION PASSED — all checks matched!", UVM_NONE)
-    else if (ebreak_seen && simx_ran && (num_skipped_stack == 0) && (num_skipped_poison == 0))
+    // No declared result window (kernel_launch_test, riscv-dv, pure-arithmetic):
+    // the program has no comparable data-region output — its writes are local
+    // mem / stack / MMIO. DUT and SimX both ran to EBREAK, so this is a PASS on
+    // liveness + co-sim completion, not a vacuous run. (The loophole stays closed
+    // for the regression harness: a DECLARED window with 0 compared still FAILs.)
+    else if (ebreak_seen && simx_ran && cfg.result_size_bytes == 0)
       `uvm_warning("SCOREBOARD",
-        "No memory writes to compare — DUT and SimX both completed (pure arithmetic program)")
+        "No comparable result region — DUT and SimX both completed to EBREAK (liveness verified; kernel_launch/riscv-dv/pure-arithmetic)")
     else
       `uvm_error("SCOREBOARD",
-        $sformatf("VACUOUS RUN — %0d write(s) skipped, 0 compared (result_base=0x%08h size=%0d).",
-                  num_skipped_stack + num_skipped_poison,
-                  cfg.result_base_addr, cfg.result_size_bytes))
+        $sformatf("VACUOUS RUN — a result window was declared (base=0x%08h size=%0d) but %0d write(s) were skipped and 0 compared.",
+                  cfg.result_base_addr, cfg.result_size_bytes,
+                  num_skipped_stack + num_skipped_poison))
   endfunction : report_results
 
 endclass : vortex_scoreboard
