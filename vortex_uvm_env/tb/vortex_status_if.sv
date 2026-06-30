@@ -47,7 +47,9 @@ interface vortex_status_if (
     wire [63:0] cycle_count;        // TB counts cycles
     wire [63:0] instr_count;        // TB estimates from memory activity
     wire [31:0] pc;                 // TB tracks if available (optional)
-    
+    wire        fetch_stall;        // TB probe: icache req stalled (req_valid & !req_ready)
+    wire        memory_stall;       // TB probe: dcache req stalled (req_valid & !req_ready)
+
     // Derived signals
     logic       idle;
     assign idle = !busy;
@@ -72,6 +74,8 @@ interface vortex_status_if (
         output cycle_count,
         output instr_count,
         output pc,
+        output fetch_stall,
+        output memory_stall,
         input  idle
     );
     
@@ -94,6 +98,8 @@ modport monitor (
         input cycle_count;
         input instr_count;
         input pc;
+        input fetch_stall;
+        input memory_stall;
         input idle;
     endclocking
     

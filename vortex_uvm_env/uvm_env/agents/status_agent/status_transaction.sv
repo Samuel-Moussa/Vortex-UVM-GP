@@ -106,6 +106,8 @@ class status_transaction extends uvm_sequence_item;
         `uvm_field_int(pc, UVM_ALL_ON | UVM_HEX)
         `uvm_field_int(cycle_count, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(instr_count, UVM_ALL_ON | UVM_DEC)
+        `uvm_field_int(fetch_stall, UVM_ALL_ON)
+        `uvm_field_int(memory_stall, UVM_ALL_ON)
     `uvm_object_utils_end
     
     //==========================================================================

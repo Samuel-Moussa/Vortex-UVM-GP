@@ -166,6 +166,8 @@ class status_monitor extends uvm_monitor;
             trans.cycle_count     = vif.monitor_cb.cycle_count;
             trans.instr_count     = vif.monitor_cb.instr_count;
             trans.pc              = vif.monitor_cb.pc;
+            trans.fetch_stall     = vif.monitor_cb.fetch_stall;
+            trans.memory_stall    = vif.monitor_cb.memory_stall;
             trans.sample_time     = $time;
             trans.calculate_metrics();
             ap.write(trans);
@@ -230,6 +232,8 @@ class status_monitor extends uvm_monitor;
                 ebreak_txn.cycle_count     = vif.monitor_cb.cycle_count;
                 ebreak_txn.instr_count     = vif.monitor_cb.instr_count;
                 ebreak_txn.pc              = vif.monitor_cb.pc;
+                ebreak_txn.fetch_stall     = vif.monitor_cb.fetch_stall;
+                ebreak_txn.memory_stall    = vif.monitor_cb.memory_stall;
                 ebreak_txn.sample_time     = $time;
                 ebreak_txn.calculate_metrics();
                 ap.write(ebreak_txn);   // <— immediate, before any objection drop
