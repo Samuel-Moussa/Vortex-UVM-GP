@@ -47,10 +47,12 @@ class host_coverage_vseq extends vortex_virtual_sequence;
     endtask
 
     virtual task body();
-        host_launch_kernel_sequence launch_seq;
-        host_wait_done_sequence     wait_seq;
-        bit [31:0]                  startup_lo;  // correct STARTUP_ADDR0 (lower 32b)
-        bit [31:0]                  startup_hi;  // correct STARTUP_ADDR1 (upper 32b)
+        host_launch_kernel_sequence  launch_seq;
+        host_wait_done_sequence      wait_seq;
+        host_read_result_sequence    rd_seq;
+        host_load_program_sequence   ld_seq;
+        bit [31:0]                   startup_lo;  // correct STARTUP_ADDR0 (lower 32b)
+        bit [31:0]                   startup_hi;  // correct STARTUP_ADDR1 (upper 32b)
 
         if (p_sequencer == null)
             `uvm_fatal("HCOV_VSEQ", "p_sequencer is null — start on env.m_virtual_sequencer")
@@ -126,12 +128,32 @@ class host_coverage_vseq extends vortex_virtual_sequence;
         dcr_write(32'h002, startup_hi, "STARTUP_ADDR1 (restore correct)");
         dcr_write(32'h001, startup_lo, "STARTUP_ADDR0 (restore correct)");
 
-        // NOTE: post-completion HOST_RESET / HOST_READ_RESULT were removed —
-        // HOST_RESET drove the DUT interfaces to x on an already-idle DUT and
-        // tripped a zero-time status-dump spin in the TB (sim time frozen, log
-        // runaway). The DCR sweep above already covers cp_op_type.configure_dcr
-        // plus the dcr_config_cg addr/magnitude/align bins; the reset/read_result
-        // op-type bins are deferred to a cleaner pre-launch mechanism.
+        //--- 3) host_operation_cg.cp_op_type: read_result + load_program ------
+        // Both op-types only touch the shared mem_model (never the DUT), and we
+        // are past the SimX compare, so neither can affect the verdict:
+        //   * HOST_READ_RESULT is a pure memory.read_byte() (fully passive).
+        //   * HOST_LOAD_PROGRAM re-loads the SAME program to cfg.startup_addr —
+        //     a no-op mutation (identical bytes, guaranteed in-bounds) issued
+        //     only so the monitor samples the load_program op-type bin.
+        // cp_op_type 50% -> 83% (5/6). The remaining `reset` bin needs a real
+        // reset toggle (host_driver.do_reset waits reset_n==0, which never
+        // recurs post-completion -> would hang); left for a pre-launch flow.
+        // cross_op_completion stays low by construction: cp_completion is
+        // iff(op_type==WAIT_DONE), so op_type x completion is structurally
+        // ~unreachable except WAIT_DONE rows -> collector waiver (Ahmad).
+        `uvm_info(get_type_name(), "host_coverage_vseq: read_result + load_program op-type coverage", UVM_LOW)
+
+        rd_seq = host_read_result_sequence::type_id::create("rd_cov");
+        if (!rd_seq.randomize() with { result_address == 64'h8010_0000; result_size == 32'd16; })
+            `uvm_warning(get_type_name(), "rd_seq randomize failed — using defaults")
+        rd_seq.start(p_sequencer.m_host_sequencer);
+
+        ld_seq = host_load_program_sequence::type_id::create("ld_cov");
+        if (cfg != null) begin
+            ld_seq.program_path = cfg.program_path;
+            ld_seq.load_address = cfg.startup_addr;   // re-load same program (no-op)
+        end
+        ld_seq.start(p_sequencer.m_host_sequencer);
     endtask
 
 endclass : host_coverage_vseq
