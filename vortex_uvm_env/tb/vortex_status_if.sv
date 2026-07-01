@@ -49,6 +49,9 @@ interface vortex_status_if (
     wire [31:0] pc;                 // TB tracks if available (optional)
     wire        fetch_stall;        // TB probe: icache req stalled (req_valid & !req_ready)
     wire        memory_stall;       // TB probe: dcache req stalled (req_valid & !req_ready)
+    wire        decode_stall;       // TB probe: fetch_if backpressured (valid & !ready) -> decode busy
+    wire        issue_stall;        // TB probe: decode_if backpressured (valid & !ready) -> issue busy
+    wire        execute_stall;      // TB probe: dispatch_if backpressured (valid & !ready) -> execute busy
 
     // Derived signals
     logic       idle;
@@ -76,6 +79,9 @@ interface vortex_status_if (
         output pc,
         output fetch_stall,
         output memory_stall,
+        output decode_stall,
+        output issue_stall,
+        output execute_stall,
         input  idle
     );
     
@@ -100,6 +106,9 @@ modport monitor (
         input pc;
         input fetch_stall;
         input memory_stall;
+        input decode_stall;
+        input issue_stall;
+        input execute_stall;
         input idle;
     endclocking
     

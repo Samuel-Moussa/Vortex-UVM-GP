@@ -476,6 +476,12 @@ module vortex_tb_top;
     wire tb_fetch_stall, tb_memory_stall;
     assign vif.status_if.fetch_stall     = tb_fetch_stall;
     assign vif.status_if.memory_stall    = tb_memory_stall;
+    // Pipeline backpressure stalls for cp_decode/issue/execute_stall (driven from
+    // fetch_if/decode_if/dispatch_if valid&&!ready probes in each ifdef branch; core[0]).
+    wire tb_decode_stall, tb_issue_stall, tb_execute_stall;
+    assign vif.status_if.decode_stall    = tb_decode_stall;
+    assign vif.status_if.issue_stall     = tb_issue_stall;
+    assign vif.status_if.execute_stall   = tb_execute_stall;
 
     always @(posedge clk) begin
         if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 &&
@@ -571,6 +577,23 @@ module vortex_tb_top;
         assign dcache_rsp_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_valid;
         assign dcache_rsp_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_ready;
 
+        // Pipeline backpressure stalls (core[0]): valid && !ready at each stage boundary.
+        //   decode_stall : decode not ready for fetch  (fetch_if.valid & !ready)
+        //   issue_stall  : issue  not ready for decode (decode_if.valid & !ready)
+        //   execute_stall: any EX unit not ready for dispatch (|dispatch_if[*].valid & !ready)
+        localparam int TB_NDISP_A = VX_gpu_pkg::NUM_EX_UNITS * TB_ISSUE_W;
+        wire [TB_NDISP_A-1:0] tb_disp_bp_a;
+        for (genvar d = 0; d < TB_NDISP_A; d++) begin : g_disp_bp_a
+            assign tb_disp_bp_a[d] =
+                 dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].valid &&
+                !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].ready;
+        end
+        assign tb_decode_stall  = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid &&
+                                 !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.ready;
+        assign tb_issue_stall   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.valid &&
+                                 !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.ready;
+        assign tb_execute_stall = |tb_disp_bp_a;
+
         // Pipeline flow signals
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
@@ -663,6 +686,20 @@ module vortex_tb_top;
         assign dcache_req_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_ready;
         assign dcache_rsp_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_valid;
         assign dcache_rsp_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_ready;
+
+        // Pipeline backpressure stalls (core[0]) — see AXI branch for semantics.
+        localparam int TB_NDISP_M = VX_gpu_pkg::NUM_EX_UNITS * TB_ISSUE_W;
+        wire [TB_NDISP_M-1:0] tb_disp_bp_m;
+        for (genvar d = 0; d < TB_NDISP_M; d++) begin : g_disp_bp_m
+            assign tb_disp_bp_m[d] =
+                 dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].valid &&
+                !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].ready;
+        end
+        assign tb_decode_stall  = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid &&
+                                 !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.ready;
+        assign tb_issue_stall   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.valid &&
+                                 !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.ready;
+        assign tb_execute_stall = |tb_disp_bp_m;
 
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
