@@ -124,6 +124,15 @@ class host_coverage_vseq extends vortex_virtual_sequence;
         dcr_write(32'h005, 32'h0000_0040, "MPM_CLASS sm_cfg");
         dcr_write(32'h005, 32'h0001_0000, "MPM_CLASS mid_ptr");
         dcr_write(32'h005, 32'h8000_0000, "MPM_CLASS hi_code");
+        // dcr_write_cg (vortex_dcr_if) wr_data_cp bins on the DCR bus itself:
+        //   wr_data_cp.startup_1 = 0x8001_0000,  wr_data_cp.small_val = [1:16].
+        // Written to ARGV_PTR0 (argv-less kernel ignores it) so SimX stays safe.
+        // NOTE: wr_addr_cp.num_cores (base+8=0x009) is NOT driven here — the DCR
+        // DPI mirror forwards every write to SimX and 0x009 is out of SimX's DCR
+        // range -> SIGABRT. That bin (coverpoint assumes +4 byte spacing; the DCR
+        // bus is word-addressed) is a mis-defined/unreachable waiver (Ahmad).
+        dcr_write(32'h003, 32'h8001_0000, "wr_data_cp.startup_1 (0x80010000)");
+        dcr_write(32'h003, 32'h0000_0010, "wr_data_cp.small_val (16, in [1:16])");
         // Restore the correct live startup entry (cleanliness; DUT already idle).
         dcr_write(32'h002, startup_hi, "STARTUP_ADDR1 (restore correct)");
         dcr_write(32'h001, startup_lo, "STARTUP_ADDR0 (restore correct)");
