@@ -220,9 +220,12 @@ interface vortex_if (
     // removes them from the coverage percentage but KEEPS the bins in the UCDB,
     // so a later vcover merge across axi+mem runs still recovers full coverage.
     initial begin
-        int use_axi;
-        if (!$value$plusargs("USE_AXI_WRAPPER=%d", use_axi))
-            use_axi = 1;                // default to AXI when plusarg absent
+        // simulate.sh passes +USE_AXI_WRAPPER WITHOUT a value, only in AXI mode.
+        // $value$plusargs("USE_AXI_WRAPPER=%d") never matched that form, so the
+        // guard fell to its AXI default in BOTH modes and wrongly zeroed the
+        // ACTIVE mem_usage_cp on MEM-interface runs. $test$plusargs matches
+        // presence (the same reader apply_plusargs() uses) -> correct per mode.
+        bit use_axi = $test$plusargs("USE_AXI_WRAPPER");
         if (use_axi) begin
             sys_cov.mem_usage_cp.option.weight     = 0;   // idle on AXI runs
             sys_cov.system_mem_cross.option.weight = 0;
