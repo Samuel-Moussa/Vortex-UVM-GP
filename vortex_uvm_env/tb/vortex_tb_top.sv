@@ -482,6 +482,10 @@ module vortex_tb_top;
     assign vif.status_if.decode_stall    = tb_decode_stall;
     assign vif.status_if.issue_stall     = tb_issue_stall;
     assign vif.status_if.execute_stall   = tb_execute_stall;
+    // core[0] scheduler active-warp bitmask for cp_active_warps (per-cycle sampled,
+    // driven from core.schedule.active_warps in each ifdef branch; zero-extended).
+    wire [31:0] tb_active_warps;
+    assign vif.status_if.active_warps    = tb_active_warps;
 
     always @(posedge clk) begin
         if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 &&
@@ -593,6 +597,7 @@ module vortex_tb_top;
         assign tb_issue_stall   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.valid &&
                                  !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.ready;
         assign tb_execute_stall = |tb_disp_bp_a;
+        assign tb_active_warps  = 32'(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps);
 
         // Pipeline flow signals
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
@@ -700,6 +705,7 @@ module vortex_tb_top;
         assign tb_issue_stall   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.valid &&
                                  !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.ready;
         assign tb_execute_stall = |tb_disp_bp_m;
+        assign tb_active_warps  = 32'(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps);
 
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
