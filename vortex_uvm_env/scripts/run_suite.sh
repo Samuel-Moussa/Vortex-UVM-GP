@@ -55,7 +55,7 @@ runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST
 
 # ---- kernels (first does full compile) ----
 runk sim      hello           100000
-for k in vecadd_lite diverge_lite diverge_deep fpu_test fpu_mt spawn_tmc_sweep barrier_lite fibonacci; do
+for k in vecadd_lite diverge_lite diverge_deep diverge_peel fpu_test fpu_mt spawn_tmc_sweep barrier_lite fibonacci; do
   runk sim-only "$k" 200000
 done
 # ---- directed tests ----
