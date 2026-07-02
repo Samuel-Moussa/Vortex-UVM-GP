@@ -190,6 +190,7 @@ class status_monitor extends uvm_monitor;
                 win_prev_cycle = vif.monitor_cb.cycle_count;
             end
             trans.ipc_window      = ipc_window;
+            trans.active_warps    = vif.monitor_cb.active_warps;
             trans.sample_time     = $time;
             trans.calculate_metrics();
             ap.write(trans);
@@ -260,6 +261,7 @@ class status_monitor extends uvm_monitor;
                 ebreak_txn.issue_stall     = vif.monitor_cb.issue_stall;
                 ebreak_txn.execute_stall   = vif.monitor_cb.execute_stall;
                 ebreak_txn.ipc_window      = ipc_window;   // last windowed IPC
+                ebreak_txn.active_warps    = vif.monitor_cb.active_warps;
                 ebreak_txn.sample_time     = $time;
                 ebreak_txn.calculate_metrics();
                 ap.write(ebreak_txn);   // <— immediate, before any objection drop

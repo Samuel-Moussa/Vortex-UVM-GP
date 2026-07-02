@@ -566,7 +566,11 @@ class vortex_coverage_collector extends uvm_component;
       bins two  = {2};
       bins few  = {3};
       bins four = {4};
-      bins many = {5, 6, 7, 8};
+      bins many = {[5:8]};
+      // Active-warp count can never exceed NUM_WARPS, so counts above the compiled
+      // config are unreachable (e.g. `many` is unreachable at NUM_WARPS<=4).
+      // Config-aware: references item so no constant-with_expr warning; auto-adapts.
+      ignore_bins above_cfg = {[1:8]} with (item > CFG_WARPS);
     }
 
     cross_ipc_stalls: cross cp_ipc_bucket, cp_fetch_stall, cp_memory_stall;
