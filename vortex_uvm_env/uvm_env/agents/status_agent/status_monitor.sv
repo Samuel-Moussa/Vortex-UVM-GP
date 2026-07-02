@@ -74,7 +74,9 @@ class status_monitor extends uvm_monitor;
     // Windowed (instantaneous) IPC state — retired instrs over a fixed cycle
     // window, updated each time the window elapses. Cumulative IPC only ever
     // occupies 1-2 buckets; windowed IPC exercises the full cp_ipc_bucket range.
-    localparam int IPC_WINDOW = 200;   // cycles per throughput window
+    localparam int IPC_WINDOW = 64;    // cycles per throughput window (small enough
+                                       // to capture real compute bursts between
+                                       // icache refills -> reaches the high_ipc bin)
     real    ipc_window;
     longint win_prev_instr;
     longint win_prev_cycle;
