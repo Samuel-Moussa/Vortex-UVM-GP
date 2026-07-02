@@ -201,6 +201,10 @@ class vortex_coverage_collector extends uvm_component;
   localparam int CFG_CORES    = `NUM_CORES;
   localparam int CFG_WARPS    = `NUM_WARPS;
   localparam int CFG_THREADS  = `NUM_THREADS;
+  // ISSUE_WIDTH is not a `define in the UVM compile, but PER_ISSUE_WARPS =
+  // NUM_WARPS/ISSUE_WIDTH is a VX_gpu_pkg localparam -> derive it. Max IPC ==
+  // issue width (per-cycle issue slots).
+  localparam int CFG_ISSUE_W  = CFG_WARPS / VX_gpu_pkg::PER_ISSUE_WARPS;
 
   // AXI native transfer size — the DUT's VX_axi_adapter HARDCODES awsize/arsize =
   // CLOG2(DATA_SIZE) (VX_axi_adapter.sv:263,298), i.e. one full-bus-width beat;
@@ -507,7 +511,10 @@ class vortex_coverage_collector extends uvm_component;
       bins low_ipc   = {2};
       bins med_ipc   = {3};
       bins high_ipc  = {4};
-      bins very_high = {5};
+      // ipc_bucket 5 = IPC>1.0, only reachable with ISSUE_WIDTH>=2 (>1 issue slot
+      // per cycle). This build is single-issue (CFG_ISSUE_W==1) -> unreachable.
+      // NOTE: remove this ignore on ISSUE_WIDTH>=2 builds (then bin 5 is real).
+      ignore_bins very_high_single_issue = {5};
     }
 
     cp_fetch_stall: coverpoint current_status.fetch_stall {

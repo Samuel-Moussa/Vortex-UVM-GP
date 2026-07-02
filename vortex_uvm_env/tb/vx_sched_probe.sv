@@ -211,12 +211,15 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         cp_bar_id    : coverpoint bar_id;            // which barrier (auto)
         cp_bar_scope : coverpoint is_global {
             bins local_bar  = { 1'b0 };
-            bins global_bar = { 1'b1 };
+            // Global (cross-core) barriers require GBAR_ENABLE / multi-core; in the
+            // single-cluster single-core config no global barrier is ever issued.
+            ignore_bins global_bar = { 1'b1 };
         }
-        // Participating warps minus 1. Range is [0 : NUM_WARPS-1]; auto-bins
-        // the full NW_WIDTH bit-range creates structurally-unreachable bins.
+        // Participating warps minus 1. size_m1==0 (a 1-warp barrier) is is_noop,
+        // so the probe's !is_noop sample guard never fires for it -> structurally
+        // unreachable. Reachable participant counts are [1 : NUM_WARPS-1].
         cp_bar_size : coverpoint size_m1 {
-            bins size[]  = { [0 : `NUM_WARPS-1] };
+            bins size[]  = { [1 : `NUM_WARPS-1] };
         }
         cp_bar_event : coverpoint is_release {
             bins hold = { 1'b0 };                    // arrival, not last
@@ -251,7 +254,9 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         cp_spawn_cnt : coverpoint spawn_cnt {
             bins one     = { 1 };
             bins some[]  = { [2 : NW-1] };
-            bins all     = { NW };
+            // vx_wspawn's wmask excludes the issuing warp, so a single wspawn
+            // activates at most NW-1 warps; spawning exactly NW is unreachable.
+            ignore_bins all_excludes_issuer = { NW };
         }
     endgroup
 
