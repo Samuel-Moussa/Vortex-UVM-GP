@@ -193,7 +193,13 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             ignore_bins deeper = { [NT_LOG2+1 : $] };
         }
 
-        cross_join : cross cp_join_dvg, cp_join_else;
+        cross_join : cross cp_join_dvg, cp_join_else {
+            // A uniform (non-divergent) join has no diverged else-side to
+            // reconverge into, so <uniform, else_path> is structurally
+            // unreachable (a join into the else side implies real divergence).
+            ignore_bins uniform_else = binsof(cp_join_dvg) intersect {1'b0}
+                                    && binsof(cp_join_else) intersect {1'b1};
+        }
     endgroup
 
     // =========================================================================

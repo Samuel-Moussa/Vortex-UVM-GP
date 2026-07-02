@@ -163,6 +163,25 @@ class host_coverage_vseq extends vortex_virtual_sequence;
             ld_seq.load_address = cfg.startup_addr;   // re-load same program (no-op)
         end
         ld_seq.start(p_sequencer.m_host_sequencer);
+
+        //--- 4) host_operation_cg.cp_timeout: low + mid range values ----------
+        // The suite only uses high/out-of-range timeouts, so cp_timeout.low
+        // ([1000:9999]) and mid ([10000:49999]) are uncovered. Issue WAIT_DONE
+        // with those timeout values on the now-idle DUT: wait_completion sees
+        // !busy on cycle 1 and returns immediately (completion_flag=1, no timeout
+        // error) — only the timeout_cycles field is sampled by cp_timeout.
+        begin
+            host_wait_done_sequence tcov;
+            int unsigned tvals[3];
+            tvals[0] = 5000;    // low  bin  [1000:9999]
+            tvals[1] = 20000;   // mid  bin  [10000:49999]
+            tvals[2] = 80000;   // high bin  [50000:100000]
+            foreach (tvals[i]) begin
+                tcov = host_wait_done_sequence::type_id::create($sformatf("tcov_%0d", i));
+                tcov.timeout_cycles = tvals[i];
+                tcov.start(p_sequencer.m_host_sequencer);
+            end
+        end
     endtask
 
 endclass : host_coverage_vseq
