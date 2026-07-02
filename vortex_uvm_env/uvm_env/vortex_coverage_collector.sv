@@ -505,7 +505,10 @@ class vortex_coverage_collector extends uvm_component;
       bins completed = {1'b1};
     }
 
-    cp_ipc_bucket: coverpoint ipc_bucket(current_status.ipc) {
+    // Sample WINDOWED (instantaneous) IPC, not cumulative: cumulative IPC is a
+    // single asymptotic value per run (only 1-2 buckets ever); windowed IPC
+    // reflects real throughput bursts and exercises the full bucket range.
+    cp_ipc_bucket: coverpoint ipc_bucket(current_status.ipc_window) {
       bins zero      = {0};
       bins very_low  = {1};
       bins low_ipc   = {2};
