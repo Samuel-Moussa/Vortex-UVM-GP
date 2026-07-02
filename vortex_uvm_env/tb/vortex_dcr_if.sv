@@ -177,11 +177,15 @@ interface vortex_dcr_if (
     covergroup dcr_write_cg @(posedge clk);
         option.per_instance = 1;
         
-        // Coverage of DCR addresses accessed
+        // Coverage of DCR addresses accessed. FIX: the DCR bus is WORD-addressed
+        // (0x001..0x005), not byte-addressed — the old +4/+8 bins were mis-defined
+        // (0x005 collided with MPM_CLASS; 0x009 is out of range -> SimX SIGABRT).
+        // Use the real DCR register addresses so every bin is genuinely reachable.
         wr_addr_cp: coverpoint wr_addr iff (wr_valid) {
             bins startup_addr0 = {`VX_DCR_BASE_STARTUP_ADDR0};
-            bins startup_addr1 = {`VX_DCR_BASE_STARTUP_ADDR0 + 4};
-            bins num_cores     = {`VX_DCR_BASE_STARTUP_ADDR0 + 8};
+            bins startup_addr1 = {`VX_DCR_BASE_STARTUP_ADDR1};
+            bins argv0         = {`VX_DCR_BASE_STARTUP_ARG0};
+            bins argv1         = {`VX_DCR_BASE_STARTUP_ARG1};
             bins mpm_class     = {`VX_DCR_BASE_MPM_CLASS};
             bins other[] = default;
         }

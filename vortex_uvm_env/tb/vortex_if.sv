@@ -193,7 +193,11 @@ interface vortex_if (
             bins no_access    = {2'b00};
             bins write_only   = {2'b10};
             bins read_only    = {2'b01};
-            bins simultaneous = {2'b11};
+            // AW and AR are mutually exclusive by construction: VX_axi_adapter
+            // drives awvalid = req_valid & xbar_rw_out and arvalid = req_valid &
+            // ~xbar_rw_out (a single arbitrated R/W bit), so both-valid in one
+            // cycle never occurs. Evidence-based structural waiver.
+            ignore_bins simultaneous = {2'b11};
         }
 
         mem_usage_cp: coverpoint {mem_if.req_valid[0], mem_if.req_rw[0]} {
@@ -207,7 +211,9 @@ interface vortex_if (
             bins active   = {1};
         }
 
-        system_axi_cross: cross system_state_cp, axi_usage_cp;
+        system_axi_cross: cross system_state_cp, axi_usage_cp {
+            ignore_bins simul = binsof(axi_usage_cp) intersect {2'b11};
+        }
         system_mem_cross: cross system_state_cp, mem_usage_cp;
 
     endgroup

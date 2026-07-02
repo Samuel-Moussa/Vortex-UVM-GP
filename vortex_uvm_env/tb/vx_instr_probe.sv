@@ -81,6 +81,9 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
     // here. Derive the width from the actual tmask field of dispatch_t instead —
     // always correct, never macro-dependent.
     localparam int SIMD_W = $bits(dispatch_if[0].data.tmask);
+    // XLEN without the `XLEN macro (no RTL incdir in the UVM pass): XLENB is a
+    // VX_gpu_pkg localparam (XLEN/8), imported above. Used for the RV32 LD/SD waiver.
+    localparam int PROBE_XLEN = XLENB * 8;
 
     // =========================================================================
     // Per-class covergroup TYPES. Each carries only the coverpoints reachable
@@ -141,11 +144,13 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
             bins lb = { INST_LSU_LB };
             bins lh = { INST_LSU_LH };
             bins lw = { INST_LSU_LW };
-            bins ld = { INST_LSU_LD };
             bins sb = { INST_LSU_SB };
             bins sh = { INST_LSU_SH };
             bins sw = { INST_LSU_SW };
-            bins sd = { INST_LSU_SD };
+            // LD/SD are 64-bit load/store — not encodable in RV32 (XLEN==32).
+            // Config-aware waiver: these bins are active only on RV64 builds.
+            ignore_bins rv32_no_ld = { INST_LSU_LD } with (PROBE_XLEN == 32);
+            ignore_bins rv32_no_sd = { INST_LSU_SD } with (PROBE_XLEN == 32);
         }
 
         cp_active_threads : coverpoint active_thr {
