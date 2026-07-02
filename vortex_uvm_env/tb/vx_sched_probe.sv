@@ -78,11 +78,13 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
     // ---- Config-derived widths (robust, no macros) --------------------------
     localparam int NT = $bits(schedule_if.data.tmask);   // threads per warp
     localparam int NW = $bits(active_warps);             // warps per core
-    // Max reachable divergence-stack depth = clog2(threads): a warp of NT threads
-    // can split at most clog2(NT) times (NT->NT/2->...->1). The IPDOM stack holds
-    // DV_STACK_SIZE=NT-1 slots, but slots beyond clog2(NT) are UNREACHABLE by
-    // binary splitting -> config-aware waiver on the deeper split/join-depth bins.
-    localparam int NT_LOG2 = $clog2(NT);
+    // Max reachable divergence-stack depth = NUM_THREADS-1 (the DV_STACK_SIZE from
+    // VX_gpu_pkg: `UP(NUM_THREADS-1)`). A warp can nest that many divergent splits
+    // via LINEAR thread-peeling (NT -> (NT-1)+1 -> (NT-2)+1 -> ... -> 1+1), which is
+    // exactly why the IPDOM stack is sized NT-1. (An earlier clog2(NT) bound was
+    // WRONG — it only covers balanced splitting; verified against upstream Vortex
+    // v2.2 RTL.) Config-aware: bins span the full reachable stack range.
+    localparam int DV_DEPTH_MAX = (NT > 1) ? (NT - 1) : 0;
 
     // =========================================================================
     // 1) SCHEDULER STATE — sampled when a warp actually issues (schedule fire)
@@ -151,12 +153,12 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             bins full      = { NT };
         }
 
-        // Divergence-stack depth at the split (nesting level). Config-aware bins:
-        // only depths 0..clog2(threads) are reachable by binary splitting; deeper
-        // stack slots exist but can never be pushed (see NT_LOG2 above).
+        // Divergence-stack depth at the split (nesting level). Reachable range is
+        // 0..NUM_THREADS-1 (DV_DEPTH_MAX) via linear thread-peeling; deeper values
+        // exceed the DV_STACK_SIZE and are structurally unreachable.
         cp_split_depth : coverpoint depth {
-            bins d[]           = { [0 : NT_LOG2] };
-            ignore_bins deeper = { [NT_LOG2+1 : $] };
+            bins d[]           = { [0 : DV_DEPTH_MAX] };
+            ignore_bins deeper = { [DV_DEPTH_MAX+1 : $] };
         }
 
         cross_dvg_depth : cross cp_is_dvg, cp_split_depth;
@@ -187,10 +189,10 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             bins partial[] = { [2 : NT-1] };
             bins full      = { NT };
         }
-        // Stack depth at reconverge — same clog2(threads) reachability bound.
+        // Stack depth at reconverge — same 0..NUM_THREADS-1 reachability bound.
         cp_join_depth : coverpoint depth {
-            bins d[]           = { [0 : NT_LOG2] };
-            ignore_bins deeper = { [NT_LOG2+1 : $] };
+            bins d[]           = { [0 : DV_DEPTH_MAX] };
+            ignore_bins deeper = { [DV_DEPTH_MAX+1 : $] };
         }
 
         cross_join : cross cp_join_dvg, cp_join_else {
