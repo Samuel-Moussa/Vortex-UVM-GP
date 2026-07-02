@@ -78,6 +78,11 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
     // ---- Config-derived widths (robust, no macros) --------------------------
     localparam int NT = $bits(schedule_if.data.tmask);   // threads per warp
     localparam int NW = $bits(active_warps);             // warps per core
+    // Max reachable divergence-stack depth = clog2(threads): a warp of NT threads
+    // can split at most clog2(NT) times (NT->NT/2->...->1). The IPDOM stack holds
+    // DV_STACK_SIZE=NT-1 slots, but slots beyond clog2(NT) are UNREACHABLE by
+    // binary splitting -> config-aware waiver on the deeper split/join-depth bins.
+    localparam int NT_LOG2 = $clog2(NT);
 
     // =========================================================================
     // 1) SCHEDULER STATE — sampled when a warp actually issues (schedule fire)
@@ -146,8 +151,13 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             bins full      = { NT };
         }
 
-        // Divergence-stack depth at the split (nesting level). Auto-binned.
-        cp_split_depth : coverpoint depth;
+        // Divergence-stack depth at the split (nesting level). Config-aware bins:
+        // only depths 0..clog2(threads) are reachable by binary splitting; deeper
+        // stack slots exist but can never be pushed (see NT_LOG2 above).
+        cp_split_depth : coverpoint depth {
+            bins d[]           = { [0 : NT_LOG2] };
+            ignore_bins deeper = { [NT_LOG2+1 : $] };
+        }
 
         cross_dvg_depth : cross cp_is_dvg, cp_split_depth;
     endgroup
@@ -177,7 +187,11 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             bins partial[] = { [2 : NT-1] };
             bins full      = { NT };
         }
-        cp_join_depth : coverpoint depth;    // stack depth at reconverge
+        // Stack depth at reconverge — same clog2(threads) reachability bound.
+        cp_join_depth : coverpoint depth {
+            bins d[]           = { [0 : NT_LOG2] };
+            ignore_bins deeper = { [NT_LOG2+1 : $] };
+        }
 
         cross_join : cross cp_join_dvg, cp_join_else;
     endgroup
