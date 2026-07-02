@@ -610,24 +610,27 @@ class vortex_scoreboard extends uvm_scoreboard;
       simx_word = '0;
       for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
 
-      // ---- Gate 2: skip SimX-uninitialized poison (baadf00d in either half) ----
-      if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) begin
-        num_skipped_poison++;
-        continue;
-      end
-
-      // ---- Byte-valid gate: compare ONLY the lanes the DUT actually wrote.
-      //      Sub-word stores (sb/sh) into preinitialized .data leave the other
-      //      lanes of the 8-byte slot at 0 in the sparse shadow, while SimX
-      //      returns store-bytes merged with the .data init pattern. Masking
-      //      both sides to the written lanes removes that false mismatch. For a
-      //      full 8-byte write the mask is 0xFF and this is a no-op. ----
+      // ---- Byte-valid gate (MUST run before POISON): compare ONLY the lanes
+      //      the DUT actually wrote. Sub-word stores (sb/sh) into a slot whose
+      //      other lanes SimX has never touched leave those SimX lanes at
+      //      BAADF00D (SimX's uninit fill). If POISON is checked before the
+      //      mask, the whole slot is dropped as "SimX uninitialised" even
+      //      though the DUT-written lanes are valid and comparable. Masking
+      //      first zeros the unwritten lanes on BOTH sides so the POISON test
+      //      only sees the lanes we actually care about. Full 8-byte writes
+      //      have mask 0xFF and this is a no-op. ----
       if (shadow_valid.exists(addr)) begin
         for (int b = 0; b < 8; b++)
           if (!shadow_valid[addr][b]) begin
             dut_word [b*8 +: 8] = 8'h00;
             simx_word[b*8 +: 8] = 8'h00;
           end
+      end
+
+      // ---- Gate 2: skip SimX-uninitialized poison (baadf00d in either half) ----
+      if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) begin
+        num_skipped_poison++;
+        continue;
       end
 
       // NEG: inject ONLY on a word that currently MATCHES, so the forced
@@ -879,6 +882,18 @@ class vortex_scoreboard extends uvm_scoreboard;
     else if (num_unchecked > 0)
       `uvm_warning("SCOREBOARD",
         $sformatf("SIMULATION INCOMPLETE — %0d response(s) never received", num_unchecked))
+    // Vacuous-run guard MUST run before the total_checks>0 PASS branch.
+    // If a test DECLARED a memory-comparison window (result_size_bytes > 0),
+    // then num_comparisons == 0 is a vacuous memory-equivalence result — the
+    // DUT-vs-SimX check literally didn't run. A passing console check is NOT a
+    // substitute; without this guard, any test with a vx_printf-based console
+    // pass silently hides an empty memory compare (regression of pre-sync
+    // Bug 5 in docs/tests/t_axi_t_fmem_report.md:96-98).
+    else if (cfg.result_size_bytes > 0 && num_comparisons == 0)
+      `uvm_error("SCOREBOARD",
+        $sformatf("VACUOUS RUN — a result window was declared (base=0x%08h size=%0d) but 0 memory comparisons ran (%0d write(s) skipped stack/MMIO, %0d skipped poison). Console pass alone is NOT sufficient.",
+                  cfg.result_base_addr, cfg.result_size_bytes,
+                  num_skipped_stack, num_skipped_poison))
     else if (total_checks > 0)
       `uvm_info("SCOREBOARD", "SIMULATION PASSED — all checks matched!", UVM_NONE)
     // No declared result window (kernel_launch_test, riscv-dv, pure-arithmetic):
