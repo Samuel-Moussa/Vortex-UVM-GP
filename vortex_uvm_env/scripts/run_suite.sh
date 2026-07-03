@@ -82,17 +82,19 @@ runr dogfood "DOGFOOD_TESTID=4"
 #                                  completion (busy=0) never idles -> harness timeout (DUT DOES
 #                                  reach ebreak: STATUS ebreak:1 sampled 5525x). Needs stress-vseq
 #                                  completion rework; parked.
-#   riscv_unaligned_load_store_test : Vortex HW does NOT support misaligned accesses
-#                                  (VX_lsu_slice.sv:186 "memory misalignment not supported!" +
-#                                  RTL assert). The test deliberately generates misaligned
-#                                  loads/stores -> UNDEFINED DUT behaviour that diverges from
-#                                  SimX's SW model (352 byte-level mismatches on a seed where SimX
-#                                  ran; SimX aborted on earlier seeds). Inapplicable test, like
-#                                  ebreak_debug_mode. NOT a DUT bug and NOT a scoreboard bug (the
-#                                  shadow_valid byte-mask correctly limits to written bytes).
+# MISALIGNED FIX (2026-07-03): Vortex HW does not support misaligned accesses
+# (VX_lsu_slice.sv "memory misalignment not supported!"; halfword byte-enable drops
+# addr bit 0; RUNTIME_ASSERT on alignment — confirmed vs upstream master). riscv-dv's
+# rv32im target was wrongly set support_unaligned_load_store=1, so it generated
+# misaligned accesses -> asserts (previously MASKED by the TB idle net cutting runs
+# short; unmasked by the progress-based idle-net fix). Fixed at the source:
+# riscv-dv/target/rv32im/riscv_core_setting.sv support_unaligned_load_store=1'b0 ->
+# ALIGNED-only generation. unaligned_load_store_test is now RE-INCLUDED (it becomes a
+# normal aligned load/store test). MUST regen (RISCV_DV_REGEN=1, already set) to pick
+# up the new setting.
 # NOTE: several RETAINED tests pass on liveness but are UNVERIFIABLE (SimX golden model aborts on
 # some random sequences — Steven's SimX-robustness lane); they run the DUT to EBREAK cleanly.
-for P in riscv_arithmetic_basic_test riscv_jump_stress_test \
+for P in riscv_arithmetic_basic_test riscv_jump_stress_test riscv_unaligned_load_store_test \
          riscv_non_compressed_instr_test riscv_loop_test riscv_rand_instr_test \
          riscv_rand_jump_test riscv_mmu_stress_test riscv_no_fence_test \
          riscv_illegal_instr_test riscv_full_interrupt_test riscv_pmp_test; do
