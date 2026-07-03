@@ -417,7 +417,16 @@ module vortex_tb_top;
                     $display("\n[TB_STATUS @ %0t] Execution STARTED", $time);
                 end
             end else if (tb_execution_started && !tb_execution_complete) begin
-                tb_idle_cycles <= tb_idle_cycles + 1;
+                // PROGRESS is instruction retirement, not just memory activity. A
+                // compute-bound kernel (long ALU loop, no memory ops) is busy and
+                // making progress -> it must NOT count as idle, else the idle
+                // safety net (below) cuts it short mid-compute (was the root cause
+                // of compute-kernel thread-0-only failures: the tail stores never
+                // executed). Reset the hang counter on any commit this cycle.
+                if (tb_commit_count_cyc != 0)
+                    tb_idle_cycles <= 0;
+                else
+                    tb_idle_cycles <= tb_idle_cycles + 1;
             end
 
             // C3 PRIMARY: ebreak (0x00100073) decoded at fetch stage
