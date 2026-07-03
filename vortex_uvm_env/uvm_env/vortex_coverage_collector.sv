@@ -205,6 +205,15 @@ class vortex_coverage_collector extends uvm_component;
   // NUM_WARPS/ISSUE_WIDTH is a VX_gpu_pkg localparam -> derive it. Max IPC ==
   // issue width (per-cycle issue slots).
   localparam int CFG_ISSUE_W  = CFG_WARPS / VX_gpu_pkg::PER_ISSUE_WARPS;
+  // Total cores = requesters into the AXI adapter. The route-field ignores below
+  // were evidence-validated for ONE requester (1CL/1C); with >1 core the AXI ID's
+  // requester-port bits make those routes reachable, so the ignores MUST NOT apply
+  // (they would fake coverage). Gate them on single-core.
+  localparam int TOTAL_CORES  = CFG_CLUSTERS * CFG_CORES;
+  localparam bit SINGLE_CORE  = (TOTAL_CORES == 1);
+  // Max reachable IPC bucket: bucket 5 (IPC>1.0) needs ISSUE_WIDTH>=2; at single
+  // issue the ceiling is bucket 4 (high, IPC<=1.0). Config-aware, auto-adapts.
+  localparam int MAX_IPC_BUCKET = (CFG_ISSUE_W >= 2) ? 5 : 4;
 
   // AXI native transfer size — the DUT's VX_axi_adapter HARDCODES awsize/arsize =
   // CLOG2(DATA_SIZE) (VX_axi_adapter.sv:263,298), i.e. one full-bus-width beat;
@@ -277,8 +286,13 @@ class vortex_coverage_collector extends uvm_component;
     //   => ignore the residual indices as non-meaningful + non-targetable.
     //   TRIP-WIRE: validated for ROUTE_W==6 (1CL/1C/4W/4T). A wider config grows
     //      VX_MEM_TAG_WIDTH and the slot space -> re-derive before trusting these.
+    // Route ignores are evidence-validated for SINGLE-CORE (1 requester). At
+    // multi-core the AXI ID's requester-port bits make these routes reachable, so
+    // these ignores must be re-derived per config — DEFERRED to the Cores>1 phase.
+    // (config-constant `with (...)` does NOT work: Questa vopt-13185 drops it. The
+    // multi-core gate needs item-referencing bounds or `ifdef, done later.)
     cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0] {
-      ignore_bins route_msb_unreachable = {[32:63]};                 // bit5 never set
+      ignore_bins route_msb_unreachable = {[32:63]};                 // bit5 never set @1 requester
       ignore_bins route_even_ge16       = {16,18,20,22,24,26,28,30}; // reads<=15, writes odd
       ignore_bins route_emergent_read   = {4,6,8,10,12,14};          // read-only MSHR idx, release-order emergent
       ignore_bins route_high_write_tag  = {23,27,31};                // write src/counter id, non-targetable
@@ -514,10 +528,14 @@ class vortex_coverage_collector extends uvm_component;
       bins low_ipc   = {2};
       bins med_ipc   = {3};
       bins high_ipc  = {4};
-      // ipc_bucket 5 = IPC>1.0, only reachable with ISSUE_WIDTH>=2 (>1 issue slot
-      // per cycle). This build is single-issue (CFG_ISSUE_W==1) -> unreachable.
-      // NOTE: remove this ignore on ISSUE_WIDTH>=2 builds (then bin 5 is real).
-      ignore_bins very_high_single_issue = {5};
+      // CONFIG-AWARE: ipc_bucket 5 = IPC>1.0, reachable only when >1 instr can
+      // issue per cycle (ISSUE_WIDTH>=2). Max reachable bucket = MAX_IPC_BUCKET
+      // (=4 at single-issue, =5 otherwise). Uses `with (item > ...)` — an
+      // item-referencing expression, which Questa applies (a constant `with` is
+      // silently DROPPED, vopt-13185). Auto-reactivates bin 5 at ISSUE_WIDTH>=2.
+      // NOTE: high_ipc (bin 4, IPC 0.75..1.0) is <=1.0 so it is REACHABLE at
+      // single-issue -> NOT ignored; it must be covered by stimulus.
+      ignore_bins above_issue_width = {5} with (item > MAX_IPC_BUCKET);
     }
 
     cp_fetch_stall: coverpoint current_status.fetch_stall {
