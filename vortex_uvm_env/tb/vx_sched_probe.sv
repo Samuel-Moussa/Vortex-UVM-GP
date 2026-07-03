@@ -102,7 +102,10 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         option.name = "warp_sched_state_cg";
 
         cp_active_warps : coverpoint active_cnt {
-            bins none      = { 0 };          // scheduler idle (no resident warp)
+            // sched_state_cg samples ONLY at schedule fire (schedule_if.valid &&
+            // ready) — a warp is issuing, so >=1 warp is always active here.
+            // active_cnt==0 is structurally unreachable at this sample point.
+            ignore_bins none = { 0 };
             bins one       = { 1 };
             bins some[]    = { [2 : NW-1] };
             bins all       = { NW };
