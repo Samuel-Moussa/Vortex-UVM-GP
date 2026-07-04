@@ -1,6 +1,25 @@
 # Vortex UVM — Verification Plan (Current Progress)
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
+---
+## 🧭 COMPACT-POINT STATUS (2026-07-04, head `aba5aa9`) — READ FIRST
+**Functional coverage 72.70% → 88.45%** (covergroup bins 337/381, single-config 1CL/1C/4W/4T AXI, 2247 instances). Total (filtered) 74.91%. **Suite passes by TB verdict; verification integrity verified.**
+
+**LANDED & VERIFIED this session (all committed):**
+- **Verification integrity** — meaningful tests now do real DUT-vs-SimX memory compare (were narrow-window/vacuous): functional_mem 6→22, axi_memory 13→78, barrier_sync 6→31, warp_scheduling 3→23 (`36d75cf`,`2e44ad2`). Comparison counts re-verified UNCHANGED after later fixes.
+- **Coverage pushes** — cross_addr_data→100, mem_usage guard, cp_op_type 50→83, stall taps (decode/issue/execute)→100, diverge_deep, wr_data_cp→100, windowed-IPC + active-warps wiring→100, cp_timeout, divergence-DEPTH correction (clog2 waiver was WRONG; DV_STACK_SIZE=NUM_THREADS-1 verified vs upstream → diverge_peel covers depth3), cp_active_warps.none sched waiver.
+- **Config-aware waivers, ALL RTL/upstream-verified** (AXI-simultaneous, cp_spawn_cnt.all, cp_bar_scope.global[GBAR off], cp_bar_size.size0[is_noop], cp_lsu_op.ld/sd[RV32], cp_ipc_bucket.very_high[ISSUE_WIDTH]). **MECHANISM NOTE:** config-*constant* `with(...)` is silently dropped by Questa (vopt-13185) — must use item-referencing `with(item <op> CFG_*)` or `ifdef.
+- **idle-net bug fix** (`aba5aa9`): TB idle safety net counted compute-bound kernels (no memory ops) as idle and cut them short (compute-kernel thread-0-only failures). Now resets on instruction retirement. Verified compute_tight PASS (244k instrs). Kernel/directed comparison counts UNCHANGED (they use busy=0/ebreak, not idle-net).
+- **misaligned root cause** (verified vs upstream): Vortex HW does NOT support misaligned (VX_lsu_slice.sv byteen drops addr bit0 + RUNTIME_ASSERT). Fixed riscv-dv rv32im `support_unaligned_load_store=1'b0` (external repo) → aligned-only gen.
+
+**OPEN ITEMS (next session):**
+1. **riscv-dv misaligned asserts + FALSE-PASS gate.** Aligned config helps but random/illegal streams still compute misaligned addrs at runtime → Vortex asserts (illegal_instr 790k, unaligned 3725, mmu 1694 …). These log millions of RTL errors yet the suite reads the TB "Test Result: PASS" (UVM_ERROR-based, IGNORES RTL asserts) → false pass. DECIDE: (a) fix suite gate to count RTL asserts, then (b) exclude inherently-misaligned tests (illegal_instr, mmu_stress, unaligned) as inapplicable-to-Vortex, OR downgrade the debug RUNTIME_ASSERT for CRT (scoreboard is the real check).
+2. **high_ipc (cp_ipc_bucket bin 4) — warp-limited, NOT covered.** Peak IPC 0.52 at 4W even for pure branchless ALU (VX_schedule stall-after-issue; only 4 warps to hide writeback latency). Reachable at higher NUM_WARPS. Config-aware waiver candidate (gate on NUM_WARPS) — investigate threshold before waiving. Blocks cross_ipc_stalls high combos too.
+3. **Remaining functional tail (~44 bins):** cross_stall_types, system_axi_cross, cross_sfu_threads, cross_pc_cycles(text_high kernel), cp_stalled_warps.none, cp_active_threads.partial(1 EX unit — needs divergent LSU/SFU op), cross_dvg_depth.<uniform,d3>. Each: cover by stimulus or waive only with RTL proof (NO clog2-style guesses).
+4. **Multi-core (2CL/2C) config-aware route waiver** deferred: cp_id_route ignores are 1-requester-specific; at multi-core the AXI ID requester bits make them reachable → re-derive per config (item-referencing bound, not constant-with).
+
+---
+
 **Synced-to:** `0cfec34` (2026-06-30)  *(history was rewritten 2026-06-28 to drop co-author trailers — all SHAs below are post-rewrite)*
 
 ### Sync changelog
