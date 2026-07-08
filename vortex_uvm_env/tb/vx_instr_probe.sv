@@ -193,7 +193,24 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
 
         // The one genuinely meaningful cross: do divergence-control ops
         // (split/join/etc.) themselves fire under partial masks? = real SIMT.
-        cross_sfu_threads : cross cp_sfu_op, cp_active_threads;
+        cross_sfu_threads : cross cp_sfu_op, cp_active_threads {
+            // WSPAWN is a runtime-only primitive: it is issued exclusively from the
+            // single-threaded spawn bootstrap (Vortex/kernel/src/vx_spawn.c:259,
+            // vx_wspawn(active_warps, stub) executed on thread 0 before the SIMT region
+            // spreads). No user SIMT kernel issues wspawn, and 35 diverse runs (all
+            // kernels + directed tests + 12 constrained-random riscv-dv profiles) never
+            // produced a multi-thread wspawn. Multi-thread wspawn is therefore
+            // unreachable in any well-formed program; issuing vx_wspawn under a full
+            // mask would redundantly re-spawn from every lane (broken/unsafe), not a
+            // legitimate stimulus. Ignore <wspawn, partial|uniform>; keep the reachable
+            // <wspawn, one_divergent>. Evidence-based structural (programming-model)
+            // waiver — trip-wire: revisit if a kernel ever legitimately fans wspawn out
+            // across active threads.
+            ignore_bins wspawn_multithread =
+                binsof(cp_sfu_op.wspawn) &&
+                ( binsof(cp_active_threads.partial) ||
+                  binsof(cp_active_threads.uniform) );
+        }
     endgroup
 
     // ---- FPU / TCU (no op-decode in this probe) -----------------------------

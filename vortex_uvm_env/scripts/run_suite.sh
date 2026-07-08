@@ -69,6 +69,10 @@ runk sim-only mem_stress 400000
 # -> fills cross_sfu_threads <csrrw|csrrc, {uniform,partial[2],partial[3]}> (CSR-WRITE
 # ops otherwise fire only single-threaded from crt0). Fast (~32k cyc), deterministic.
 runk sim-only sfu_masks 200000
+# bar_masks: single-warp kernel issuing vx_barrier(id,1) under peeled thread masks ->
+# fills cross_sfu_threads <bar,{uniform,partial[2],partial[3]}>. num_warps=1 self-releases
+# so a barrier under a divergent mask cannot deadlock. Fast (~9k cyc), deterministic.
+runk sim-only bar_masks 200000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
