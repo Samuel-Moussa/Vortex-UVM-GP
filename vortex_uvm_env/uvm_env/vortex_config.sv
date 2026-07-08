@@ -715,7 +715,16 @@ class vortex_config extends uvm_object;
         max_latency_cycles   = 200;
         min_inter_req_delay  = 0;
         max_inter_req_delay  = 10;
-        status_sample_interval = 100;
+        // 10 (constraint floor): the stall taps (fetch/decode/issue/mem/execute)
+        // are INSTANTANEOUS RTL signals whose co-occurrence windows are 1-2 cycles;
+        // at 100-cycle sampling the periodic snapshot almost never lands on them, so
+        // cross_stall_types / cross_ipc_stalls asymmetric-and-simultaneous tuples
+        // (<*,stalled,stalled>, <active,stalled,*>, <stalled,active,*>) and the
+        // system_axi idle<->busy edge tuples stay ZERO. Dense sampling (10) observes
+        // these real transient states without altering them — the windowed IPC bucket
+        // refreshes on its own IPC_WINDOW clock (status_monitor.sv), independent of
+        // this interval, so already-banked ipc_bucket coverage is unaffected.
+        status_sample_interval = 10;
 
         // --- Simulation ---
         global_timeout_cycles = 100000;
