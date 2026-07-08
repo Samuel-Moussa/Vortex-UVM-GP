@@ -273,22 +273,35 @@ barrier, tmc, wspawn), so no bin is ever hit vacuously.
 
 ## 7. Honest status of the remaining gaps
 
-100% is claimed only where every *reachable* bin is hit; the open bins are catalogued
-here rather than waived without proof:
+Current merged functional coverage: **~93% (350/375 bins)** at 1CL/1C/4W/4T after the
+`mem_stress` and `sfu_masks` stimulus. 100% is claimed only where every *reachable* bin
+is hit; the ~25 open bins are catalogued here rather than waived without proof:
 
-- **Auto-fill on the current re-merge:** `high_ipc` (proven config waiver) and two
-  `status_performance_cg` `<med_ipc, *, mem-stalled>` combos (filled by the new
-  `mem_stress` kernel).
-- **Stimulus gaps (targetable, not waived):** `cross_sfu_threads` (more SFU-op variety
-  under partial masks); `cross_dvg_depth <uniform, d3>` (1 bin — reachable via a
-  nested-divergence-then-uniform-branch kernel).
+- **Closed this push (directed stimulus):** `cp_ipc_bucket.high_ipc` (proven config
+  waiver); `status_performance_cg` `<med_ipc, *, mem-stalled>` ×2 (via `mem_stress` —
+  a 12-load MSHR burst co-sampled with a med-IPC window); `cross_sfu_threads`
+  `<csrrw|csrrc, {uniform, partial[2], partial[3]}>` ×6 (via `sfu_masks` — register-form
+  FP-CSR writes under peeled thread masks).
+- **Structural waiver candidates (proven, pending owner sign-off):**
+  `cross_sfu_threads` `<wspawn, partial/uniform>` — `vx_wspawn` is a runtime-only
+  primitive issued single-threaded from the spawn bootstrap (`vx_spawn.c:259`, thread 0
+  before the SIMT region spreads); no user SIMT code issues it, so multi-thread wspawn
+  is unreachable in any well-formed program (same class as the accepted
+  `all_excludes_issuer` / `global_bar` waivers). `sfu_class_cg` is the coverage lane —
+  flagged for sign-off, not unilaterally waived.
+- **Stimulus gaps (targetable, not waived):** `cross_sfu_threads` `<bar, partial/uniform>`
+  (a convergent multi-thread barrier — reachable but risks deadlock if `num_warps` is
+  mismatched); `cross_dvg_depth <uniform, d3>` (1 bin — a uniform split at stack-depth 3;
+  `diverge_deep` misses it, needs care with post-push depth semantics).
 - **Timing/sampling-coincidence (candidate for a *proven* waiver, not a blind one):**
-  the asymmetric single-stage stalls `<decode-active, issue-stalled>` /
-  `<decode-stalled, issue-active>` are one-cycle backpressure-propagation transients
-  against a 100-cycle sample interval; `system_axi_cross` transition×activity bins need
-  a bus access in the exact cycle of an idle↔busy edge. These are limited by *sampling
-  cadence*, not by missing features — the honest levers are a finer
-  `status_sample_interval` or a documented sampling-limitation note.
+  `status_performance_cg` `<zero, *, mem-stalled>` and the asymmetric single-stage stalls
+  `<decode-active, issue-stalled>` / `<decode-stalled, issue-active>` are one-cycle
+  backpressure-propagation transients against a 100-cycle sample interval;
+  `system_axi_cross` transition×activity bins need a bus access in the exact cycle of an
+  idle↔busy edge. These are limited by *sampling cadence*, not by missing features — the
+  honest levers are a finer `status_sample_interval` or a documented sampling-limitation
+  note. `memory_stall` is dcache *request* backpressure (MSHR-full), reachable only by a
+  burst of independent outstanding loads — a serial pointer-chase does NOT set it.
 
 **Excluded, legitimately (not counted, not hidden):** the idle data-interface
 coverpoints (`mem_usage_cp` / `system_mem_cross` on AXI runs, and the AXI-side on MEM
