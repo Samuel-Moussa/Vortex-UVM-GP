@@ -273,26 +273,27 @@ barrier, tmc, wspawn), so no bin is ever hit vacuously.
 
 ## 7. Honest status of the remaining gaps
 
-Current merged functional coverage: **~93% (350/375 bins)** at 1CL/1C/4W/4T after the
-`mem_stress` and `sfu_masks` stimulus. 100% is claimed only where every *reachable* bin
-is hit; the ~25 open bins are catalogued here rather than waived without proof:
+Current merged functional coverage: **93.33% (350/375 bins)** at 1CL/1C/4W/4T; the SFU
+cross closure (`bar_masks` + wspawn waiver) is committed and lifts this to an expected
+**~94.9% (353/372)** on the pending re-merge. 100% is claimed only where every
+*reachable* bin is hit; open bins are catalogued here rather than waived without proof:
 
-- **Closed this push (directed stimulus):** `cp_ipc_bucket.high_ipc` (proven config
-  waiver); `status_performance_cg` `<med_ipc, *, mem-stalled>` ×2 (via `mem_stress` —
-  a 12-load MSHR burst co-sampled with a med-IPC window); `cross_sfu_threads`
+- **Closed by directed stimulus:** `cp_ipc_bucket.high_ipc` (proven config waiver);
+  `status_performance_cg` `<med_ipc, *, mem-stalled>` ×2 (via `mem_stress` — a 12-load
+  MSHR burst co-sampled with a med-IPC window); `cross_sfu_threads`
   `<csrrw|csrrc, {uniform, partial[2], partial[3]}>` ×6 (via `sfu_masks` — register-form
-  FP-CSR writes under peeled thread masks).
-- **Structural waiver candidates (proven, pending owner sign-off):**
-  `cross_sfu_threads` `<wspawn, partial/uniform>` — `vx_wspawn` is a runtime-only
-  primitive issued single-threaded from the spawn bootstrap (`vx_spawn.c:259`, thread 0
-  before the SIMT region spreads); no user SIMT code issues it, so multi-thread wspawn
-  is unreachable in any well-formed program (same class as the accepted
-  `all_excludes_issuer` / `global_bar` waivers). `sfu_class_cg` is the coverage lane —
-  flagged for sign-off, not unilaterally waived.
-- **Stimulus gaps (targetable, not waived):** `cross_sfu_threads` `<bar, partial/uniform>`
-  (a convergent multi-thread barrier — reachable but risks deadlock if `num_warps` is
-  mismatched); `cross_dvg_depth <uniform, d3>` (1 bin — a uniform split at stack-depth 3;
-  `diverge_deep` misses it, needs care with post-push depth semantics).
+  FP-CSR writes under peeled thread masks); `cross_sfu_threads`
+  `<bar, {uniform, partial[2], partial[3]}>` ×3 (via `bar_masks` — single-warp
+  `vx_barrier(id,1)` self-releasing under peeled masks, deadlock-free).
+- **Closed by proven structural waiver:** `cross_sfu_threads` `<wspawn, partial/uniform>`
+  — `vx_wspawn` is a runtime-only primitive issued single-threaded from the spawn
+  bootstrap (`vx_spawn.c:259`, thread 0 before the SIMT region spreads); no user SIMT
+  code issues it and 35 diverse runs never produced multi-thread wspawn, so it is
+  unreachable in any well-formed program (same class as the accepted
+  `all_excludes_issuer` / `global_bar` waivers). → **`cross_sfu_threads` = 100%.**
+- **Stimulus gaps (targetable, not waived):** `cross_dvg_depth <uniform, d3>` (1 bin — a
+  uniform split at stack-depth 3; `diverge_deep` misses it, needs care with post-push
+  depth semantics).
 - **Timing/sampling-coincidence (candidate for a *proven* waiver, not a blind one):**
   `status_performance_cg` `<zero, *, mem-stalled>` and the asymmetric single-stage stalls
   `<decode-active, issue-stalled>` / `<decode-stalled, issue-active>` are one-cycle
