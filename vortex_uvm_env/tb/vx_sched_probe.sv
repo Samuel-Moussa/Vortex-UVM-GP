@@ -112,7 +112,13 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         }
 
         cp_stalled_warps : coverpoint stalled_cnt {
-            bins none      = { 0 };
+            // Structurally unreachable at this sample point, same as cp_active_warps.none:
+            // schedule_fire (VX_schedule.sv:202) sets stalled_warps[schedule_wid]=1 for the
+            // warp it issues, and schedule_if is registered one cycle later through the
+            // VX_elastic_buffer OUT_REG=1 (VX_schedule.sv:345-358). So the warp we observe
+            // at schedule_if.valid was already stalled the prior cycle -> stalled_cnt>=1
+            // here always. Config-independent, RTL-proven (not omission of a reachable bin).
+            ignore_bins none = { 0 };
             bins some[]    = { [1 : NW-1] };
             bins all       = { NW };         // every warp stalled (barrier/branch)
         }

@@ -55,9 +55,12 @@ runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST
 
 # ---- kernels (first does full compile) ----
 runk sim      hello           100000
-for k in vecadd_lite diverge_lite diverge_deep diverge_peel fpu_test fpu_mt spawn_tmc_sweep barrier_lite fibonacci; do
+for k in vecadd_lite diverge_lite diverge_deep diverge_peel diverge_fpu fpu_test fpu_mt spawn_tmc_sweep barrier_lite fibonacci; do
   runk sim-only "$k" 200000
 done
+# text_big: large resident .text so executed PC crosses into cp_pc_region.text_high
+# (fills cross_pc_cycles <text_high,med>/<text_high,short>). Bigger timeout for the sweep.
+runk sim-only text_big 400000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
