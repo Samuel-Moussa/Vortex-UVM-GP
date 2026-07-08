@@ -84,6 +84,11 @@ runk sim-only cache_stress 600000
 # mem_zero: compute-free 128-block independent-load saturation -> zero/very-low-IPC windows
 # co-sampled with mem/fetch stalls (cross_ipc_stalls <zero|very_low,*,stalled> family).
 runk sim-only mem_zero 400000
+# axi_edge: minimal store-and-exit (x=5). Short run makes the idle<->busy transitions
+# dominate; best-effort stimulus for system_axi_cross edge tuples (system_cg samples every
+# cycle). Note: empirically the AXI beats do not land on the busy toggle (pipeline gap +
+# busy=~no_pending keeps AXI in the busy state) -> documents that gap; cheap fast run.
+runk sim-only axi_edge 50000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
