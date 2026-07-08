@@ -73,6 +73,10 @@ runk sim-only sfu_masks 200000
 # fills cross_sfu_threads <bar,{uniform,partial[2],partial[3]}>. num_warps=1 self-releases
 # so a barrier under a divergent mask cannot deadlock. Fast (~9k cyc), deterministic.
 runk sim-only bar_masks 200000
+# diverge_uni3: three nested ASYMMETRIC real divergences (3v1->2v1->1v1) push the IPDOM
+# stack to depth 3 with one thread active, then a 4th data-dependent branch fires with a
+# single active thread (is_dvg=0) -> fills cross_dvg_depth <uniform,d3>. Fast, deterministic.
+runk sim-only diverge_uni3 200000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
