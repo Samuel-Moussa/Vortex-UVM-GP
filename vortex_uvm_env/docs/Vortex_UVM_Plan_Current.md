@@ -10,7 +10,9 @@
 - `diverge_fpu` kernel: FP (`fcvt`/`fmv`→EX_FPU) + `csrr tid` (→EX_SFU) under peeled partial masks {0,1,2}/{0,1} → FPU `cp_active_threads.partial[2,3]` ZERO→64/80 (100%), `cross_sfu_threads` 63.88→66.66.
 - `text_big` kernel: 232KB resident `.text` (600 noinline fns, runtime-indexed REVERSE sweep + early warm call) → `cross_pc_cycles <text_high,{short,med,long}>` all filled (77.7→100%).
 - Both kernels PASS DUT-vs-SimX (deterministic int stores), added to run_suite.
-- **NEXT: high_ipc investigation** (see OPEN ITEM 2) — the main remaining lever.
+- **high_ipc waiver DONE (`ebdb725`) — PROVEN, config-aware.** high_ipc (windowed IPC 0.75..1.0) unreachable at ≤4W single-issue: sustained IPC ≈ min(ISSUE_WIDTH, NUM_WARPS/L), L=schedule→decode unlock ≈8cy (icache round-trip). Proved by `compute_flat` (NEW, branchless straight-line, peaks bucket 2) + `compute_tight` (loop ILP, bucket 3) — neither ≥0.75. `MAX_IPC_BUCKET` warp-aware; ignore `{4,5}` item-referenced. Validated: cp_ipc_bucket 80→100%, `cross_ipc_stalls<high_ipc,*,*>` auto-cascade to ignored. ~5 bins → **expected ~91.2% (342/375) on next full re-merge**.
+- **⚠️ merged.ucdb still 90.00% — high_ipc waiver banks on next full re-run (collector changed). BATCH with stall-combo wave.**
+- **NEXT: stall co-occurrence** (~10 bins in `cross_stall_types`/`cross_ipc_stalls`) — mem-stress kernel to co-activate fetch+mem/decode+issue stalls; then one re-merge banks high_ipc + stalls together.
 
 **LANDED & VERIFIED this session (all committed):**
 - **Verification integrity** — meaningful tests now do real DUT-vs-SimX memory compare (were narrow-window/vacuous): functional_mem 6→22, axi_memory 13→78, barrier_sync 6→31, warp_scheduling 3→23 (`36d75cf`,`2e44ad2`). Comparison counts re-verified UNCHANGED after later fixes.
