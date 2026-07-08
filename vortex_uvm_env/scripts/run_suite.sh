@@ -65,6 +65,10 @@ runk sim-only text_big 400000
 # a dependent IDIV chain -> fills cross_ipc_stalls <med_ipc,*,mem-stalled> /
 # <med_ipc,fetch-stalled,*>. Completes ~290k cycles; 400k timeout for headroom.
 runk sim-only mem_stress 400000
+# sfu_masks: register-form csrrw (fsrm) + csrrc on FP CSRs under peeled thread masks
+# -> fills cross_sfu_threads <csrrw|csrrc, {uniform,partial[2],partial[3]}> (CSR-WRITE
+# ops otherwise fire only single-threaded from crt0). Fast (~32k cyc), deterministic.
+runk sim-only sfu_masks 200000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
