@@ -61,6 +61,10 @@ done
 # text_big: large resident .text so executed PC crosses into cp_pc_region.text_high
 # (fills cross_pc_cycles <text_high,med>/<text_high,short>). Bigger timeout for the sweep.
 runk sim-only text_big 400000
+# mem_stress: co-activates memory-request backpressure with med/low-IPC windows and
+# a dependent IDIV chain -> fills cross_ipc_stalls <med_ipc,*,mem-stalled> /
+# <med_ipc,fetch-stalled,*>. Completes ~290k cycles; 400k timeout for headroom.
+runk sim-only mem_stress 400000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
