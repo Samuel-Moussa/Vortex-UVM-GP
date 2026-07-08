@@ -211,9 +211,21 @@ class vortex_coverage_collector extends uvm_component;
   // (they would fake coverage). Gate them on single-core.
   localparam int TOTAL_CORES  = CFG_CLUSTERS * CFG_CORES;
   localparam bit SINGLE_CORE  = (TOTAL_CORES == 1);
-  // Max reachable IPC bucket: bucket 5 (IPC>1.0) needs ISSUE_WIDTH>=2; at single
-  // issue the ceiling is bucket 4 (high, IPC<=1.0). Config-aware, auto-adapts.
-  localparam int MAX_IPC_BUCKET = (CFG_ISSUE_W >= 2) ? 5 : 4;
+  // Max reachable IPC bucket. Sustained windowed IPC ~= min(ISSUE_WIDTH, NUM_WARPS/L),
+  // where L = schedule->decode warp-unlock latency (VX_schedule elastic OUT_REG + icache
+  // req elastic OUT_REG + icache round-trip; ~8 cycles at this config). So:
+  //   - bucket 5 (IPC>1.0): needs ISSUE_WIDTH>=2.
+  //   - bucket 4 (high, 0.75..1.0): at single-issue needs enough warps to hide L.
+  //     PROVEN unreachable at NUM_WARPS=4 — two max-effort ILP kernels both cap ~0.5:
+  //     compute_flat (branchless straight-line) peaks at bucket 2, compute_tight (loop
+  //     ILP) at bucket 3; neither reaches 0.75. Reaching it needs ~NUM_WARPS>=6.
+  // Honest boundary: only claim bucket 4 unreachable for the PROVEN case (<=4 warps,
+  // single-issue). At >4 warps leave it active (untested -> never fake-waive a bin we
+  // have not proven unreachable). Config-aware; auto-reactivates as the config grows.
+  localparam int MAX_IPC_BUCKET =
+      (CFG_ISSUE_W >= 2) ? 5 :   // dual+ issue -> IPC can exceed 1.0
+      (CFG_WARPS   >  4) ? 4 :   // >4 warps: do not claim high_ipc unreachable (untested)
+                           3;    // <=4 warps single-issue: PROVEN capped ~0.5
 
   // AXI native transfer size — the DUT's VX_axi_adapter HARDCODES awsize/arsize =
   // CLOG2(DATA_SIZE) (VX_axi_adapter.sv:263,298), i.e. one full-bus-width beat;
@@ -528,14 +540,13 @@ class vortex_coverage_collector extends uvm_component;
       bins low_ipc   = {2};
       bins med_ipc   = {3};
       bins high_ipc  = {4};
-      // CONFIG-AWARE: ipc_bucket 5 = IPC>1.0, reachable only when >1 instr can
-      // issue per cycle (ISSUE_WIDTH>=2). Max reachable bucket = MAX_IPC_BUCKET
-      // (=4 at single-issue, =5 otherwise). Uses `with (item > ...)` — an
-      // item-referencing expression, which Questa applies (a constant `with` is
-      // silently DROPPED, vopt-13185). Auto-reactivates bin 5 at ISSUE_WIDTH>=2.
-      // NOTE: high_ipc (bin 4, IPC 0.75..1.0) is <=1.0 so it is REACHABLE at
-      // single-issue -> NOT ignored; it must be covered by stimulus.
-      ignore_bins above_issue_width = {5} with (item > MAX_IPC_BUCKET);
+      // CONFIG-AWARE ceiling = MAX_IPC_BUCKET (see its derivation above): bin 5
+      // (IPC>1.0) needs ISSUE_WIDTH>=2; bin 4 (high_ipc, 0.75..1.0) is PROVEN
+      // unreachable at <=4 warps single-issue (warp-unlock latency L>NUM_WARPS/0.75 —
+      // compute_flat/compute_tight both cap ~0.5). Candidate set {4,5} filtered by the
+      // item-referencing `with` (a constant `with` is silently DROPPED, vopt-13185);
+      // each bin auto-reactivates as ISSUE_WIDTH/NUM_WARPS grow past its threshold.
+      ignore_bins above_issue_width = {4,5} with (item > MAX_IPC_BUCKET);
     }
 
     cp_fetch_stall: coverpoint current_status.fetch_stall {
