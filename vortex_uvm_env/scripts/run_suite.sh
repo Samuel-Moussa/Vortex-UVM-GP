@@ -77,6 +77,13 @@ runk sim-only bar_masks 200000
 # stack to depth 3 with one thread active, then a 4th data-dependent branch fires with a
 # single active thread (is_dvg=0) -> fills cross_dvg_depth <uniform,d3>. Fast, deterministic.
 runk sim-only diverge_uni3 200000
+# cache_stress: 600-function resident .text swept by runtime index (icache miss -> fetch_stall)
+# INTERLEAVED with a compute-free independent-load burst (dcache backpressure -> memory_stall)
+# -> fills cross_ipc_stalls <*,fetch-stalled,mem-stalled> (both caches stalled at once).
+runk sim-only cache_stress 600000
+# mem_zero: compute-free 128-block independent-load saturation -> zero/very-low-IPC windows
+# co-sampled with mem/fetch stalls (cross_ipc_stalls <zero|very_low,*,stalled> family).
+runk sim-only mem_zero 400000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
