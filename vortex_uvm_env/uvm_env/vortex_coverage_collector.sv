@@ -604,7 +604,24 @@ class vortex_coverage_collector extends uvm_component;
 
     cross_ipc_stalls: cross cp_ipc_bucket, cp_fetch_stall, cp_memory_stall;
     // Additional crosses for stall combinations and cycle phases
-    cross_stall_types: cross cp_decode_stall, cp_issue_stall, cp_execute_stall;
+    cross_stall_types: cross cp_decode_stall, cp_issue_stall, cp_execute_stall {
+      // PROVEN-UNREACHABLE waiver (RTL-cited, NOT a coverage convenience):
+      // cp_decode_stall = fetch_if.valid && !fetch_if.ready  (tb_top.sv:604-605)
+      // cp_issue_stall  = decode_if.valid && !decode_if.ready (tb_top.sv:606-607)
+      // The fetch->decode elastic buffer is instantiated SIZE(0) (VX_decode.sv:549),
+      // and VX_elastic_buffer.sv:34-41 defines SIZE==0 as a pure combinational passthru:
+      //     assign valid_out = valid_in;   -> decode_if.valid === fetch_if.valid
+      //     assign ready_in  = ready_out;  -> fetch_if.ready  === decode_if.ready
+      // Therefore tb_decode_stall === tb_issue_stall on EVERY cycle: the two taps are
+      // the same boolean. The (decode=active, issue=stalled) and (decode=stalled,
+      // issue=active) combinations are physically impossible in this RTL, so
+      // cross_stall_types' true ceiling is 4/8 bins. Verified empirically: 38-run
+      // suite never hit either asymmetric tuple. If a buffered pipe stage is ever
+      // inserted between fetch_if and decode_if (SIZE>0) this waiver must be removed.
+      ignore_bins decode_ne_issue =
+          ( binsof(cp_decode_stall.active)  && binsof(cp_issue_stall.stalled) ) ||
+          ( binsof(cp_decode_stall.stalled) && binsof(cp_issue_stall.active)  );
+    }
     cross_pc_cycles: cross cp_pc_region, cp_cycle_bucket;
   endgroup : status_performance_cg
 
