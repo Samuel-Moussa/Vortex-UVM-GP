@@ -2,8 +2,15 @@
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
 ---
-## 🧭 COMPACT-POINT STATUS (2026-07-04, head `aba5aa9`) — READ FIRST
-**Functional coverage 72.70% → 88.45%** (covergroup bins 337/381, single-config 1CL/1C/4W/4T AXI, 2247 instances). Total (filtered) 74.91%. **Suite passes by TB verdict; verification integrity verified.**
+## 🧭 COMPACT-POINT STATUS (2026-07-08, head `a43483a`) — READ FIRST
+**Functional coverage 72.70% → 88.45% → 90.00%** (covergroup bins 342/380, single-config 1CL/1C/4W/4T AXI, 2247 instances, 33-run suite). Total (filtered) 76.16%. **All tests PASS vs SimX; verification integrity verified.**
+
+**SESSION 5 (2026-07-08, `a43483a`) — 88.45%→90.00%:**
+- `vx_sched_probe`: waive `cp_stalled_warps.none` — RTL-proven unreachable at schedule-fire sample (`schedule_if` registered 1cy after `schedule_fire` sets `stalled_warps[wid]=1` via `VX_elastic_buffer OUT_REG=1` → observed warp always already stalled → `stalled_cnt≥1`; symmetric to accepted `cp_active_warps.none`) → `sched_state_cg` 100%.
+- `diverge_fpu` kernel: FP (`fcvt`/`fmv`→EX_FPU) + `csrr tid` (→EX_SFU) under peeled partial masks {0,1,2}/{0,1} → FPU `cp_active_threads.partial[2,3]` ZERO→64/80 (100%), `cross_sfu_threads` 63.88→66.66.
+- `text_big` kernel: 232KB resident `.text` (600 noinline fns, runtime-indexed REVERSE sweep + early warm call) → `cross_pc_cycles <text_high,{short,med,long}>` all filled (77.7→100%).
+- Both kernels PASS DUT-vs-SimX (deterministic int stores), added to run_suite.
+- **NEXT: high_ipc investigation** (see OPEN ITEM 2) — the main remaining lever.
 
 **LANDED & VERIFIED this session (all committed):**
 - **Verification integrity** — meaningful tests now do real DUT-vs-SimX memory compare (were narrow-window/vacuous): functional_mem 6→22, axi_memory 13→78, barrier_sync 6→31, warp_scheduling 3→23 (`36d75cf`,`2e44ad2`). Comparison counts re-verified UNCHANGED after later fixes.
