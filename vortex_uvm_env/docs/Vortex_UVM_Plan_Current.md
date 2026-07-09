@@ -191,11 +191,11 @@ Founding-plan features (ALU/FPU/LSU/SFU, warp scheduling, caches, exceptions) ar
 | C3 | Real EBREAK decode drives completion | **[S]** | ✅ DONE `a46a109`+`c80e336` | fetch decode primary; busy=0 fallback (now sustained, `8063ddc`); generate loop covers all cores. |
 | C2 | Real instruction count | **[S]** | ✅ DONE `b14efc5`+`c80e336` | Commit handshake popcount across all lanes; IPC real. |
 | T4 | Remove `-2` error subtraction | **[S]** | ✅ DONE `df6206e` | `REAL_UVM_ERRORS=$UVM_ERRORS`; intact at HEAD after Ahmad's same-file edit. |
-| SB-DIR | Scoreboard bidirectional | **[A]** | 🔴 OPEN | `compare_all_written()` DUT-only. Ahmad's lane (handover written). |
+| SB-DIR | Scoreboard bidirectional | **[S]** | ✅ DONE `fe10b83` | reverse pass added: walks `mem_model` vs SimX for result-scope dwords the DUT never wrote → catches dropped stores (silent data loss). `+DROP_STORE` injection + `negative_dropped_store_test` PROVE it (caught 0x800075d8). Forward pass untouched; 5 kernels + both NEG tests pass, 0 false-pos. |
 | NEG | Negative injection | **[A]** | ✅ PROVEN 2026-06-29 | Catches injected fault on vecadd_lite (INV-1 solved). Regression guard live. |
 
-> **🚦 GATE 0:** NEG RED on injection · dropped store fails · no hardcoded subtraction ✅ · width assert matches DUT ✅ · instr count real ✅.
-> **Samuel's Gate-0: ALL DONE (C1/C2/C3/T4 + negative test proven on vecadd_lite).** Only remaining Gate-0 blocker: SB-DIR (Ahmad).
+> **🚦 GATE 0 — ✅ FULLY CLOSED:** NEG RED on injection ✅ · dropped store fails ✅ (SB-DIR `fe10b83`) · no hardcoded subtraction ✅ · width assert matches DUT ✅ · instr count real ✅.
+> **All Gate-0 items DONE (C1/C2/C3/T4 + bit-flip NEG + SB-DIR bidirectional).** Both negative tests are live regression guards: `negative_result_test` (wrong value) and `negative_dropped_store_test` (dropped store) — run both after any Gate-0/scoreboard change.
 
 ---
 
