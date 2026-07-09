@@ -3,7 +3,8 @@
 **Status:** root-caused. Change-1 (assertion scoping) applied + **validated in sim** (vecadd_lite
 recompile: `assert_dcr_write_timing` fires 0× — was 2×/run — armed at 4535 ns after the config
 writes drained; TEST PASSED, 0 err). Change-3 (docs) applied. Change-2 (reset-sync robustness)
-specced, not yet applied.
+**applied + validated** (vecadd_lite: DCR driver signals `dcr_bootstrap_done`; reset release now
+gated on it; TEST PASSED, 0 err; behavior-preserving in the current config).
 **Not an RTL bug** — correct Vortex boot behavior; the finding is in the verification env + a latent ordering fragility.
 
 ## Symptom

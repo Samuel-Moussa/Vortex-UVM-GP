@@ -121,6 +121,13 @@ class dcr_driver extends uvm_driver #(dcr_transaction);
             drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_STARTUP_ARG0,   argv_ptr[31:0]);
             drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_STARTUP_ARG1,   argv_ptr[63:32]);
             drive_dcr_value(vortex_config_pkg::VX_DCR_BASE_MPM_CLASS,      32'h0);
+
+            // INV-2 Change-2: the base DCRs have NO reset (VX_dcr_data.sv:27) and the core
+            // latches startup_addr at reset-release (VX_schedule.sv:230), so this bootstrap
+            // MUST complete before reset_n deasserts. Signal completion so vortex_tb_top holds
+            // reset until now instead of relying on RESET_CYCLES >> bootstrap-time margin.
+            uvm_event_pool::get_global("dcr_bootstrap_done").trigger();
+            `uvm_info("DCR_DRV", "Bootstrap DCRs written during reset — signalled dcr_bootstrap_done", UVM_MEDIUM)
         end
         
         `uvm_info("DCR_DRV", "DCR driver reset complete", UVM_MEDIUM)
