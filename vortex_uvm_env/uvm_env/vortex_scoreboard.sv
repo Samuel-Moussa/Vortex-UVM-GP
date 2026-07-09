@@ -107,7 +107,23 @@ class vortex_scoreboard extends uvm_scoreboard;
   bit          fault_injected = 0;   // becomes 1 once we actually flip a word
   bit [31:0]   fault_addr     = 0;   // address we corrupted (for the report)
   bit          fault_detected = 0;   // set when the SPECIFIC injected word is reported as a mismatch
-  
+
+  // --- SB-DIR: bidirectional (dropped-store) negative injection (+DROP_STORE) ---
+  // Symmetric to inject_fault but for the OTHER direction: instead of corrupting a
+  // DUT-written word (caught by the forward pass), it simulates a DROPPED store — a
+  // word SimX wrote that the DUT never did — by removing one matching DUT word from
+  // the shadow AND resetting the DUT's real memory (mem_model) at that address to its
+  // load value, so only the reverse pass can catch it. Proves the checker detects
+  // silent data loss, not just wrong values.
+  bit          drop_store     = 0;   // set by negative_result_test or +DROP_STORE
+  bit          store_dropped  = 0;   // becomes 1 once we actually drop a word
+  bit [31:0]   drop_addr      = 0;   // address whose store we dropped (for the report)
+  bit          drop_detected  = 0;   // set when the reverse pass flags the dropped store
+
+  // DUT's real memory (populated by the mem/AXI slave). Used by the reverse pass to
+  // read what the DUT actually holds at result slots it never wrote.
+  mem_model    dut_mem;
+
   //==========================================================================
   // Statistics
   //==========================================================================
@@ -148,6 +164,11 @@ class vortex_scoreboard extends uvm_scoreboard;
     if (!uvm_config_db #(vortex_config)::get(this, "", "cfg", cfg))
       `uvm_fatal("SCOREBOARD", "Failed to get vortex_config from uvm_config_db")
 
+    // DUT real-memory handle for the SB-DIR reverse pass (optional: absent -> reverse
+    // pass is skipped, forward pass unaffected).
+    if (!uvm_config_db #(mem_model)::get(this, "", "mem_model", dut_mem))
+      `uvm_info("SCOREBOARD", "mem_model not in config_db — reverse (dropped-store) pass disabled", UVM_MEDIUM)
+
     mem_export    = new("mem_export",    this);
     axi_export    = new("axi_export",    this);
     dcr_export    = new("dcr_export",    this);
@@ -172,6 +193,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     int status;
 
     if ($test$plusargs("INJECT_FAULT")) inject_fault = 1;
+    if ($test$plusargs("DROP_STORE"))   drop_store   = 1;
 
     // Enable FP-tolerant compare only for floating-point kernels (path has "fpu").
     fp_tolerant = 0;
@@ -584,6 +606,35 @@ class vortex_scoreboard extends uvm_scoreboard;
     byte       simx_bytes[];
     simx_bytes = new[8];
 
+    // SB-DIR drop injection: remove one genuine DUT output word from the shadow AND
+    // reset the DUT's real memory there to its load value, so it looks exactly like a
+    // store the DUT never performed. Only the reverse pass can then catch it. Target a
+    // result-scope word that currently MATCHES SimX and is non-zero, so the resulting
+    // reverse mismatch is unambiguous.
+    if (drop_store && !store_dropped && dut_mem != null) begin
+      foreach (shadow_memory[a]) begin
+        bit in_res = (cfg.result_size_bytes > 0)
+                   ? (a >= cfg.result_base_addr && a < cfg.result_base_addr + cfg.result_size_bytes)
+                   : (a >= RAM_BASE && a < DATA_LIMIT);
+        if (!in_res) continue;
+        simx_read_mem(64'(a), 8, simx_bytes);
+        simx_word = '0;
+        for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
+        if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) continue;
+        if (simx_word == 0)                        continue;   // need non-zero for a clean mismatch
+        if (shadow_memory[a] !== simx_word)        continue;   // must currently match
+        drop_addr = a;
+        shadow_memory.delete(a);
+        shadow_valid.delete(a);
+        for (int b = 0; b < 8; b++) dut_mem.write_byte(64'(a) + b, 8'h00);  // DUT mem := load value
+        store_dropped = 1;
+        `uvm_info("SCOREBOARD",
+          $sformatf("[NEG-DROP] Dropped DUT store at addr=0x%08h (SimX=0x%016h); DUT memory reset to load value",
+                    a, simx_word), UVM_LOW)
+        break;
+      end
+    end
+
     foreach (shadow_memory[addr]) begin
       // ---- Gate 1: choose the comparison scope ----
       //  * Regression harness staged an explicit result window
@@ -676,7 +727,48 @@ class vortex_scoreboard extends uvm_scoreboard;
         end
       end
     end
-    
+
+    // ============= SB-DIR reverse pass: DROPPED-STORE detection =============
+    // The forward loop only inspects addresses the DUT WROTE (shadow_memory), so a
+    // store the DUT dropped entirely is never compared (silent data loss). Walk the
+    // DUT's real memory footprint (mem_model — bounded to touched/preloaded bytes) and,
+    // for each result-scope dword the DUT did NOT write, compare DUT memory vs SimX. A
+    // difference means SimX produced a value the DUT never stored -> a dropped store.
+    // Gated to the AXI path, where the shadow is a COMPLETE record of DUT writes.
+    if (dut_mem != null && cfg.axi_agent_enable) begin
+      bit checked [bit [31:0]];
+      foreach (dut_mem.memory[baddr]) begin
+        bit [31:0] waddr = baddr[31:0] & 32'hFFFF_FFF8;   // dword base
+        bit in_res;
+        if (checked.exists(waddr)) continue;
+        checked[waddr] = 1;
+
+        if (cfg.result_size_bytes > 0)
+          in_res = (waddr >= cfg.result_base_addr)
+                && (waddr <  cfg.result_base_addr + cfg.result_size_bytes);
+        else
+          in_res = (waddr >= RAM_BASE) && (waddr < DATA_LIMIT);
+        if (!in_res)                    continue;
+        if (shadow_valid.exists(waddr)) continue;   // DUT wrote >=1 byte -> forward handled it
+
+        dut_word = dut_mem.read_dword(64'(waddr));
+        simx_read_mem(64'(waddr), 8, simx_bytes);
+        simx_word = '0;
+        for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
+
+        if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) continue;  // SimX uninit
+        if (dut_word === simx_word)                 continue;                    // agree -> ok
+        if (is_got_reloc(dut_word, simx_word))      continue;                    // program pointer
+
+        num_comparisons++;
+        num_mem_failed++;
+        if (store_dropped && waddr == drop_addr) drop_detected = 1;
+        `uvm_error("SCOREBOARD",
+          $sformatf("DROPPED STORE  addr=0x%08h  DUT(mem)=0x%016h  SimX=0x%016h (SimX wrote, DUT never did)",
+                    waddr, dut_word, simx_word))
+      end
+    end
+
     `uvm_info("SCOREBOARD",
       $sformatf("compare_all_written: data_compared=%0d  fp_tol_passed=%0d  skipped_stack/MMIO=%0d  skipped_poison=%0d  skipped_got=%0d",
                 num_comparisons, num_fp_tol_passed, num_skipped_stack, num_skipped_poison, num_skipped_got), UVM_MEDIUM)

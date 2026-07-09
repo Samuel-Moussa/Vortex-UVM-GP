@@ -58,6 +58,7 @@ package vortex_test_pkg;
     `include "kernel_launch_test.sv"
     `include "host_coverage_test.sv"                // ← NEW (extends kernel_launch_test)
     `include "negative_result_test.sv"
+    `include "negative_dropped_store_test.sv"        // ← SB-DIR bidirectional (dropped-store) proof
     `include "random_instruction_stress_test.sv"    // ← NEW
     `include "warp_scheduling_test.sv"
     `include "barrier_sync_test.sv"
