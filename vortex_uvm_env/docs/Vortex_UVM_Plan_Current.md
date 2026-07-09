@@ -2,6 +2,21 @@
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
 ---
+## 🚀 NEXT-PHASE ROADMAP (agreed 2026-07-09) — execute in this order
+Baseline at start: **functional 97.01% (357/368)** banked · Gate-0 FULLY closed (SB-DIR bidirectional done) · INV-2 closed.
+
+**Phase 1 — coverage to 100% / max reachable.**
+- Functional: 11 residual bins are timing-coincidence (6 `system_axi_cross` idle↔busy edges, 2 `cross_ipc_stalls <zero|very_low,stalled,stalled>`, 3 siblings). Push with stimulus where reachable; anything left is an honest documented gap (NOT waived without RTL proof). Realistic functional ceiling ≈ 97–99%.
+- Code coverage: statement/toggle/branch on the DUT scope — attack the reachable gaps, waive config-off / dead RTL with cited evidence. 100% line/branch is the goal; toggle realistically <100% (unused nets) with documented waivers.
+
+**Phase 2 — FPU + TCU verification (the real execution-unit gaps).**
+- FPU: coverage is class-level only today (`instr_class_cg_fpu` = active-threads/divergence, no sub-op). Add `INST_FPU_*` op-decode coverpoints in `vx_instr_probe.sv`; ensure fadd/fmul/fdiv/fsqrt/fcvt/fcmp all fire (fpu_test/fpu_mt + a directed FP-op kernel).
+- TCU: **compiled (`EXT_TCU_ENABLE`, `TCU_BHF`) but UNSTIMULATED** — no suite program issues WMMA ops; covergroup gets 0 samples. Add `INST_TCU_*` op-decode + a **printf-free, scoreboard-safe TCU (bfloat16) kernel** (BHF tolerance like the FP path) to run_suite so the TCU unit is actually exercised & compared vs SimX. `sgemm_tcu` exists in tests/regression but uses spawn+printf → UNVERIFIABLE under the run-to-completion backend.
+
+**Phase 3 — scoreboard clean refactor (mem_model, drop shadow).**
+- Collapse `compare_all_written` to a SINGLE `mem_model`-vs-SimX end-state compare (inherently bidirectional; mem_model holds real init bytes so the sub-word byte-mask hack becomes unnecessary). Migrate the `.got`/POISON/FP-tolerance/inject-fault/drop-store logic into the one pass; delete `shadow_memory` + `shadow_valid`. Validate: full 35-run suite + BOTH negative tests green, zero regression, before deleting the legacy path.
+
+---
 ## 🧭 COMPACT-POINT STATUS (2026-07-08, head `a43483a`) — READ FIRST
 **Functional coverage 72.70% → 88.45% → 90.00%** (covergroup bins 342/380, single-config 1CL/1C/4W/4T AXI, 2247 instances, 33-run suite). Total (filtered) 76.16%. **All tests PASS vs SimX; verification integrity verified.**
 
