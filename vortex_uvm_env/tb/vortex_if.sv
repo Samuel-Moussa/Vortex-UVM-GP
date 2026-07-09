@@ -152,6 +152,12 @@ interface vortex_if (
     // sequence — the assertion is disabled during reset via 'disable iff (!reset_n)'.
     // In practice the RTL initializes DCRs during reset; the TB DCR sequence
     // also runs during reset, so this assertion correctly fires only post-reset.
+    // DCR writes must not mutate a RUNNING kernel's config. NOTE: status_if.busy asserts the
+    // instant reset deasserts (the core self-starts — VX_schedule.sv:230-231 arm warp0 during
+    // reset), while the startup DCR config sequence legitimately drains a few cycles past reset
+    // release. So this assertion is $assertoff during the startup-config window and $asserton
+    // afterwards by vortex_tb_top.sv (see INV-2 root-cause). Base DCRs have NO reset
+    // (VX_dcr_data.sv:27), so startup_addr must be programmed before reset release — INV-2 §Change-2.
     property dcr_write_timing_p;
         @(posedge clk) disable iff (!reset_n)
         dcr_if.wr_valid |-> !status_if.busy;
