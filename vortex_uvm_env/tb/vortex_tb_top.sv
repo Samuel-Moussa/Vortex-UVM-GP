@@ -51,8 +51,12 @@ module vortex_tb_top;
     // INTERFACE INSTANTIATION
     //==========================================================================
 
-    logic reset_n = 1'b0; 
+    logic reset_n = 1'b0;
     vortex_if vif (.clk(clk), .reset_n(reset_n));
+
+    // INV-2 Change-2: handshake so reset release waits for the DCR bootstrap (startup_addr
+    // etc.) to be written. Triggered by the DCR driver at the end of its reset_phase.
+    uvm_event dcr_bootstrap_done_ev = uvm_event_pool::get_global("dcr_bootstrap_done");
 
     //=========================================================================
     // RESET GENERATION
@@ -85,8 +89,28 @@ module vortex_tb_top;
         vif.dcr_if.wr_addr  = 12'h0;
         vif.dcr_if.wr_data  = 32'h0;
 
+        // Minimum reset-assertion window.
         if (RESET_CYCLES > 15)
             repeat(RESET_CYCLES - 15) @(posedge clk);
+
+        // INV-2 Change-2: do NOT release reset until the DCR bootstrap (startup_addr etc.)
+        // is confirmed written — base DCRs have no reset (VX_dcr_data.sv:27) and the core
+        // latches startup_addr at reset-release (VX_schedule.sv:230), so an early release
+        // would boot from an undefined PC. Normally the bootstrap (DCR driver reset_phase)
+        // is long done by RESET_CYCLES; this makes the ordering explicit instead of relying
+        // on the RESET_CYCLES >> bootstrap-time margin. Timeout-guarded so a config with no
+        // active DCR agent cannot hang (releases with a warning after 500 cycles).
+        if (!dcr_bootstrap_done_ev.is_on()) begin
+            $display("[TB_TOP @ %0t] Reset held: waiting for DCR bootstrap to complete...", $time);
+            fork : wait_dcr_boot
+                dcr_bootstrap_done_ev.wait_ptrigger();
+                begin
+                    repeat(500) @(posedge clk);
+                    $warning("[TB_TOP] DCR bootstrap not signalled within 500 cycles; releasing reset anyway");
+                end
+            join_any
+            disable wait_dcr_boot;
+        end
 
         reset_n = 1'b1;
         $display("[TB_TOP @ %0t] Releasing reset", $time);
