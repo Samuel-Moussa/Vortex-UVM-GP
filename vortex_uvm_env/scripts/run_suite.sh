@@ -95,6 +95,10 @@ runk sim-only axi_edge 50000
 # EXT_TCU_ENABLE (compile.sh) so instr_class_cg_tcu samples. A=1.0,B=2.0,C=0 -> exact
 # integer output -> byte-exact compare. Fills instr_class_cg_tcu <uniform>.
 runk sim-only tcu_test 200000
+# tcu_mt: one warp-collective WMMA per warp (total = NUM_THREADS*NUM_WARPS flat grid)
+# -> spreads INST_TCU_WMMA across all warps, filling instr_class_cg_tcu cp_warp bins
+# (tcu_test single-warp only hit one wis). Deterministic exact int result per tile.
+runk sim-only tcu_mt 200000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
