@@ -99,6 +99,11 @@ runk sim-only tcu_test 200000
 # -> spreads INST_TCU_WMMA across all warps, filling instr_class_cg_tcu cp_warp bins
 # (tcu_test single-warp only hit one wis). Deterministic exact int result per tile.
 runk sim-only tcu_mt 200000
+# vote_shfl: warp-collective VOTE (vx_vote_all/any/uni/ballot) + SHFL (vx_shfl_up/down/
+# bfly/idx) custom-0 ops -> the ONLY source of ALU_TYPE_OTHER (VX_alu_int.sv:193
+# `xtype==3`), the last uncovered ALU condition term. Multi-core-aware, printf-free,
+# deterministic -> byte-exact vs SimX. Closes the 4 xtype lane conditions.
+runk sim-only vote_shfl 200000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
