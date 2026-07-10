@@ -14,19 +14,20 @@
 |---|---|---|
 | **Functional** (covergroup, type-level) | **100.00%** (17 types) | 92.48% (50 types) |
 | **Line / Statement** | **97.05%** (4,312/4,443) | **96.19%** (14,703/15,284) |
-| **Branches** | 91.13% (2,580/2,831) | 89.68% (9,061/10,103) |
-| **Conditions** | 75.39% (236/313) | 69.57% (821/1,180) |
-| **Toggles** | 78.62% (334,507/425,432) | 74.25% (927,924/1,249,674) |
-| **Assertions** | 93.07% (121/130) | 73.96% (267/361) |
+| **Branches** | 91.16% (2,581/2,831) | 89.68% (9,061/10,103) |
+| **Conditions** | 76.35% (239/313) | 69.57% (821/1,180) |
+| **Toggles** | 78.65% (334,632/425,432) | 74.25% (927,924/1,249,674) |
+| **Assertions** | 93.79% (121/129) | 73.96% (267/361) |
 | **Directives** (SVA cover) | **100.00%** (5/5) | **100.00%** (5/5) |
-| **Total (filtered)** | **90.72%** | **85.16%** |
+| **Total (filtered)** | **91.00%** | **85.16%** |
 | Instances | 2,247 | 8,252 |
 | Tests | 43 / 43 pass | 40 / 42 pass (2 SimX-seed) |
 
 *Total is Questa's unweighted mean of the enabled coverage categories (each weighted
-1/7, independent of bin count). It rose from 79.20%→**90.72%** (1CL) / 75.11%→85.16% (2CL)
-via **three directed tests** (`vote_shfl`, `wide_stress`, throttled `vecadd_lite`) plus
-**config-aware structural exclusions** — never by waiving reachable logic (§4).*
+1/7, independent of bin count). It rose from 79.20%→**91.00%** (1CL) / 75.11%→85.16% (2CL)
+via **directed tests** (`vote_shfl`, `wide_stress`, `div_edge`, throttled + read-flooded
+memory tests) plus **config-aware structural exclusions** — never by waiving reachable
+logic (§4).*
 
 ---
 
