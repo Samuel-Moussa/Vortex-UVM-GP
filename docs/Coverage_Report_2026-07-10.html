@@ -111,13 +111,13 @@
     <div class="card">
       <h4><span class="tag">1CL / 1C / 4W / 4T</span> — primary</h4>
       <div class="row"><span class="k">Functional (covergroup)</span><span class="v pass">100.00%</span></div>
-      <div class="row"><span class="k">Line / Statement</span><span class="v pass">96.55%</span></div>
-      <div class="row"><span class="k">Branches</span><span class="v">90.21%</span></div>
-      <div class="row"><span class="k">Conditions</span><span class="v">73.65%</span></div>
+      <div class="row"><span class="k">Line / Statement</span><span class="v pass">96.96%</span></div>
+      <div class="row"><span class="k">Branches</span><span class="v">90.74%</span></div>
+      <div class="row"><span class="k">Conditions</span><span class="v">75.07%</span></div>
       <div class="row"><span class="k">Toggles</span><span class="v below">77.99%</span></div>
       <div class="row"><span class="k">Assertions</span><span class="v">84.78%</span></div>
-      <div class="row"><span class="k">Total (filtered)</span><span class="v">79.20%</span></div>
-      <div class="row"><span class="k">Tests</span><span class="v pass">42 / 42 pass</span></div>
+      <div class="row"><span class="k">Total (filtered)</span><span class="v">79.54%</span></div>
+      <div class="row"><span class="k">Tests</span><span class="v pass">43 / 43 pass</span></div>
       <div class="row"><span class="k">Instances</span><span class="v">2,247</span></div>
     </div>
     <div class="card">
@@ -140,10 +140,10 @@
     <thead><tr><th>Criterion</th><th>Target</th><th class="num">1CL</th><th class="num">2CL</th><th>Status</th></tr></thead>
     <tbody>
       <tr><td>Functional coverage goals met</td><td>full</td><td class="num">100.00%</td><td class="num">92.48%</td><td class="pass">Met (primary)</td></tr>
-      <tr><td>Line (statement) coverage</td><td>&gt; 95%</td><td class="num">96.55%</td><td class="num">96.19%</td><td class="pass">Met — both</td></tr>
+      <tr><td>Line (statement) coverage</td><td>&gt; 95%</td><td class="num">96.96%</td><td class="num">96.19%</td><td class="pass">Met — both</td></tr>
       <tr><td>Toggle coverage, major modules</td><td>&gt; 90%</td><td class="num">77.99%</td><td class="num">74.25%</td><td class="below">Below — structural</td></tr>
       <tr><td>Scoreboard compares RTL vs SimX</td><td>yes</td><td class="num">✓</td><td class="num">✓</td><td class="pass">Met — bidirectional</td></tr>
-      <tr><td>High-priority testcases pass</td><td>all</td><td class="num">42/42</td><td class="num">40/42</td><td class="pass">Met — 2 SimX-only</td></tr>
+      <tr><td>High-priority testcases pass</td><td>all</td><td class="num">43/43</td><td class="num">40/42</td><td class="pass">Met — 2 SimX-only</td></tr>
     </tbody>
   </table>
   </div>
@@ -226,7 +226,7 @@
   <h2>5 · Sign-off summary</h2>
   <ul>
     <li><span class="pass">PASS — Functional coverage</span> closed on the primary config (100%); 2CL residual is a characterized instance-sparsity artifact, not missing coverage.</li>
-    <li><span class="pass">PASS — Line coverage &gt; 95%</span> on both configs (96.55% / 96.19%).</li>
+    <li><span class="pass">PASS — Line coverage &gt; 95%</span> on both configs (96.96% / 96.19%).</li>
     <li><span class="pass">PASS — Bidirectional scoreboard</span> vs SimX; two live fault-injection guards (wrong-value + dropped-store) stay red on injection.</li>
     <li><span class="below">BELOW — Toggle &gt; 90%</span> not met (78% / 74%). Root-caused as structural + realism-limited; reported at true value, not waived to a synthetic pass.</li>
     <li><strong>NOTE — 2 of 84 test-runs</strong> (the fenceless <code>no_fence</code> / <code>full_interrupt</code> riscv-dv tests, multi-cluster only) — root-caused to a per-cluster SimX memory-ordering divergence, not a Vortex defect (§4).</li>

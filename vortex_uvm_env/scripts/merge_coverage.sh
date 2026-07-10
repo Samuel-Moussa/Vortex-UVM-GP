@@ -41,7 +41,11 @@ if [[ -L "${BASH_SOURCE[0]}" ]]; then _SP="$(readlink -f "${BASH_SOURCE[0]}")"; 
 SCRIPTS_DIR="$(cd "$(dirname "$_SP")" && pwd)"
 ENV_ROOT="$(cd "$SCRIPTS_DIR/.." && pwd)"
 RESULTS_ROOT="${ENV_ROOT}/results"
-EXCLUDE_DO="${SCRIPTS_DIR}/coverage_exclude.do"
+# Config-aware exclusions: the .do is GENERATED per-config by gen_coverage_exclude.sh
+# so each config's report only excludes what is structurally dead for THAT topology.
+# Override the config via env, e.g.  COV_NCL=2 COV_NC=2 ./merge_coverage.sh
+GEN_EXCLUDE="${SCRIPTS_DIR}/gen_coverage_exclude.sh"
+COV_NCL="${COV_NCL:-1}"; COV_NC="${COV_NC:-1}"; COV_NW="${COV_NW:-4}"; COV_NT="${COV_NT:-4}"
 COV_DIR="${ENV_ROOT}/cov"
 STAGING="${COV_DIR}/staging"
 OUT_DIR="${COV_DIR}/report"
@@ -103,16 +107,20 @@ printf '  %s\n' "${UCDBS[@]##*/}"
 vcover merge -out "$RAW_UCDB" "${UCDBS[@]}"
 [[ $? -eq 0 && -f "$RAW_UCDB" ]] || { echo "ERROR: vcover merge failed"; exit 1; }
 
-# ---- 3. apply exclusions once, re-save --------------------------------------
-if [[ -f "$EXCLUDE_DO" ]]; then
-    echo "Applying central exclusions: $EXCLUDE_DO"
+# ---- 3. apply CONFIG-AWARE exclusions once, re-save -------------------------
+if [[ -x "$GEN_EXCLUDE" ]]; then
+    EXCLUDE_DO="${COV_DIR}/coverage_exclude.gen.do"
+    echo "Generating config-aware exclusions for ${COV_NCL}CL/${COV_NC}C/${COV_NW}W/${COV_NT}T -> $EXCLUDE_DO"
+    "$GEN_EXCLUDE" "$COV_NCL" "$COV_NC" "$COV_NW" "$COV_NT" > "$EXCLUDE_DO"
     vsim -viewcov "$RAW_UCDB" -c -do "
         do ${EXCLUDE_DO};
         coverage save ${MERGED_UCDB};
-        quit -f;" 2>&1 | grep -Ei "had no effect|error|excluded" || true
+        quit -f;" 2>&1 | tee "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error|excluded" || true
+    HNE=$(grep -c "had no effect" "${COV_DIR}/exclude_apply.log" 2>/dev/null || echo 0)
+    [[ "$HNE" -eq 0 ]] || echo "WARN: $HNE exclusion line(s) had no effect (stale path for this config?)"
     [[ -f "$MERGED_UCDB" ]] || { echo "ERROR: exclusion/save failed"; exit 1; }
 else
-    echo "WARN: $EXCLUDE_DO missing — merging WITHOUT exclusions (cvfpu in denominator!)"
+    echo "WARN: $GEN_EXCLUDE missing/not-exec — merging WITHOUT exclusions (cvfpu in denominator!)"
     cp "$RAW_UCDB" "$MERGED_UCDB"
 fi
 
