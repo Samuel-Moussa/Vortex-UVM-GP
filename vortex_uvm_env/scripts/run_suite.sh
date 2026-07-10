@@ -36,6 +36,9 @@ stage()  {
   fi
 }
 runk() { echo "=== $1 kernel $2 ==="; make "$1" TEST=kernel_launch_test PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/k_$2.log" 2>&1; stage; }
+# runthr: same as runk but with the AXI slave ready-throttle enabled (+AXI_THROTTLE) to
+# exercise the AXI backpressure stability assertions + downstream stall branches.
+runthr() { echo "=== throttled kernel $1 ==="; AXI_THROTTLE=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_thr_$1.log" 2>&1; stage; }
 rund() { echo "=== sim-only $1 ($2) ==="; make sim-only TEST="$1" PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/d_$1.log" 2>&1; stage; }
 # riscv-dv regenerates the generator into a shared work dir guarded by a Questa
 # _lock. A killed/crashed prior gen can leave a STALE lock (dead owner pid) that
@@ -104,6 +107,14 @@ runk sim-only tcu_mt 200000
 # `xtype==3`), the last uncovered ALU condition term. Multi-core-aware, printf-free,
 # deterministic -> byte-exact vs SimX. Closes the 4 xtype lane conditions.
 runk sim-only vote_shfl 200000
+# wide_stress: 256KB sparse working set (1 word/64B line across the span) with 8
+# complementary high-entropy patterns -> flips DATA-address high bits far beyond the
+# 32KB toggle_stress (real toggle gain: aggregate 77.99->78.61%). Multi-core, byte-exact.
+runk sim-only wide_stress 40000000
+# AXI backpressure: vecadd_lite under slave ready wait-states -> covers the AXI
+# aw/w/ar stability assertions (assert_*_stable) + backpressure branches. Byte-exact
+# (throttle only delays ready; data preserved). Assertions 84.78->93.07%.
+runthr vecadd_lite 2000000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000

@@ -50,6 +50,16 @@ class axi_driver extends uvm_driver #(axi_transaction);
     logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]    aw_active_id;
     logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0]  aw_active_addr;
 
+    // Backpressure throttle — plusarg-gated (+AXI_THROTTLE). Default OFF => the
+    // ready signals behave EXACTLY as before (zero effect on the regression suite).
+    // When ON, the slave periodically deasserts awready/wready/arready for one cycle
+    // (ready stays high 3-4 of every 4-5 cycles => bounded latency, no deadlock, data
+    // integrity preserved — AXI permits arbitrary ready latency). This forces
+    // `valid && !ready`, exercising the master-side AXI stability assertions and the
+    // downstream elastic-buffer backpressure conditions/branches — a REAL protocol test.
+    bit throttle_en = 1'b0;
+    int thr_aw = 0, thr_w = 0, thr_ar = 0;
+
     //--------------------------------------------------------------------------
     // Constructor
     //--------------------------------------------------------------------------
@@ -79,6 +89,11 @@ class axi_driver extends uvm_driver #(axi_transaction);
 
         if (!uvm_config_db#(mem_model)::get(this, "", "mem_model", memory)) begin
             `uvm_fatal("AXI_DRV", "Failed to get mem_model from config DB! AXI responder requires memory access.")
+        end
+
+        if ($test$plusargs("AXI_THROTTLE")) begin
+            throttle_en = 1'b1;
+            `uvm_info("AXI_DRV", "AXI_THROTTLE enabled — slave will inject ready wait-states (backpressure test)", UVM_LOW)
         end
     endfunction
 
@@ -142,7 +157,10 @@ class axi_driver extends uvm_driver #(axi_transaction);
         vif.awready <= 1'b0;
         forever begin
             @(posedge vif.clk);
-            vif.awready <= 1'b1;
+            thr_aw = thr_aw + 1;
+            // throttle: hold awready LOW most cycles (pulse high 1-in-4) so an arriving
+            // awvalid reliably sees !awready for >=1 cycle -> exercises stability asserts
+            vif.awready <= throttle_en ? ((thr_aw % 4) == 0) : 1'b1;
             if (vif.awvalid && vif.awready) begin
                 aw_queue.push_back(vif.awid);
                 aw_addr_queue.push_back(vif.awaddr);
@@ -167,11 +185,13 @@ class axi_driver extends uvm_driver #(axi_transaction);
                 aw_active_addr = aw_addr_queue.pop_front();
             end
             
+            thr_w = thr_w + 1;
             if (write_complete_flag) begin
                 vif.wready <= 1'b0;
                 write_complete_flag = 1'b0;
             end else begin
-                vif.wready <= aw_active;
+                // throttle: hold wready LOW (pulse high 1-in-5) while a write is active
+                vif.wready <= aw_active && (throttle_en ? ((thr_w % 5) == 0) : 1'b1);
             end
             
             if (vif.wvalid && vif.wready && aw_active) begin
@@ -236,7 +256,9 @@ class axi_driver extends uvm_driver #(axi_transaction);
             @(posedge vif.clk);
 
             // Cannot accept a new address until previous read finishes
-            vif.arready <= !vif.rvalid;
+            thr_ar = thr_ar + 1;
+            // throttle: hold arready LOW (pulse high 1-in-3) while no read in flight
+            vif.arready <= !vif.rvalid && (throttle_en ? ((thr_ar % 3) == 0) : 1'b1);
 
             if (vif.arvalid && vif.arready) begin
                 ar_id_reg         = vif.arid;
