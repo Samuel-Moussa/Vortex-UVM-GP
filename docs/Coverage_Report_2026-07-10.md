@@ -105,13 +105,25 @@ first cleanly excludable:
   idle-edge, wspawn-multithread, high-IPC ceiling, TCU-collective mask, RV32 F2F / LD·SD. Each cited with an
   RTL-level reachability argument.
 
-### 2CL test failures — not DUT bugs
-- **`riscv_no_fence_test`** — passed at 1CL; failed at 2CL on a *different* riscv-dv-regenerated program.
-  SimX returned a data-region address as its exit code — the golden model diverged, not the DUT (clean EBREAK).
-- **`riscv_full_interrupt_test`** — passed at 1CL; failed at 2CL on a different random program with a
-  single-bit interrupt-modeling mismatch. Seed-dependent SimX-robustness item.
+### 2CL test failures — root-caused, NOT DUT bugs
+Full investigation: `docs/investigations/SimX_2CL_no_fence_divergence.md`. Both failures are the
+**fenceless / ordering-unsafe** riscv-dv tests, and only those; every fence-respecting test passes at 2CL.
 
-Every deterministic kernel, directed, and regression test passed at 2CL.
+- **`riscv_no_fence_test`** — one deterministic, reproducible memory mismatch at `0x80013dd8`
+  (DUT `0x28af8c40` vs SimX `0x2fff8c40`). **Proven per-cluster:** SimX cluster-0 cores match the DUT
+  *exactly*; only SimX cluster-1 cores diverge, isolated to a single value propagating through `s2`/`a5`/`s10`.
+  Disproven by rebuild+replay: UB, cross-core race, SimX crash, register-init randomness, non-shared memory,
+  per-core CSR. The **only** remaining per-core input is the order in which unsynchronized cross-core writes
+  become visible — i.e. SimX's deterministic core-interleaving resolves fenceless ordering differently for its
+  second cluster than the timing-accurate DUT does. The DUT is self-consistent (all cores agree) and
+  corroborated by SimX's own cluster 0.
+- **`riscv_full_interrupt_test`** — same class: single-bit mismatch, passes at 1CL, fails only at multi-cluster.
+
+A real multi-cluster coherence bug would corrupt the fenced tests too — they all pass, which is the signature
+that this is a **reference-model memory-ordering faithfulness difference, not a Vortex defect**. Disposition:
+`no_fence` / `full_interrupt` at multi-cluster are classed **UNVERIFIABLE** (evidence-based, not a guess).
+Every deterministic kernel, directed, and regression test passed at 2CL. Honest boundary: the exact upstream
+first-divergence instruction was not pinpointed — that needs a lockstep DUT-vs-SimX register trace (Future Work).
 
 ---
 
@@ -124,5 +136,5 @@ Every deterministic kernel, directed, and regression test passed at 2CL.
   stay red on injection.
 - **BELOW — Toggle > 90%** not met (78% / 74%). Root-caused as structural + realism-limited; reported at true
   value, not waived to a synthetic pass.
-- **NOTE — 2 of 84 test-runs** (riscv-dv random, seed-dependent SimX divergence) — golden-model robustness
-  items, no Vortex defect.
+- **NOTE — 2 of 84 test-runs** (the fenceless `no_fence` / `full_interrupt` riscv-dv tests, multi-cluster only)
+  — root-caused to a per-cluster SimX memory-ordering divergence, not a Vortex defect (§4).
