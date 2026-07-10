@@ -115,8 +115,9 @@
       <div class="row"><span class="k">Branches</span><span class="v">90.74%</span></div>
       <div class="row"><span class="k">Conditions</span><span class="v">75.07%</span></div>
       <div class="row"><span class="k">Toggles</span><span class="v below">77.99%</span></div>
-      <div class="row"><span class="k">Assertions</span><span class="v">84.78%</span></div>
-      <div class="row"><span class="k">Total (filtered)</span><span class="v">79.54%</span></div>
+      <div class="row"><span class="k">Assertions</span><span class="v">90.00%</span></div>
+      <div class="row"><span class="k">Directives (SVA)</span><span class="v pass">100.00%</span></div>
+      <div class="row"><span class="k">Total (filtered)</span><span class="v pass">90.11%</span></div>
       <div class="row"><span class="k">Tests</span><span class="v pass">43 / 43 pass</span></div>
       <div class="row"><span class="k">Instances</span><span class="v">2,247</span></div>
     </div>
@@ -127,8 +128,9 @@
       <div class="row"><span class="k">Branches</span><span class="v">89.68%</span></div>
       <div class="row"><span class="k">Conditions</span><span class="v">69.57%</span></div>
       <div class="row"><span class="k">Toggles</span><span class="v below">74.25%</span></div>
-      <div class="row"><span class="k">Assertions</span><span class="v">72.35%</span></div>
-      <div class="row"><span class="k">Total (filtered)</span><span class="v">75.11%</span></div>
+      <div class="row"><span class="k">Assertions</span><span class="v">73.96%</span></div>
+      <div class="row"><span class="k">Directives (SVA)</span><span class="v pass">100.00%</span></div>
+      <div class="row"><span class="k">Total (filtered)</span><span class="v pass">85.16%</span></div>
       <div class="row"><span class="k">Tests</span><span class="v">40 / 42 pass <span style="font-weight:400;color:var(--muted)">(2 SimX-seed)</span></span></div>
       <div class="row"><span class="k">Instances</span><span class="v">8,252</span></div>
     </div>
@@ -192,14 +194,17 @@
       diminishing returns.</li>
   </ul>
 
-  <h3>Exclusions applied <span style="font-weight:400;font-size:13px;color:var(--muted)">(audit trail: <code>scripts/coverage_exclude.do</code>)</span></h3>
+  <h3>Config-aware exclusions <span style="font-weight:400;font-size:13px;color:var(--muted)">(generated: <code>scripts/gen_coverage_exclude.sh NCL NC NW NT</code>)</span></h3>
+  <p style="margin:0 0 10px">Exclusions are <strong>generated per-config</strong> so each report drops only what is
+  structurally dead for <em>that</em> topology (verified: 0 &ldquo;had no effect&rdquo;). The <code>is_global</code>
+  barrier condition, for example, is excluded at single-core but <strong>kept in</strong> at &ge;2 cores where it
+  becomes reachable — the opposite of gaming.</p>
   <ul>
     <li><strong>EOTH — cvfpu FP IP:</strong> third-party <code>fpnew_*</code>, divsqrt, common-cells. Not Vortex DUT; verified via SimX softfloat.</li>
-    <li><strong>EOTH — TCU datapath:</strong> Berkeley HardFloat (<code>tcu_fp</code>). TCU is functionally verified (WMMA byte-exact vs SimX) but its exhaustive bf16 matrix math is identity-exercised only.</li>
-    <li><strong>EUR — L2/L3 passthru interfaces:</strong> <code>L2/L3_ENABLE</code> undefined ⇒ <code>PASSTHRU(1)</code>; cache-side bus nets tied off.</li>
-    <li><strong>Waivers — timing-coincidence functional bins:</strong> <code>cross_ipc_stalls</code> double-stall,
-      <code>system_axi_cross</code> idle-edge, wspawn-multithread, high-IPC ceiling, TCU-collective mask,
-      RV32 F2F / LD·SD. Each cited with an RTL-level reachability argument.</li>
+    <li><strong>EOTH — TCU datapath:</strong> Berkeley HardFloat (<code>tcu_fp</code>), enumerated per core. Functionally verified (WMMA byte-exact vs SimX); exhaustive bf16 math identity-exercised only.</li>
+    <li><strong>EUR — L2/L3 passthru interfaces:</strong> <code>L2/L3_ENABLE</code> undefined ⇒ <code>PASSTHRU(1)</code>; cache-side bus nets tied off (enumerated per cluster).</li>
+    <li><strong>EUR — restricted-master AXI (directives + assertions):</strong> the adapter hardwires <code>awlen=0</code> / <code>awburst=FIXED</code> and drives awvalid⊕arvalid (<code>VX_axi_adapter.sv:262-264</code>), so INCR/WRAP bursts, multi-beat, 4 KB-crossing and concurrent aw+ar cannot occur — the SVA mirror of the <code>148ff78</code> covergroup waivers. bresp/rresp errors are unverifiable-class (slave OKAY-only, no SimX equivalent). Idle MEM-interface assertions excluded on AXI builds.</li>
+    <li><strong>Reachable = NOT waived:</strong> the residual assertion misses (AXI backpressure-stability, reset-window, outstanding-txn) and condition misses (cache-flush path) are left honestly uncovered and tracked as <strong>directed-test targets</strong>.</li>
   </ul>
 
   <h3>2CL test failures — root-caused, not DUT bugs</h3>

@@ -1,20 +1,20 @@
 QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
-Start time: 19:04:50 on Jul 10,2026
+Start time: 19:28:53 on Jul 10,2026
 vcover report -summary cov/bank_1CL_1C_4W_4T/merged.ucdb 
 Coverage Report Totals BY INSTANCES: Number of Instances 2247
 
     Enabled Coverage              Bins      Hits    Misses    Weight  Coverage
     ----------------              ----      ----    ------    ------  --------
-    Assertions                     138       117        21         1    84.78%
+    Assertions                     130       117        13         1    90.00%
     Branches                      2831      2569       262         1    90.74%
     Conditions                     313       235        78         1    75.07%
     Covergroups                     17        na        na         1   100.00%
         Coverpoints/Crosses         85        na        na         1        na
             Covergroup Bins        377       374         3         1    99.20%
-    Directives                      16         5        11         1    31.25%
+    Directives                       5         5         0         1   100.00%
     Statements                    4443      4308       135         1    96.96%
     Toggles                     425432    331830     93602         1    77.99%
-Total coverage (filtered view): 79.54%
+Total coverage (filtered view): 90.11%
 
-End time: 19:04:50 on Jul 10,2026, Elapsed time: 0:00:00
+End time: 19:28:54 on Jul 10,2026, Elapsed time: 0:00:01
 Errors: 0, Warnings: 0

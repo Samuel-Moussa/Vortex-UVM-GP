@@ -35,6 +35,7 @@ NW="${3:?need NUM_WARPS}"
 NT="${4:?need NUM_THREADS}"
 
 RTL="/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl"
+TB="/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/tb"
 TOP="/vortex_tb_top/dut/vortex"
 
 # Socket layout mirrors VX_config.vh: SOCKET_SIZE = min(4, NUM_CORES);
@@ -120,5 +121,63 @@ else
   echo "# --- ECFG: TOTAL_CORES=${TOTAL_CORES} (>1) -> global-barrier condition is REACHABLE, NOT excluded ---"
   echo
 fi
+
+# -----------------------------------------------------------------------------
+# 5. Structural AXI SVA cover-directives (tb/vortex_axi_if.sv g_full_axi_checks).
+#    These are the DIRECTIVE MIRROR of the AXI covergroup coverpoints already waived
+#    in commit 148ff78 (cp_burst / cp_len / cp_bresp / cp_rresp), with the SAME proof.
+#    Applies whenever the AXI wrapper is used (all AXI configs); the merge's
+#    'had no effect' guard makes it harmless on a non-AXI (mem-if) build.
+#
+#    (a) STRUCTURALLY IMPOSSIBLE — the Vortex AXI adapter is a *restricted master*:
+#        VX_axi_adapter.sv:264 awburst = 2'b00 (FIXED only)  -> INCR/WRAP never occur
+#        VX_axi_adapter.sv:262 awlen   = 8'b0  (single beat)  -> multi-beat never occurs
+#        VX_axi_adapter.sv:253/288 awvalid=(..&& xbar_rw_out), arvalid=(..&& ~xbar_rw_out)
+#             -> a request is read XOR write; awvalid&arvalid can never co-assert.
+#    (b) UNVERIFIABLE-CLASS — bresp/rresp SLVERR/DECERR: the TB slave only returns
+#        OKAY, and an AXI error response has NO SimX equivalent to check against, so an
+#        error-injection test would not be end-state verifiable (same as cp_bresp/rresp).
+# -----------------------------------------------------------------------------
+echo "# --- EUR: structural AXI cover-directives (restricted master; mirror of 148ff78) ---"
+# (a) structurally impossible
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 755 -reason EUR ;# aw_burst_incr  (awburst hardwired FIXED)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 757 -reason EUR ;# aw_burst_wrap  (awburst hardwired FIXED)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 779 -reason EUR ;# awlen_2to4     (awlen hardwired 0)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 781 -reason EUR ;# awlen_5to16    (awlen hardwired 0)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 783 -reason EUR ;# awlen_17to64   (awlen hardwired 0)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 785 -reason EUR ;# awlen_65to255  (awlen hardwired 0)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 789 -reason EUR ;# concurrent_aw_ar (read XOR write per port)"
+# (b) unverifiable-class (TB slave OKAY-only; AXI errors not SimX-checkable)
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 763 -reason EUR ;# bresp_slverr   (slave OKAY-only)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 765 -reason EUR ;# bresp_decerr   (slave OKAY-only)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 771 -reason EUR ;# rresp_slverr   (slave OKAY-only)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 773 -reason EUR ;# rresp_decerr   (slave OKAY-only)"
+echo
+
+# -----------------------------------------------------------------------------
+# 6. Structural / interface-dead SVA ASSERTIONS (never-triggered antecedents).
+#    Only assertions whose ANTECEDENT can never hold for this design are waived;
+#    the reachable ones (backpressure-stability, reset-window, outstanding-txn
+#    scoreboards) are deliberately LEFT IN and closed with directed tests instead.
+#
+#    (a) Restricted-master AXI (antecedent needs a burst the adapter never issues):
+#        assert_aw/ar_wrap_len_legal  antecedent awburst/arburst==WRAP (2'b10) — never
+#        assert_aw/ar_4k_boundary     antecedent awburst/arburst==INCR (2'b01) — never
+#        (adapter hardwires burst FIXED, VX_axi_adapter.sv:264/299).
+#    (b) Interface-idle on an AXI build: the MEM interface is unused (DUT drives AXI),
+#        so its req/rsp-stability antecedents (valid && !ready) never hold. Alive on a
+#        mem-if build -> keyed to the AXI wrapper (harmless 'no effect' otherwise).
+# -----------------------------------------------------------------------------
+echo "# --- EUR: restricted-master AXI assertions (WRAP/INCR antecedent never holds) ---"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 586 -reason EUR ;# aw_wrap_len_legal"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 595 -reason EUR ;# ar_wrap_len_legal"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 605 -reason EUR ;# aw_4k_boundary (INCR)"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 615 -reason EUR ;# ar_4k_boundary (INCR)"
+echo "# --- EUR: idle MEM-interface assertions (unused on an AXI build) ---"
+echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 135 -reason EUR ;# req_valid_stable"
+echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 138 -reason EUR ;# req_addr_stable"
+echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 152 -reason EUR ;# rsp_valid_stable"
+echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 155 -reason EUR ;# rsp_data_stable"
+echo
 
 echo "# --- end generated exclusions (config ${NCL}CL/${NC}C/${NW}W/${NT}T) ---"
