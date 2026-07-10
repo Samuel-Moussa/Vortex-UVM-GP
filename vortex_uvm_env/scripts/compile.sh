@@ -44,6 +44,11 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     # TCU handling — must remove ALL tcu file references from flist, not just the define
     if [[ $NO_TCU -eq 0 ]]; then
         COMPILE_OPTS="$COMPILE_OPTS +define+$TCU_TYPE"
+        # EXT_TCU_ENABLE is defined inside vortex_rtl.flist for the RTL, but the passive
+        # probes (vx_instr_probe.sv) live in uvm_env.flist and gate their TCU covergroup on
+        # `ifdef EXT_TCU_ENABLE`. Promote it to a GLOBAL compile define so the probe builds
+        # its instr_class_cg_tcu covergroup and can actually sample TCU dispatches.
+        COMPILE_OPTS="$COMPILE_OPTS +define+EXT_TCU_ENABLE=1"
         RTL_FLIST="vortex_rtl.flist"
         print_info "TCU: enabled ($TCU_TYPE)"
     else
