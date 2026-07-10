@@ -213,9 +213,52 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
         }
     endgroup
 
-    // ---- FPU / TCU (no op-decode in this probe) -----------------------------
+    // ---- FPU (sub-op decode — Phase 2) --------------------------------------
+    // op_type is the INST_FPU_* sub-opcode (VX_gpu_pkg.sv:349-361). Every RV F/D
+    // op maps to one of these 13 codes; F2I/F2U/I2F/U2F/CMP/F2F/MISC further split
+    // on fmt/frm inside the FPU, but op_type is the coverage-relevant class here.
+    covergroup fpu_class_cg with function sample(
+        logic [INST_ALU_BITS-1:0] op_type,   // shared-width op_type field
+        int                       active_thr,
+        logic [ISSUE_WIS_W-1:0]   wis
+    );
+        option.per_instance = 1;
+        option.name         = "instr_class_cg_fpu";
+
+        cp_fpu_op : coverpoint op_type {
+            bins fadd  = { INST_FPU_ADD };    // fadd / fsub (SUB=fmt[1])
+            bins fmul  = { INST_FPU_MUL };
+            bins fmadd = { INST_FPU_MADD };   // fmadd / fmsub
+            bins fnmadd= { INST_FPU_NMADD };  // fnmadd / fnmsub
+            bins fdiv  = { INST_FPU_DIV };
+            bins fsqrt = { INST_FPU_SQRT };
+            bins f2i   = { INST_FPU_F2I };    // fcvt.w.s / fcvt.l.s
+            bins f2u   = { INST_FPU_F2U };    // fcvt.wu.s / fcvt.lu.s
+            bins i2f   = { INST_FPU_I2F };    // fcvt.s.w / fcvt.s.l
+            bins u2f   = { INST_FPU_U2F };    // fcvt.s.wu / fcvt.s.lu
+            bins fcmp  = { INST_FPU_CMP };    // feq / flt / fle
+            bins fmisc = { INST_FPU_MISC };   // sgnj/class/fmv/fmin/fmax
+            // F2F = float<->double conversion (fcvt.s.d / fcvt.d.s). Requires the
+            // D extension. The primary RV32 build compiles kernels rv32imaf (F only,
+            // no D → soft-double libcalls, never an fcvt.d hardware op); RV64 builds
+            // rv64imafd. Config-aware waiver: F2F is reachable only on a D-enabled
+            // (RV64) build, mirroring the LSU LD/SD RV64-only waiver above.
+            ignore_bins rv32_no_f2f = { INST_FPU_F2F } with (PROBE_XLEN == 32);
+            bins f2f   = { INST_FPU_F2F };    // fcvt.s.d / fcvt.d.s (RV64/D only)
+        }
+
+        cp_active_threads : coverpoint active_thr {
+            bins one_divergent = { 1 };
+            bins partial[]     = { [2 : SIMD_W-1] };
+            bins uniform       = { SIMD_W };
+        }
+
+        cp_warp : coverpoint wis;
+    endgroup
+
+    // ---- TCU (no op-decode: only INST_TCU_WMMA exists) ----------------------
     // Shared type: divergence + warp distribution only. The class name is set
-    // per instance via the constructor argument. Adding an INST_FPU_* / INST_TCU_*
+    // per instance via the constructor argument. Adding an INST_TCU_*
     // op coverpoint later is a clean extension if you want sub-opcode detail.
     covergroup noop_class_cg (string cls) with function sample(
         int                     active_thr,
@@ -282,10 +325,11 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
             end
 
             else if (gi == C_FPU) begin : g_fpu
-                noop_class_cg cg = new("fpu");
+                fpu_class_cg cg = new();
                 always @(posedge clk) begin
                     if (!reset && dispatch_if[gi].valid && dispatch_if[gi].ready) begin
                         cg.sample(
+                            dispatch_if[gi].data.op_type,
                             $countones(dispatch_if[gi].data.tmask),
                             dispatch_if[gi].data.wis
                         );
