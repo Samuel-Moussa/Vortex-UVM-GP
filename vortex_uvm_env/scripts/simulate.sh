@@ -71,7 +71,12 @@ if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
     SIM_OPTS="$SIM_OPTS +NUM_STRESS_ITER=$STRESS_ITER"
 fi
 
-
+# AXI backpressure test — env AXI_THROTTLE=1 makes the AXI slave inject ready
+# wait-states (read by axi_driver.sv $test$plusargs). Exercises the AXI stability
+# assertions + downstream backpressure conditions/branches. Default unset = OFF.
+if [[ -n "${AXI_THROTTLE:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +AXI_THROTTLE=$AXI_THROTTLE"
+fi
 
 
 print_info "Test:      $TEST_NAME"
