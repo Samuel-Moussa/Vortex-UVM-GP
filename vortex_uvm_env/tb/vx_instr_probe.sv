@@ -257,20 +257,28 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
     endgroup
 
     // ---- TCU (no op-decode: only INST_TCU_WMMA exists) ----------------------
-    // Shared type: divergence + warp distribution only. The class name is set
-    // per instance via the constructor argument. Adding an INST_TCU_*
-    // op coverpoint later is a clean extension if you want sub-opcode detail.
-    covergroup noop_class_cg (string cls) with function sample(
+    // Divergence + warp distribution only. INST_TCU_WMMA is the single TCU op, so
+    // there is no sub-opcode coverpoint (nothing to decode).
+    //
+    // COLLECTIVE-OP WAIVER (cp_active_threads): WMMA is a warp-COLLECTIVE tensor op
+    // — every lane of the warp contributes a slice of the A/B/D matrix tiles,
+    // indexed by vx_thread_id() (vx_tensor.h:181). It is only well-formed under a
+    // FULL (uniform) thread mask; a partial or single-thread mask would drop lanes
+    // from the collective matrix product, which is not a valid WMMA (structurally
+    // analogous to the wspawn multi-thread waiver in sfu_class_cg). tcu_test +
+    // tcu_mt only ever produce uniform-mask WMMA. Waive one_divergent + partial;
+    // cp_warp (which warp issued) is fully reachable and filled by tcu_mt.
+    covergroup tcu_class_cg with function sample(
         int                     active_thr,
         logic [ISSUE_WIS_W-1:0] wis
     );
         option.per_instance = 1;
-        option.name         = $sformatf("instr_class_cg_%s", cls);
+        option.name         = "instr_class_cg_tcu";
 
         cp_active_threads : coverpoint active_thr {
-            bins one_divergent = { 1 };
-            bins partial[]     = { [2 : SIMD_W-1] };
-            bins uniform       = { SIMD_W };
+            ignore_bins collective_one_divergent = { 1 };            // WMMA needs full warp
+            ignore_bins collective_partial       = { [2 : SIMD_W-1] };
+            bins uniform                          = { SIMD_W };
         }
 
         cp_warp : coverpoint wis;
@@ -345,7 +353,7 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
                 // bins) inflating the functional denominator. Only build it when
                 // TCU is actually enabled.
 `ifdef EXT_TCU_ENABLE
-                noop_class_cg cg = new("tcu");
+                tcu_class_cg cg = new();
                 always @(posedge clk) begin
                     if (!reset && dispatch_if[gi].valid && dispatch_if[gi].ready) begin
                         cg.sample(
