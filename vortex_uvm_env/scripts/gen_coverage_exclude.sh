@@ -178,6 +178,8 @@ echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 135 -reason EU
 echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 138 -reason EUR ;# req_addr_stable"
 echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 152 -reason EUR ;# rsp_valid_stable"
 echo "coverage exclude -srcfile ${TB}/vortex_mem_if.sv -linerange 155 -reason EUR ;# rsp_data_stable"
+echo "# --- EUR: b_valid_stable unreachable — adapter hardwires m_axi_bready=1'b1 (VX_axi_adapter.sv:313) ---"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 374 -reason EUR ;# b_valid_stable (bready always 1)"
 echo
 
 echo "# --- end generated exclusions (config ${NCL}CL/${NC}C/${NW}W/${NT}T) ---"

@@ -78,6 +78,12 @@ if [[ -n "${AXI_THROTTLE:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +AXI_THROTTLE=$AXI_THROTTLE"
 fi
 
+# AXI read-flood test — env AXI_FLOOD=1 makes the AXI slave stream read responses
+# back-to-back so the DUT deasserts rready (exercises r_valid/r_data stable). OFF by default.
+if [[ -n "${AXI_FLOOD:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +AXI_FLOOD=$AXI_FLOOD"
+fi
+
 
 print_info "Test:      $TEST_NAME"
 print_info "Config:    ${NUM_CLUSTERS}CL ${NUM_CORES}C ${NUM_WARPS}W ${NUM_THREADS}T"

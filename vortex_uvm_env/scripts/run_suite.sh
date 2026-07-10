@@ -39,6 +39,9 @@ runk() { echo "=== $1 kernel $2 ==="; make "$1" TEST=kernel_launch_test PROGRAM_
 # runthr: same as runk but with the AXI slave ready-throttle enabled (+AXI_THROTTLE) to
 # exercise the AXI backpressure stability assertions + downstream stall branches.
 runthr() { echo "=== throttled kernel $1 ==="; AXI_THROTTLE=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_thr_$1.log" 2>&1; stage; }
+# runflood: AXI slave streams read responses back-to-back (+AXI_FLOOD) -> forces DUT
+# rready backpressure to exercise assert_r_valid_stable / assert_r_data_stable.
+runflood() { echo "=== flood kernel $1 ==="; AXI_FLOOD=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_flood_$1.log" 2>&1; stage; }
 rund() { echo "=== sim-only $1 ($2) ==="; make sim-only TEST="$1" PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/d_$1.log" 2>&1; stage; }
 # riscv-dv regenerates the generator into a shared work dir guarded by a Questa
 # _lock. A killed/crashed prior gen can leave a STALE lock (dead owner pid) that
@@ -115,6 +118,12 @@ runk sim-only wide_stress 40000000
 # aw/w/ar stability assertions (assert_*_stable) + backpressure branches. Byte-exact
 # (throttle only delays ready; data preserved). Assertions 84.78->93.07%.
 runthr vecadd_lite 2000000
+# div_edge: raw div/rem/divu/remu at every ISA corner (div-by-0, INT_MIN/-1, sign combos)
+# -> covers VX_serial_div corner branches. Byte-exact (corners ISA-defined).
+runk sim-only div_edge 2000000
+# AXI read-flood: mem_stress (12-load bursts) with the slave streaming R back-to-back
+# (+AXI_FLOOD) -> DUT deasserts rready -> assert_r_valid/r_data_stable. Byte-exact.
+runflood mem_stress 4000000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
