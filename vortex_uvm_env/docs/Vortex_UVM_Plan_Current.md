@@ -2,6 +2,14 @@
 ### Canonical plan, grounded in a file-by-file audit of branch `Sudky_scoreboard_and_coverage_collector`. Boundary: founding `VERIFICATION_PLAN.md`. Microarchitecture white-box = Future Work. Supersedes earlier drafts.
 
 ---
+## 📌 STATUS 2026-07-10 (session 10) — TWO-CONFIG coverage + 2CL SimX root-cause
+- **Phase 1+2 DONE. Functional 100%** banked @ 1CL/1C (17 cg types); FPU op-decode + TCU multi-warp + timing waivers all closed (`d65441d`,`ff37765`).
+- **Two-config coverage report delivered:** `docs/Coverage_Report_2026-07-10.md` (+ published artifact). Banks: `cov/bank_1CL_1C_4W_4T/` (func 100%/line 96.55%/toggle 78%) and `cov/bank_2CL_2C_4W_4T/` (func 92.48%/line 96.19%/toggle 74.25%). **Per-config, never blended.**
+- **Toggle ceiling root-caused (structural, not gamed):** write-through dcache (`DCACHE_WRITEBACK=0`) + read-only icache → full-line write-data fields never driven; PC/addr high bits realism-limited. Line >95% MET both; toggle >90% NOT met, documented. Exclusions: `scripts/coverage_exclude.do`+`coverage_exclude_2CL.do` (cvfpu/TCU-HardFloat/L2L3-passthru, cited).
+- **2CL `no_fence`+`full_interrupt` fails = NOT a DUT bug** — SimX multi-cluster fenceless-ordering reference divergence. Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md`. Disposition = UNVERIFIABLE class at multi-cluster.
+- **▶ NEXT (user plan):** push code coverage more for 1CL then 2CL. Honest levers: conditions (73.65%/69.57%, unexamined), 2CL functional 92.48%→↑ via multi-core-aware directed kernels (all per-core probes fire), branches. Toggle >90% not honestly reachable single-config.
+
+---
 ## 🚀 NEXT-PHASE ROADMAP (agreed 2026-07-09) — execute in this order
 Baseline at start: **functional 97.01% (357/368)** banked · Gate-0 FULLY closed (SB-DIR bidirectional done) · INV-2 closed.
 
