@@ -104,6 +104,13 @@ else
         cd "$SIMX_REF_DIR" || exit 1
         ARCH_FLAGS="-DNUM_CLUSTERS=${NUM_CLUSTERS} -DNUM_CORES=${NUM_CORES}"
         ARCH_FLAGS="$ARCH_FLAGS -DNUM_WARPS=${NUM_WARPS} -DNUM_THREADS=${NUM_THREADS}"
+        # TCU: the RTL is compiled with EXT_TCU_ENABLE (vortex_rtl.flist), so the SimX
+        # golden model MUST match — otherwise SimX has no tensor_unit, can't decode the
+        # WMMA op, and aborts (run classified UNVERIFIABLE). The simx Makefile keys the
+        # tensor_unit.cpp source off -DEXT_TCU_ENABLE in CONFIGS; the DPI wrapper needs
+        # the same define so its decode path matches. Format (bf16/…) is decoded from the
+        # instruction at runtime, so no separate TCU_BHF define is required for SimX.
+        ARCH_FLAGS="$ARCH_FLAGS -DEXT_TCU_ENABLE"
         # Rebuild the SimX CORE objects with the per-config macros, not just the DPI
         # wrapper. SimX sizes ibuffers_/etc. at runtime from arch.num_warps() but
         # bounds its issue loops with COMPILE-TIME macros (PER_ISSUE_WARPS,

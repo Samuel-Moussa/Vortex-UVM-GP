@@ -89,6 +89,12 @@ runk sim-only mem_zero 400000
 # cycle). Note: empirically the AXI beats do not land on the busy toggle (pipeline gap +
 # busy=~no_pending keeps AXI in the busy state) -> documents that gap; cheap fast run.
 runk sim-only axi_edge 50000
+# tcu_test: single warp-collective WMMA (INST_TCU_WMMA) -> exercises + VERIFIES the Tensor
+# Core Unit (VX_tcu_unit + BHF bf16 datapath) vs SimX's tensor_unit. Requires the SimX DPI
+# built with -DEXT_TCU_ENABLE (prepare.sh) and the probe built with global +define+
+# EXT_TCU_ENABLE (compile.sh) so instr_class_cg_tcu samples. A=1.0,B=2.0,C=0 -> exact
+# integer output -> byte-exact compare. Fills instr_class_cg_tcu <uniform>.
+runk sim-only tcu_test 200000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     150000
 rund functional_memory_test functional_mem  150000
