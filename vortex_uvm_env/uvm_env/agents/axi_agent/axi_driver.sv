@@ -60,6 +60,17 @@ class axi_driver extends uvm_driver #(axi_transaction);
     bit throttle_en = 1'b0;
     int thr_aw = 0, thr_w = 0, thr_ar = 0;
 
+    // Read-flood — plusarg-gated (+AXI_FLOOD). Default OFF. When ON, the slave greedily
+    // accepts every AR and streams R responses back-to-back (instead of one-at-a-time),
+    // so a burst of outstanding reads floods the DUT's read-response path faster than it
+    // can drain -> the DUT deasserts m_axi_rready (= rsp_xbar_ready_in, VX_axi_adapter.sv:332)
+    // -> exercises assert_r_valid_stable / assert_r_data_stable (the DUT holding R stable
+    // while IT backpressures). Data is served in-order from a FIFO -> byte-exact preserved.
+    // (b_valid_stable is NOT reachable: the adapter hardwires m_axi_bready=1'b1 @ :313.)
+    bit flood_en = 1'b0;
+    logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0] ar_flood_addr_q[$];
+    logic [vortex_config_pkg::AXI_ID_WIDTH-1:0]   ar_flood_id_q[$];
+
     //--------------------------------------------------------------------------
     // Constructor
     //--------------------------------------------------------------------------
@@ -94,6 +105,10 @@ class axi_driver extends uvm_driver #(axi_transaction);
         if ($test$plusargs("AXI_THROTTLE")) begin
             throttle_en = 1'b1;
             `uvm_info("AXI_DRV", "AXI_THROTTLE enabled — slave will inject ready wait-states (backpressure test)", UVM_LOW)
+        end
+        if ($test$plusargs("AXI_FLOOD")) begin
+            flood_en = 1'b1;
+            `uvm_info("AXI_DRV", "AXI_FLOOD enabled — slave streams read responses back-to-back (forces DUT rready backpressure)", UVM_LOW)
         end
     endfunction
 
@@ -250,6 +265,10 @@ class axi_driver extends uvm_driver #(axi_transaction);
     // AR/R Channels: Accept Address & Send Read Data Response
     //--------------------------------------------------------------------------
     virtual task handle_ar_r_channels();
+        if (flood_en) begin
+            handle_ar_r_flood();   // aggressive back-to-back streaming (never returns)
+            return;
+        end
         vif.arready <= 1'b0;
         vif.rvalid  <= 1'b0;
         forever begin
@@ -286,7 +305,42 @@ class axi_driver extends uvm_driver #(axi_transaction);
             end
         end
     endtask
-    
+
+    //--------------------------------------------------------------------------
+    // AR/R flood: greedily accept every AR (arready always high) and stream single-beat
+    // R responses back-to-back from an in-order FIFO. When the DUT deasserts rready
+    // (rvalid && !rready) the current beat is HELD stable -> exercises r_valid/r_data
+    // stable. Data served in program order per FIFO -> byte-exact vs SimX preserved.
+    //--------------------------------------------------------------------------
+    virtual task handle_ar_r_flood();
+        vif.arready <= 1'b1;   // always accept addresses (flood)
+        vif.rvalid  <= 1'b0;
+        forever begin
+            @(posedge vif.clk);
+            vif.arready <= 1'b1;
+            if (vif.arvalid && vif.arready) begin
+                ar_flood_addr_q.push_back(vif.araddr);
+                ar_flood_id_q.push_back(vif.arid);
+            end
+            // Advance the response only when the current beat was accepted (rready) or
+            // no beat is in flight. While (rvalid && !rready) we fall through and hold
+            // rvalid/rdata/rid stable — that is the case the stability assertions check.
+            if (!vif.rvalid || vif.rready) begin
+                if (ar_flood_addr_q.size() > 0) begin
+                    automatic logic [vortex_config_pkg::AXI_ADDR_WIDTH-1:0] a = ar_flood_addr_q.pop_front();
+                    vif.rvalid <= 1'b1;
+                    vif.rid    <= ar_flood_id_q.pop_front();
+                    vif.rdata  <= memory.read_line(a);
+                    vif.rresp  <= 2'b00;
+                    vif.rlast  <= 1'b1;   // Vortex AR is single-beat (arlen=0)
+                    num_reads_served++;
+                end else begin
+                    vif.rvalid <= 1'b0;
+                end
+            end
+        end
+    endtask
+
     //--------------------------------------------------------------------------
     // Report Phase
     //--------------------------------------------------------------------------
