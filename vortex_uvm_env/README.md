@@ -1,69 +1,89 @@
-# Vortex GPGPU UVM Verification Environment
+# Vortex UVM Verification Environment
 
-## Introduction
+The UVM environment for the Vortex RISC-V GPGPU. For the project overview,
+architecture, and results, see the [top-level README](../README.md); this file
+is the build-and-extend reference for the environment itself.
 
-This directory contains a complete UVM (Universal Verification Methodology) verification environment for the Vortex GPGPU. It is designed to be a reusable, modular, and scalable solution for verifying the functional correctness of the Vortex RTL design.
+## Method
 
-## Features
+Black-box **end-state equivalence**: the DUT and the **SimX** C++ golden model
+run the same program from the same configuration; the scoreboard compares the
+final memory, console, and exit state over a DPI-C bridge.
 
-- **Modular UVM Agents**: Separate agents for each interface (custom memory, AXI4, DCR, host).
-- **Reference Model Integration**: Scoreboard with DPI-C integration for the `simx` C++ behavioral model.
-- **Comprehensive Test Suite**: Includes smoke tests, functional tests, and stress tests.
-- **Multi-Simulator Support**: Scripts for Verilator (open-source) and commercial simulators (VCS/Questa).
-- **Functional Coverage**: Built-in coverage collectors for key GPU features.
+## Prerequisites
 
-## Directory Structure
+- **QuestaSim 2021.2+** (the flow auto-detects `vsim`).
+- A **RISC-V toolchain** — `riscv{32,64}-unknown-elf` GCC/LLVM 14.
+- A **C++17 compiler** to build the SimX model into `simx_model.so`.
+- Host: Ubuntu 22.04 (validated under WSL2).
 
-Please refer to the `FILE_TREE.md` document for a detailed breakdown of the directory structure.
+## Running
 
-## Getting Started
+All flows go through the `Makefile`, which drives four sourced scripts —
+`run.sh → prepare.sh → compile.sh → simulate.sh`:
 
-### Prerequisites
+```bash
+# Full flow: build SimX DPI lib, compile RTL + UVM, simulate.
+make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite TIMEOUT=200000
 
-- A SystemVerilog simulator that supports UVM (e.g., Verilator, Synopsys VCS, Mentor Questa).
-- The Vortex GPGPU source code.
-- A C++ compiler for building the `simx` reference model and DPI-C wrapper.
+# Re-run without recompiling the RTL.
+make sim-only TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite
+
+# Waveform debug in the Questa GUI.
+make gui TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite
+
+# Full regression suite (48 runs) + coverage merge.
+bash scripts/run_suite.sh
+
+make help          # all targets and flags
+```
+
+`PROGRAM_NAME=<kernel>` resolves an ELF under `../Vortex/tests/kernel/<name>/`.
+`riscv_*` programs are generated and compiled through the riscv-dv pipeline in
+`prepare.sh` (see [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md)).
 
 ### Configuration
 
-1.  **Set up the Vortex source**: Ensure the `VORTEX_HOME` environment variable points to the root of the Vortex repository.
-2.  **Configure paths**: Update the simulation scripts in the `sim/` directory to point to your simulator installation and the Vortex source code.
+One parameter set drives the RTL (`+define+`), SimX (`-D` macros, recompiled per
+config), and the testbench (runtime `+plusargs`). Elaboration asserts abort at
+time 0 if the testbench topology disagrees with the compiled DUT.
 
-### Running a Smoke Test with Verilator
+```bash
+make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite \
+         CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 INTERFACE=axi TIMEOUT=200000
+```
 
-1.  **Navigate to the Verilator simulation directory**:
+## Structure
 
-    ```bash
-    cd sim/verilator
-    ```
+```
+vortex_uvm_env/
+├── tb/                 vortex_tb_top.sv, interfaces, binds, elaboration asserts
+├── uvm_env/
+│   ├── agents/         axi · mem · dcr · host · status
+│   ├── ref_model/      SimX DPI bridge (simx_dpi.cpp, simx_pkg.sv)
+│   ├── vortex_scoreboard.sv          end-state equivalence vs SimX
+│   ├── vortex_coverage_collector.sv
+│   └── vortex_config.sv              config derived from RTL params
+├── uvm_tests/          test library (extend vortex_base_test)
+├── scripts/            run.sh, prepare.sh, compile.sh, simulate.sh, run_suite.sh,
+│                       gen_coverage_exclude.sh, merge_coverage.sh
+├── cov/                per-config coverage banks (bank_1CL…, bank_2CL…)
+└── docs/               plan, coverage model, riscv-dv guide, fix writeups
+```
 
-2.  **Compile the testbench**:
+## Extending
 
-    ```bash
-    ./compile.sh
-    ```
+**Add a test** — create a file in `uvm_tests/` extending `vortex_base_test`,
+build/start a sequence in `run_phase`, and register it in the regression list.
 
-3.  **Run the simulation**:
+**Add a sequence** — create a file under `uvm_env/sequences/` extending
+`vortex_base_sequence`, randomize transactions in `body`, and send them to the
+target agent's sequencer.
 
-    ```bash
-    ./run.sh
-    ```
+## Documentation
 
-    This will run the `smoke_test` and generate a waveform file (`simx.vcd`) for debugging.
-
-## Extending the Environment
-
-### Adding a New Test
-
-1.  Create a new test file in the `uvm_tests/` directory, extending from `vortex_base_test`.
-2.  In the `run_phase` of your new test, create and start a sequence.
-3.  Add your new test to the regression test list (`uvm_tests/regression_test_list.f`).
-
-### Adding a New Sequence
-
-1.  Create a new sequence file in the `uvm_env/sequences/` directory, extending from `vortex_base_sequence`.
-2.  In the `body` of your sequence, create and randomize transactions, and send them to the appropriate agent's sequencer.
-
-## Verification Plan
-
-For a detailed overview of the verification strategy, testcases, and coverage goals, please refer to the `VERIFICATION_PLAN.md` document.
+- [`docs/VERIFICATION_PLAN.md`](docs/VERIFICATION_PLAN.md) — strategy, testcases, coverage goals
+- [`docs/Coverage_Model_Reference.md`](docs/Coverage_Model_Reference.md) — every covergroup and its rationale
+- [`docs/INTERFACE_MAPPING.md`](docs/INTERFACE_MAPPING.md) — RTL interface → UVM agent mapping
+- [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md) — constrained-random pipeline
+- [`docs/fixes/`](docs/fixes/) — per-issue root-cause writeups
