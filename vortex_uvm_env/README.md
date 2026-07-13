@@ -40,7 +40,7 @@ make help          # all targets and flags
 
 `PROGRAM_NAME=<kernel>` resolves an ELF under `../Vortex/tests/kernel/<name>/`.
 `riscv_*` programs are generated and compiled through the riscv-dv pipeline in
-`prepare.sh` (see [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md)).
+`prepare.sh` (see [`docs/RISCV_DV_GUIDE.md`](../docs/RISCV_DV_GUIDE.md)).
 
 ### Configuration
 
@@ -82,8 +82,8 @@ target agent's sequencer.
 
 ## Documentation
 
-- [`docs/VERIFICATION_PLAN.md`](docs/VERIFICATION_PLAN.md) — strategy, testcases, coverage goals
-- [`docs/Coverage_Model_Reference.md`](docs/Coverage_Model_Reference.md) — every covergroup and its rationale
-- [`docs/INTERFACE_MAPPING.md`](docs/INTERFACE_MAPPING.md) — RTL interface → UVM agent mapping
-- [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md) — constrained-random pipeline
-- [`docs/fixes/`](docs/fixes/) — per-issue root-cause writeups
+- [`docs/VERIFICATION_PLAN.md`](../docs/VERIFICATION_PLAN.md) — strategy, testcases, coverage goals
+- [`docs/Coverage_Model_Reference.md`](../docs/Coverage_Model_Reference.md) — every covergroup and its rationale
+- [`docs/INTERFACE_MAPPING.md`](../docs/INTERFACE_MAPPING.md) — RTL interface → UVM agent mapping
+- [`docs/RISCV_DV_GUIDE.md`](../docs/RISCV_DV_GUIDE.md) — constrained-random pipeline
+- [`docs/fixes/`](../docs/fixes/) — per-issue root-cause writeups
