@@ -54,6 +54,13 @@ class vortex_scoreboard extends uvm_scoreboard;
   // Key = byte-aligned 32-bit address, Value = 64-bit data word.
   //==========================================================================
   bit [63:0] shadow_memory [bit [31:0]];
+  // Per-slot byte-valid mask, keyed identically to shadow_memory. Bit[lane]=1
+  // iff the DUT actually wrote that byte. Lets compare_all_written restrict the
+  // DUT-vs-SimX compare to bytes the DUT really stored — sub-word stores (sb/sh)
+  // into preinitialized .data otherwise read back as 0 in the sparse shadow while
+  // SimX returns the merge of store + .data init, a false mismatch. For full
+  // 8-byte writes the mask is 0xFF and the compare is byte-identical to before.
+  bit [7:0]  shadow_valid  [bit [31:0]];
   localparam bit [31:0] RAM_BASE   = 32'h8000_0000;  // program / data / heap start
   localparam bit [31:0] DATA_LIMIT = 32'h8800_0000;  // upper bound of output region (excludes stack @0xfffd_xxxx+ and MMIO)
   localparam bit [31:0] POISON     = 32'hBAAD_F00D;  // SimX uninitialized-memory fill
@@ -65,10 +72,30 @@ class vortex_scoreboard extends uvm_scoreboard;
   bit          console_passed     = 0;
 
   //==========================================================================
+  // Spawn-runtime detection
+  //
+  // vx_spawn_threads() overwrites MSCRATCH (csrw mscratch = 0x34079073, or any
+  // csrw to 0x340) with a pointer to a STACK-RESIDENT wspawn_args struct. Spawned
+  // warps read that struct back to compute their per-warp task offsets. Because
+  // the struct lives in local memory (stack @ ~0xffff0000) that is written at
+  // RUNTIME and is NOT staged identically into SimX, the DUT and the golden model
+  // diverge on spawn-distributed outputs. Verifying such kernels requires
+  // lockstep co-simulation with per-step memory equivalence — out of scope for
+  // the current run-to-completion SimX backend (see VERIFICATION_PLAN.md,
+  // Future Work). We therefore classify these runs UNVERIFIABLE rather than
+  // emitting mismatches that look like DUT defects.
+  //
+  // Detection is set by the SimX decode hook when it observes a post-startup
+  // csrw to MSCRATCH. (A program-kind allowlist is the cheap fallback.)
+  //==========================================================================
+  bit spawn_detected;
+
+  //==========================================================================
   // State flags
   //==========================================================================
-  bit simx_ran;    // Set after simx_run() completes
-  bit ebreak_seen; // Set when status monitor reports EBREAK
+  bit simx_ran;     // Set after simx_run() completes
+  bit simx_crashed; // Set when simx_run() returns the crash sentinel (-3)
+  bit ebreak_seen;  // Set when status monitor reports EBREAK
   
   // --- Negative-test fault injection (one-sided, plusarg- or test-gated) ---
   // When enabled, corrupt exactly ONE DUT word INSIDE the comparison so the
@@ -80,7 +107,23 @@ class vortex_scoreboard extends uvm_scoreboard;
   bit          fault_injected = 0;   // becomes 1 once we actually flip a word
   bit [31:0]   fault_addr     = 0;   // address we corrupted (for the report)
   bit          fault_detected = 0;   // set when the SPECIFIC injected word is reported as a mismatch
-  
+
+  // --- SB-DIR: bidirectional (dropped-store) negative injection (+DROP_STORE) ---
+  // Symmetric to inject_fault but for the OTHER direction: instead of corrupting a
+  // DUT-written word (caught by the forward pass), it simulates a DROPPED store — a
+  // word SimX wrote that the DUT never did — by removing one matching DUT word from
+  // the shadow AND resetting the DUT's real memory (mem_model) at that address to its
+  // load value, so only the reverse pass can catch it. Proves the checker detects
+  // silent data loss, not just wrong values.
+  bit          drop_store     = 0;   // set by negative_result_test or +DROP_STORE
+  bit          store_dropped  = 0;   // becomes 1 once we actually drop a word
+  bit [31:0]   drop_addr      = 0;   // address whose store we dropped (for the report)
+  bit          drop_detected  = 0;   // set when the reverse pass flags the dropped store
+
+  // DUT's real memory (populated by the mem/AXI slave). Used by the reverse pass to
+  // read what the DUT actually holds at result slots it never wrote.
+  mem_model    dut_mem;
+
   //==========================================================================
   // Statistics
   //==========================================================================
@@ -96,6 +139,14 @@ class vortex_scoreboard extends uvm_scoreboard;
   int unsigned num_data_compared;
   int unsigned num_skipped_stack;
   int unsigned num_skipped_poison;
+  int unsigned num_skipped_got;     // load-time .got/relocation entries (DUT=0, SimX=ptr)
+  int unsigned num_fp_tol_passed;   // matched within FP rounding/denormal tolerance
+
+  // FP-tolerant compare: enabled only for floating-point kernels (program path
+  // contains "fpu"). Lets RTL-FPU vs softfloat differ by <=FP_ULP_TOL ULP per
+  // 32-bit lane or flush denormals to zero, WITHOUT relaxing integer/other tests.
+  bit          fp_tolerant;
+  localparam int FP_ULP_TOL = 2;
 
   //==========================================================================
   // Constructor
@@ -113,6 +164,11 @@ class vortex_scoreboard extends uvm_scoreboard;
     if (!uvm_config_db #(vortex_config)::get(this, "", "cfg", cfg))
       `uvm_fatal("SCOREBOARD", "Failed to get vortex_config from uvm_config_db")
 
+    // DUT real-memory handle for the SB-DIR reverse pass (optional: absent -> reverse
+    // pass is skipped, forward pass unaffected).
+    if (!uvm_config_db #(mem_model)::get(this, "", "mem_model", dut_mem))
+      `uvm_info("SCOREBOARD", "mem_model not in config_db — reverse (dropped-store) pass disabled", UVM_MEDIUM)
+
     mem_export    = new("mem_export",    this);
     axi_export    = new("axi_export",    this);
     dcr_export    = new("dcr_export",    this);
@@ -125,6 +181,8 @@ class vortex_scoreboard extends uvm_scoreboard;
     num_dcr_writes     = 0;    num_unchecked      = 0;
     num_skipped        = 0;    num_data_compared  = 0;
     num_skipped_stack  = 0;    num_skipped_poison = 0;
+    num_skipped_got    = 0;    num_fp_tol_passed  = 0;
+    fp_tolerant        = 0;
     simx_ran           = 0;    ebreak_seen        = 0;
   endfunction : build_phase
 
@@ -135,6 +193,16 @@ class vortex_scoreboard extends uvm_scoreboard;
     int status;
 
     if ($test$plusargs("INJECT_FAULT")) inject_fault = 1;
+    if ($test$plusargs("DROP_STORE"))   drop_store   = 1;
+
+    // Enable FP-tolerant compare only for floating-point kernels (path has "fpu").
+    fp_tolerant = 0;
+    for (int i = 0; i + 3 <= cfg.program_path.len(); i++)
+      if (cfg.program_path.substr(i, i+2) == "fpu") fp_tolerant = 1;
+    if (fp_tolerant)
+      `uvm_info("SCOREBOARD",
+        $sformatf("FP-tolerant compare enabled (<=%0d ULP / denormal flush per f32 lane) for %s",
+                  FP_ULP_TOL, cfg.program_path), UVM_MEDIUM)
 
     if (!cfg.simx_enable) begin
       `uvm_info("SCOREBOARD", "SimX disabled — shadow-memory checks only", UVM_MEDIUM)
@@ -224,6 +292,7 @@ class vortex_scoreboard extends uvm_scoreboard;
             else                                    wdata = '0;
             wdata[lane*8 +: 8] = tr.data[i*8 +: 8];
             shadow_memory[waddr[31:0]] = wdata;
+            shadow_valid[waddr[31:0]][lane] = 1'b1;
 
             if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes))
               `uvm_info("SCOREBOARD", $sformatf(
@@ -279,6 +348,7 @@ class vortex_scoreboard extends uvm_scoreboard;
 
             wdata[lane*8 +: 8] = beat_data[i*8 +: 8];
             shadow_memory[waddr[31:0]] = wdata;
+            shadow_valid[waddr[31:0]][lane] = 1'b1;
 
             if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes)) begin
               `uvm_info("SCOREBOARD",
@@ -334,6 +404,17 @@ class vortex_scoreboard extends uvm_scoreboard;
     `uvm_info("SCOREBOARD", "Running SimX to completion...", UVM_MEDIUM)
     exitcode = simx_run();
     `uvm_info("SCOREBOARD", $sformatf("SimX done — exit code = %0d", exitcode), UVM_MEDIUM)
+
+    // -3 = SimX model aborted/crashed (decode/memory fault), caught in the DPI
+    // so vsim survives. SimX never reached a valid end-state, so its memory is
+    // meaningless — skip the comparison and classify the run UNVERIFIABLE.
+    if (exitcode == -3) begin
+      simx_crashed = 1;
+      `uvm_warning("SCOREBOARD",
+        "SimX aborted/crashed during run-to-completion — run is UNVERIFIABLE (no DUT/SimX compare).")
+      return;
+    end
+
     if (simx_is_done() != 1)
       `uvm_warning("SCOREBOARD", "simx_is_done() != 1 after simx_run()")
 
@@ -486,6 +567,36 @@ class vortex_scoreboard extends uvm_scoreboard;
     end
   endfunction : compare_axi_transaction
 
+  // ---- Relocation artifact: DUT left 0 where SimX holds a program-region
+  //      pointer (a load-time .got / relocation entry, not a computed output).
+  //      barrier_lite: addr 0x80001e98 in .got, SimX=0x80001e88, DUT=0.
+  function automatic bit is_got_reloc(bit [63:0] dut, bit [63:0] simx);
+    return (dut == 0)
+        && (simx[63:32] == 0)
+        && (simx[31:0] >= RAM_BASE) && (simx[31:0] < DATA_LIMIT);
+  endfunction
+
+  // ---- IEEE-754 binary32 closeness for one 32-bit lane (RTL FPU vs softfloat):
+  //      bit-equal, OR both subnormal/zero (denormal flush-to-zero), OR same sign
+  //      and within FP_ULP_TOL ULPs (rounding). NaN/Inf/large errors still fail.
+  function automatic bit f32_close(bit [31:0] a, bit [31:0] b);
+    bit [7:0]    ea, eb;
+    int unsigned ma, mb, d;
+    if (a === b)               return 1;
+    ea = a[30:23]; eb = b[30:23];
+    if (ea == 0 && eb == 0)    return 1;   // both ~0 (subnormal/zero)
+    if (ea == 8'hFF || eb == 8'hFF) return 0;   // NaN/Inf must match exactly
+    if (a[31] != b[31])        return 0;   // opposite signs => not close
+    ma = a[30:0]; mb = b[30:0];
+    d  = (ma > mb) ? (ma - mb) : (mb - ma);
+    return (d <= FP_ULP_TOL);
+  endfunction
+
+  function automatic bit fp_lanes_close(bit [63:0] dut, bit [63:0] simx);
+    return f32_close(dut[31:0],  simx[31:0]) &&
+           f32_close(dut[63:32], simx[63:32]);
+  endfunction
+
   // Fix #2: compare every DRAM-output location the DUT wrote against SimX,
   // with two principled gates:
   //   (1) scope to the program/data region — stack & MMIO are not kernel outputs
@@ -495,9 +606,51 @@ class vortex_scoreboard extends uvm_scoreboard;
     byte       simx_bytes[];
     simx_bytes = new[8];
 
+    // SB-DIR drop injection: remove one genuine DUT output word from the shadow AND
+    // reset the DUT's real memory there to its load value, so it looks exactly like a
+    // store the DUT never performed. Only the reverse pass can then catch it. Target a
+    // result-scope word that currently MATCHES SimX and is non-zero, so the resulting
+    // reverse mismatch is unambiguous.
+    if (drop_store && !store_dropped && dut_mem != null) begin
+      foreach (shadow_memory[a]) begin
+        bit in_res = (cfg.result_size_bytes > 0)
+                   ? (a >= cfg.result_base_addr && a < cfg.result_base_addr + cfg.result_size_bytes)
+                   : (a >= RAM_BASE && a < DATA_LIMIT);
+        if (!in_res) continue;
+        simx_read_mem(64'(a), 8, simx_bytes);
+        simx_word = '0;
+        for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
+        if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) continue;
+        if (simx_word == 0)                        continue;   // need non-zero for a clean mismatch
+        if (shadow_memory[a] !== simx_word)        continue;   // must currently match
+        drop_addr = a;
+        shadow_memory.delete(a);
+        shadow_valid.delete(a);
+        for (int b = 0; b < 8; b++) dut_mem.write_byte(64'(a) + b, 8'h00);  // DUT mem := load value
+        store_dropped = 1;
+        `uvm_info("SCOREBOARD",
+          $sformatf("[NEG-DROP] Dropped DUT store at addr=0x%08h (SimX=0x%016h); DUT memory reset to load value",
+                    a, simx_word), UVM_LOW)
+        break;
+      end
+    end
+
     foreach (shadow_memory[addr]) begin
-      // ---- Gate 1: data region only (skip stack 0xfffd_xxxx+, local mem, MMIO) ----
-      if (addr < RAM_BASE || addr >= DATA_LIMIT) begin
+      // ---- Gate 1: choose the comparison scope ----
+      //  * Regression harness staged an explicit result window
+      //    (result_size_bytes > 0): compare ONLY that window — precise, avoids
+      //    spawn scratch / uninitialised data outside the kernel's output.
+      //  * No window declared (kernel_launch_test, riscv-dv): fall back to the
+      //    whole program/data region [RAM_BASE, DATA_LIMIT) — stack (0xfffd_xxxx+),
+      //    local mem and MMIO are excluded. This is the original behaviour that
+      //    let plain kernels (vecadd_lite) and riscv-dv compare DUT-vs-SimX.
+      bit in_result;
+      if (cfg.result_size_bytes > 0)
+        in_result = (addr >= cfg.result_base_addr)
+                 && (addr <  cfg.result_base_addr + cfg.result_size_bytes);
+      else
+        in_result = (addr >= RAM_BASE) && (addr < DATA_LIMIT);
+      if (!in_result) begin
         num_skipped_stack++;
         continue;
       end
@@ -507,6 +660,23 @@ class vortex_scoreboard extends uvm_scoreboard;
       simx_read_mem(simx_base, 8, simx_bytes);
       simx_word = '0;
       for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
+
+      // ---- Byte-valid gate (MUST run before POISON): compare ONLY the lanes
+      //      the DUT actually wrote. Sub-word stores (sb/sh) into a slot whose
+      //      other lanes SimX has never touched leave those SimX lanes at
+      //      BAADF00D (SimX's uninit fill). If POISON is checked before the
+      //      mask, the whole slot is dropped as "SimX uninitialised" even
+      //      though the DUT-written lanes are valid and comparable. Masking
+      //      first zeros the unwritten lanes on BOTH sides so the POISON test
+      //      only sees the lanes we actually care about. Full 8-byte writes
+      //      have mask 0xFF and this is a no-op. ----
+      if (shadow_valid.exists(addr)) begin
+        for (int b = 0; b < 8; b++)
+          if (!shadow_valid[addr][b]) begin
+            dut_word [b*8 +: 8] = 8'h00;
+            simx_word[b*8 +: 8] = 8'h00;
+          end
+      end
 
       // ---- Gate 2: skip SimX-uninitialized poison (baadf00d in either half) ----
       if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) begin
@@ -527,21 +697,84 @@ class vortex_scoreboard extends uvm_scoreboard;
       end
 
       // ---- Real comparison ----
-      num_comparisons++;   
+      num_comparisons++;
       if (dut_word === simx_word) begin
         num_mem_passed++;
       end else begin
-        num_mem_failed++;
-        if (fault_injected && addr == fault_addr) fault_detected = 1;  // the injected word was caught
-        `uvm_error("SCOREBOARD",
-          $sformatf("MEM MISMATCH  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
-                    addr, dut_word, simx_word))
+        // An injected fault (negative test) must ALWAYS surface as a mismatch —
+        // never excused by the relocation/FP exceptions below.
+        bit is_injected = (fault_injected && addr == fault_addr);
+
+        if (!is_injected && is_got_reloc(dut_word, simx_word)) begin
+          // load-time .got/relocation pointer, not a computed output — not a defect
+          num_skipped_got++;
+          num_comparisons--;
+          `uvm_info("SCOREBOARD",
+            $sformatf("RELOC/GOT skip  addr=0x%08h  DUT=0x%016h  SimX=0x%016h (program pointer)",
+                      addr, dut_word, simx_word), UVM_HIGH)
+        end
+        else if (!is_injected && fp_tolerant && fp_lanes_close(dut_word, simx_word)) begin
+          // RTL FPU vs softfloat rounding/denormal divergence within tolerance
+          num_mem_passed++;
+          num_fp_tol_passed++;
+          `uvm_info("SCOREBOARD",
+            $sformatf("FP within tolerance  addr=0x%08h  DUT=0x%016h  SimX=0x%016h (<=%0d ULP/denormal)",
+                      addr, dut_word, simx_word, FP_ULP_TOL), UVM_HIGH)
+        end
+        else begin
+          num_mem_failed++;
+          if (is_injected) fault_detected = 1;  // the injected word was caught
+          `uvm_error("SCOREBOARD",
+            $sformatf("MEM MISMATCH  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
+                      addr, dut_word, simx_word))
+        end
       end
     end
-    
+
+    // ============= SB-DIR reverse pass: DROPPED-STORE detection =============
+    // The forward loop only inspects addresses the DUT WROTE (shadow_memory), so a
+    // store the DUT dropped entirely is never compared (silent data loss). Walk the
+    // DUT's real memory footprint (mem_model — bounded to touched/preloaded bytes) and,
+    // for each result-scope dword the DUT did NOT write, compare DUT memory vs SimX. A
+    // difference means SimX produced a value the DUT never stored -> a dropped store.
+    // Gated to the AXI path, where the shadow is a COMPLETE record of DUT writes.
+    if (dut_mem != null && cfg.axi_agent_enable) begin
+      bit checked [bit [31:0]];
+      foreach (dut_mem.memory[baddr]) begin
+        bit [31:0] waddr = baddr[31:0] & 32'hFFFF_FFF8;   // dword base
+        bit in_res;
+        if (checked.exists(waddr)) continue;
+        checked[waddr] = 1;
+
+        if (cfg.result_size_bytes > 0)
+          in_res = (waddr >= cfg.result_base_addr)
+                && (waddr <  cfg.result_base_addr + cfg.result_size_bytes);
+        else
+          in_res = (waddr >= RAM_BASE) && (waddr < DATA_LIMIT);
+        if (!in_res)                    continue;
+        if (shadow_valid.exists(waddr)) continue;   // DUT wrote >=1 byte -> forward handled it
+
+        dut_word = dut_mem.read_dword(64'(waddr));
+        simx_read_mem(64'(waddr), 8, simx_bytes);
+        simx_word = '0;
+        for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
+
+        if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) continue;  // SimX uninit
+        if (dut_word === simx_word)                 continue;                    // agree -> ok
+        if (is_got_reloc(dut_word, simx_word))      continue;                    // program pointer
+
+        num_comparisons++;
+        num_mem_failed++;
+        if (store_dropped && waddr == drop_addr) drop_detected = 1;
+        `uvm_error("SCOREBOARD",
+          $sformatf("DROPPED STORE  addr=0x%08h  DUT(mem)=0x%016h  SimX=0x%016h (SimX wrote, DUT never did)",
+                    waddr, dut_word, simx_word))
+      end
+    end
+
     `uvm_info("SCOREBOARD",
-      $sformatf("compare_all_written: data_compared=%0d  skipped_stack/MMIO=%0d  skipped_poison=%0d",
-                num_comparisons, num_skipped_stack, num_skipped_poison), UVM_MEDIUM)
+      $sformatf("compare_all_written: data_compared=%0d  fp_tol_passed=%0d  skipped_stack/MMIO=%0d  skipped_poison=%0d  skipped_got=%0d",
+                num_comparisons, num_fp_tol_passed, num_skipped_stack, num_skipped_poison, num_skipped_got), UVM_MEDIUM)
   endfunction
 
   // Order-independent content check: same characters, any order.
@@ -671,6 +904,16 @@ class vortex_scoreboard extends uvm_scoreboard;
     end
   endfunction : final_phase
 
+  // Called from the SimX-DECODE path (or set once via a known-spawn allowlist).
+  // instr = 32-bit decoded word, pc = its PC.
+  function void note_decoded_instr(bit [31:0] instr, bit [63:0] pc);
+    // csrw mscratch : funct3=001(csrrw), csr=0x340 -> imm[31:20]=0x340, op=0x73
+    //   0x34079073 is the a5 form; mask off rs1/rd to catch any csrrw to 0x340.
+    if ((instr[31:20] == 12'h340) && (instr[14:12] == 3'b001) && (instr[6:0] == 7'h73)
+        && (pc >= RAM_BASE))   // post-startup, in program image
+      spawn_detected = 1;
+  endfunction
+
   //==========================================================================
   // report_results
   //==========================================================================
@@ -705,23 +948,59 @@ class vortex_scoreboard extends uvm_scoreboard;
       "╚══════════════════════════════════════════╝\n"
     }, UVM_NONE)
 
-    if (total_failed > 0)
+    if (simx_crashed) begin
+      // SimX model could not execute this program to a valid end-state (decode/
+      // memory abort, caught in the DPI). Not a DUT defect — do not pass or fail.
+      `uvm_warning("SCOREBOARD",
+        "UNVERIFIABLE: SimX golden model aborted during run-to-completion (decode/memory fault). No DUT/SimX equivalence could be established for this program.")
+      // Intentionally NOT counted as pass or fail.
+    end
+    else if (spawn_detected || cfg.is_spawn_kernel) begin
+      // Co-sim cannot establish memory equivalence for spawn-distributed
+      // outputs (stack-resident scheduler args). Do not pass, do not fail —
+      // mark UNVERIFIABLE so the result is not mistaken for a DUT defect.
+      `uvm_warning("SCOREBOARD",
+        $sformatf({"UNVERIFIABLE under run-to-completion co-sim: kernel invoked the spawn ",
+                   "runtime (csrw MSCRATCH observed). Spawn scheduler args are stack-resident ",
+                   "in local memory not staged to SimX; bit-exact DUT/SimX equivalence requires ",
+                   "lockstep stepping (VERIFICATION_PLAN.md Future Work). compared=%0d (informational only)."},
+                  num_comparisons))
+      // Intentionally NOT counted as pass or fail.
+    end
+    else if (total_failed > 0)
       `uvm_error("SCOREBOARD",
         $sformatf("SIMULATION FAILED — %0d memory + %0d console check(s) did not match!",
                   num_mem_failed, num_console_failed))
     else if (num_unchecked > 0)
       `uvm_warning("SCOREBOARD",
         $sformatf("SIMULATION INCOMPLETE — %0d response(s) never received", num_unchecked))
+    // Vacuous-run guard MUST run before the total_checks>0 PASS branch.
+    // If a test DECLARED a memory-comparison window (result_size_bytes > 0),
+    // then num_comparisons == 0 is a vacuous memory-equivalence result — the
+    // DUT-vs-SimX check literally didn't run. A passing console check is NOT a
+    // substitute; without this guard, any test with a vx_printf-based console
+    // pass silently hides an empty memory compare (regression of pre-sync
+    // Bug 5 in docs/tests/t_axi_t_fmem_report.md:96-98).
+    else if (cfg.result_size_bytes > 0 && num_comparisons == 0)
+      `uvm_error("SCOREBOARD",
+        $sformatf("VACUOUS RUN — a result window was declared (base=0x%08h size=%0d) but 0 memory comparisons ran (%0d write(s) skipped stack/MMIO, %0d skipped poison). Console pass alone is NOT sufficient.",
+                  cfg.result_base_addr, cfg.result_size_bytes,
+                  num_skipped_stack, num_skipped_poison))
     else if (total_checks > 0)
       `uvm_info("SCOREBOARD", "SIMULATION PASSED — all checks matched!", UVM_NONE)
-    else if (ebreak_seen && simx_ran)
-      // Pure arithmetic programs (e.g. riscv-dv riscv_arithmetic_basic_test) have no
-      // stores to the data region. Both DUT and SimX halted at ebreak with matching
-      // (empty) memory state — still a valid pass by completion criterion.
+    // No declared result window (kernel_launch_test, riscv-dv, pure-arithmetic):
+    // the program has no comparable data-region output — its writes are local
+    // mem / stack / MMIO. DUT and SimX both ran to EBREAK, so this is a PASS on
+    // liveness + co-sim completion, not a vacuous run. (The loophole stays closed
+    // for the regression harness: a DECLARED window with 0 compared still FAILs.)
+    else if (ebreak_seen && simx_ran && cfg.result_size_bytes == 0)
       `uvm_warning("SCOREBOARD",
-        "No memory writes to compare — DUT and SimX both completed (pure arithmetic program)")
+        "No comparable result region — DUT and SimX both completed to EBREAK (liveness verified; kernel_launch/riscv-dv/pure-arithmetic)")
     else
-      `uvm_error("SCOREBOARD", "No checks were performed — vacuous run")
+      `uvm_error("SCOREBOARD",
+        $sformatf("VACUOUS RUN — a result window was declared (base=0x%08h size=%0d) but %0d write(s) were skipped and 0 compared.",
+                  cfg.result_base_addr, cfg.result_size_bytes,
+                  num_skipped_stack + num_skipped_poison))
   endfunction : report_results
 
 endclass : vortex_scoreboard

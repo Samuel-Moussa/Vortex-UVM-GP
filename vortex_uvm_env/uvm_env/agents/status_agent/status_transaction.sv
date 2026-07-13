@@ -93,7 +93,12 @@ class status_transaction extends uvm_sequence_item;
     // Derived Performance Metrics
     // Calculated from counters
     //==========================================================================
-    real ipc;                    // Instructions Per Cycle
+    real ipc;                    // Instructions Per Cycle (cumulative: instr/cycle)
+    real ipc_window;             // Instantaneous IPC over a fixed cycle window
+                                 // (retired instrs in the last ~IPC_WINDOW cycles /
+                                 // window). Cumulative IPC is a single asymptotic
+                                 // value per run; windowed IPC reflects real
+                                 // throughput bursts and exercises the IPC buckets.
     real cache_miss_rate;        // Cache miss percentage
     
     //==========================================================================
@@ -106,6 +111,8 @@ class status_transaction extends uvm_sequence_item;
         `uvm_field_int(pc, UVM_ALL_ON | UVM_HEX)
         `uvm_field_int(cycle_count, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(instr_count, UVM_ALL_ON | UVM_DEC)
+        `uvm_field_int(fetch_stall, UVM_ALL_ON)
+        `uvm_field_int(memory_stall, UVM_ALL_ON)
     `uvm_object_utils_end
     
     //==========================================================================

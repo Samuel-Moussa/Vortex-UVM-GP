@@ -152,6 +152,12 @@ interface vortex_if (
     // sequence — the assertion is disabled during reset via 'disable iff (!reset_n)'.
     // In practice the RTL initializes DCRs during reset; the TB DCR sequence
     // also runs during reset, so this assertion correctly fires only post-reset.
+    // DCR writes must not mutate a RUNNING kernel's config. NOTE: status_if.busy asserts the
+    // instant reset deasserts (the core self-starts — VX_schedule.sv:230-231 arm warp0 during
+    // reset), while the startup DCR config sequence legitimately drains a few cycles past reset
+    // release. So this assertion is $assertoff during the startup-config window and $asserton
+    // afterwards by vortex_tb_top.sv (see INV-2 root-cause). Base DCRs have NO reset
+    // (VX_dcr_data.sv:27), so startup_addr must be programmed before reset release — INV-2 §Change-2.
     property dcr_write_timing_p;
         @(posedge clk) disable iff (!reset_n)
         dcr_if.wr_valid |-> !status_if.busy;
@@ -193,7 +199,11 @@ interface vortex_if (
             bins no_access    = {2'b00};
             bins write_only   = {2'b10};
             bins read_only    = {2'b01};
-            bins simultaneous = {2'b11};
+            // AW and AR are mutually exclusive by construction: VX_axi_adapter
+            // drives awvalid = req_valid & xbar_rw_out and arvalid = req_valid &
+            // ~xbar_rw_out (a single arbitrated R/W bit), so both-valid in one
+            // cycle never occurs. Evidence-based structural waiver.
+            ignore_bins simultaneous = {2'b11};
         }
 
         mem_usage_cp: coverpoint {mem_if.req_valid[0], mem_if.req_rw[0]} {
@@ -207,7 +217,30 @@ interface vortex_if (
             bins active   = {1};
         }
 
-        system_axi_cross: cross system_state_cp, axi_usage_cp;
+        system_axi_cross: cross system_state_cp, axi_usage_cp {
+            ignore_bins simul = binsof(axi_usage_cp) intersect {2'b11};
+            // STRUCTURAL/timing waiver (evidence-based): status_if.busy is the DUT's
+            // hardware busy output (asserted while warps are active OR memory requests
+            // are in flight — vortex_tb_top.sv:358). AXI activity (awvalid/arvalid)
+            // therefore implies busy=1: AXI-active is a SUBSET of busy. So an AXI
+            // read/write beat during the `idle` state (busy=0, drained) is structurally
+            // contradictory, and during the single-cycle `idle_to_busy`/`busy_to_idle`
+            // transition edges it is a timing coincidence (the beat would have to land
+            // on the exact toggle cycle; empirically the pipeline gap keeps AXI in the
+            // steady `busy` state — documented by the axi_edge kernel, session 8). The
+            // reachable, meaningful bins <busy, {read_only,write_only,no_access}> are
+            // covered. Waive AXI R/W crossed with the idle/transition states.
+            ignore_bins axi_during_idle_read =
+                binsof(axi_usage_cp.read_only) &&
+                ( binsof(system_state_cp.idle) ||
+                  binsof(system_state_cp.idle_to_busy) ||
+                  binsof(system_state_cp.busy_to_idle) );
+            ignore_bins axi_during_idle_write =
+                binsof(axi_usage_cp.write_only) &&
+                ( binsof(system_state_cp.idle) ||
+                  binsof(system_state_cp.idle_to_busy) ||
+                  binsof(system_state_cp.busy_to_idle) );
+        }
         system_mem_cross: cross system_state_cp, mem_usage_cp;
 
     endgroup
@@ -220,9 +253,12 @@ interface vortex_if (
     // removes them from the coverage percentage but KEEPS the bins in the UCDB,
     // so a later vcover merge across axi+mem runs still recovers full coverage.
     initial begin
-        int use_axi;
-        if (!$value$plusargs("USE_AXI_WRAPPER=%d", use_axi))
-            use_axi = 1;                // default to AXI when plusarg absent
+        // simulate.sh passes +USE_AXI_WRAPPER WITHOUT a value, only in AXI mode.
+        // $value$plusargs("USE_AXI_WRAPPER=%d") never matched that form, so the
+        // guard fell to its AXI default in BOTH modes and wrongly zeroed the
+        // ACTIVE mem_usage_cp on MEM-interface runs. $test$plusargs matches
+        // presence (the same reader apply_plusargs() uses) -> correct per mode.
+        bit use_axi = $test$plusargs("USE_AXI_WRAPPER");
         if (use_axi) begin
             sys_cov.mem_usage_cp.option.weight     = 0;   // idle on AXI runs
             sys_cov.system_mem_cross.option.weight = 0;

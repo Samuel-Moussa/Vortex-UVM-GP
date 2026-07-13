@@ -30,6 +30,15 @@ SIM_OPTS="$SIM_OPTS +NUM_THREADS=$NUM_THREADS"
 SIM_OPTS="$SIM_OPTS +TIMEOUT=$TIMEOUT_CYCLES"
 SIM_OPTS="$SIM_OPTS +STARTUP_ADDR=$STARTUP_ADDR_HEX"   # FIX A: no 0x prefix
 
+# Regression harness: program kind selects the kernel_arg_t layout in
+# regression_test.sv; dogfood sub-kernel selector is optional.
+if [[ -n "$PROGRAM_KIND" ]]; then
+    SIM_OPTS="$SIM_OPTS +PROGRAM_KIND=$PROGRAM_KIND"
+fi
+if [[ -n "$DOGFOOD_TESTID" ]]; then
+    SIM_OPTS="$SIM_OPTS +DOGFOOD_TESTID=$DOGFOOD_TESTID"
+fi
+
 
 # FIX: USE_AXI_WRAPPER must be a runtime plusarg so apply_plusargs()
 #      can read it via $test$plusargs("USE_AXI_WRAPPER").
@@ -62,7 +71,18 @@ if [[ "${STRESS_ITER:-1}" -gt 1 ]]; then
     SIM_OPTS="$SIM_OPTS +NUM_STRESS_ITER=$STRESS_ITER"
 fi
 
+# AXI backpressure test — env AXI_THROTTLE=1 makes the AXI slave inject ready
+# wait-states (read by axi_driver.sv $test$plusargs). Exercises the AXI stability
+# assertions + downstream backpressure conditions/branches. Default unset = OFF.
+if [[ -n "${AXI_THROTTLE:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +AXI_THROTTLE=$AXI_THROTTLE"
+fi
 
+# AXI read-flood test — env AXI_FLOOD=1 makes the AXI slave stream read responses
+# back-to-back so the DUT deasserts rready (exercises r_valid/r_data stable). OFF by default.
+if [[ -n "${AXI_FLOOD:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +AXI_FLOOD=$AXI_FLOOD"
+fi
 
 
 print_info "Test:      $TEST_NAME"

@@ -59,11 +59,20 @@ class functional_memory_test extends kernel_launch_test;
         // plusarg handling.
         super.customize_config();
 
-        // Set scenario-specific result window unless the user provided an
-        // explicit +RESULT_BASE_ADDR override (super sets addr=0 when no plusarg).
-        if (cfg.result_base_addr == 64'h0) begin
-            cfg.result_base_addr  = 64'h0000_0000_8001_0000;
-            cfg.result_size_bytes = 4;
+        // FULL-REGION verification (do NOT declare a narrow result window):
+        // the kernel writes per-thread sentinels across many arrays (t1_word/
+        // hword/byte, strided, shared, RESULT_ADDR). A 4-byte window at
+        // RESULT_ADDR made compare_all_written skip all of them as stack/MMIO
+        // (153 skipped, only 6 compared) — the scoreboard verified just the
+        // self-check sentinel. Leaving result_size_bytes=0 makes it fall back to
+        // the whole [RAM_BASE, DATA_LIMIT) region (like vecadd), so EVERY data
+        // write is compared DUT-vs-SimX (stack/MMIO/poison/GOT still gated out).
+        // A user +RESULT_BASE_ADDR/+RESULT_SIZE_BYTES override (applied by super)
+        // still takes precedence.
+        if (cfg.result_base_addr != 64'h0) begin
+            `uvm_info(get_type_name(),
+                $sformatf("Using operator result window base=0x%0h size=%0d (overrides full-region compare)",
+                          cfg.result_base_addr, cfg.result_size_bytes), UVM_LOW)
         end
 
         // Enforce minimum hardware configuration for this scenario.
