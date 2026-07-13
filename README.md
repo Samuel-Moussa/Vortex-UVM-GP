@@ -117,7 +117,7 @@ the memory boundary: **`Vortex.sv`** (native cache-line bus) and
 
 > The host agent owns no physical bus — it sequences a kernel's full lifecycle
 > (reset → load → configure → launch → wait → read) through the other interfaces.
-> Signal-level mapping: [`docs/INTERFACE_MAPPING.md`](vortex_uvm_env/docs/INTERFACE_MAPPING.md).
+> Signal-level mapping: [`docs/INTERFACE_MAPPING.md`](docs/INTERFACE_MAPPING.md).
 
 ### Completion & comparison
 
@@ -171,7 +171,7 @@ Located in [`vortex_uvm_env/uvm_tests/`](vortex_uvm_env/uvm_tests/) — select w
 `PROGRAM_NAME=<kernel>` resolves an ELF under `Vortex/tests/kernel/<name>/`.
 `riscv_*` programs are generated and compiled through the riscv-dv pipeline in
 [`prepare.sh`](vortex_uvm_env/scripts/prepare.sh); see
-[`docs/RISCV_DV_GUIDE.md`](vortex_uvm_env/docs/RISCV_DV_GUIDE.md).
+[`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md).
 
 ---
 
@@ -241,11 +241,11 @@ A group project delivered to one shared verification plan.
 | :--- | :--- |
 | [`vortex_uvm_env/README.md`](vortex_uvm_env/README.md) | environment build & structure detail |
 | [`docs/Coverage_Report_2026-07-10.md`](docs/Coverage_Report_2026-07-10.md) | full coverage report (both configs) |
-| [`vortex_uvm_env/docs/Coverage_Model_Reference.md`](vortex_uvm_env/docs/Coverage_Model_Reference.md) | every covergroup and its rationale |
-| [`vortex_uvm_env/docs/RISCV_DV_GUIDE.md`](vortex_uvm_env/docs/RISCV_DV_GUIDE.md) | constrained-random pipeline |
-| [`vortex_uvm_env/docs/INTERFACE_MAPPING.md`](vortex_uvm_env/docs/INTERFACE_MAPPING.md) | RTL interface → UVM agent mapping |
-| [`vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md`](vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md) | verification plan |
-| [`vortex_uvm_env/docs/fixes/`](vortex_uvm_env/docs/fixes/) | per-issue root-cause writeups |
+| [`docs/Coverage_Model_Reference.md`](docs/Coverage_Model_Reference.md) | every covergroup and its rationale |
+| [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md) | constrained-random pipeline |
+| [`docs/INTERFACE_MAPPING.md`](docs/INTERFACE_MAPPING.md) | RTL interface → UVM agent mapping |
+| [`docs/VERIFICATION_PLAN.md`](docs/VERIFICATION_PLAN.md) | verification strategy, testcases, coverage goals |
+| [`docs/fixes/`](docs/fixes/) | per-issue root-cause writeups |
 
 ---
 
