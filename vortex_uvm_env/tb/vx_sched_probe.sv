@@ -78,6 +78,13 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
     // ---- Config-derived widths (robust, no macros) --------------------------
     localparam int NT = $bits(schedule_if.data.tmask);   // threads per warp
     localparam int NW = $bits(active_warps);             // warps per core
+    // Max reachable divergence-stack depth = NUM_THREADS-1 (the DV_STACK_SIZE from
+    // VX_gpu_pkg: `UP(NUM_THREADS-1)`). A warp can nest that many divergent splits
+    // via LINEAR thread-peeling (NT -> (NT-1)+1 -> (NT-2)+1 -> ... -> 1+1), which is
+    // exactly why the IPDOM stack is sized NT-1. (An earlier clog2(NT) bound was
+    // WRONG — it only covers balanced splitting; verified against upstream Vortex
+    // v2.2 RTL.) Config-aware: bins span the full reachable stack range.
+    localparam int DV_DEPTH_MAX = (NT > 1) ? (NT - 1) : 0;
 
     // =========================================================================
     // 1) SCHEDULER STATE — sampled when a warp actually issues (schedule fire)
@@ -95,14 +102,23 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         option.name = "warp_sched_state_cg";
 
         cp_active_warps : coverpoint active_cnt {
-            bins none      = { 0 };          // scheduler idle (no resident warp)
+            // sched_state_cg samples ONLY at schedule fire (schedule_if.valid &&
+            // ready) — a warp is issuing, so >=1 warp is always active here.
+            // active_cnt==0 is structurally unreachable at this sample point.
+            ignore_bins none = { 0 };
             bins one       = { 1 };
             bins some[]    = { [2 : NW-1] };
             bins all       = { NW };
         }
 
         cp_stalled_warps : coverpoint stalled_cnt {
-            bins none      = { 0 };
+            // Structurally unreachable at this sample point, same as cp_active_warps.none:
+            // schedule_fire (VX_schedule.sv:202) sets stalled_warps[schedule_wid]=1 for the
+            // warp it issues, and schedule_if is registered one cycle later through the
+            // VX_elastic_buffer OUT_REG=1 (VX_schedule.sv:345-358). So the warp we observe
+            // at schedule_if.valid was already stalled the prior cycle -> stalled_cnt>=1
+            // here always. Config-independent, RTL-proven (not omission of a reachable bin).
+            ignore_bins none = { 0 };
             bins some[]    = { [1 : NW-1] };
             bins all       = { NW };         // every warp stalled (barrier/branch)
         }
@@ -146,8 +162,13 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             bins full      = { NT };
         }
 
-        // Divergence-stack depth at the split (nesting level). Auto-binned.
-        cp_split_depth : coverpoint depth;
+        // Divergence-stack depth at the split (nesting level). Reachable range is
+        // 0..NUM_THREADS-1 (DV_DEPTH_MAX) via linear thread-peeling; deeper values
+        // exceed the DV_STACK_SIZE and are structurally unreachable.
+        cp_split_depth : coverpoint depth {
+            bins d[]           = { [0 : DV_DEPTH_MAX] };
+            ignore_bins deeper = { [DV_DEPTH_MAX+1 : $] };
+        }
 
         cross_dvg_depth : cross cp_is_dvg, cp_split_depth;
     endgroup
@@ -177,9 +198,19 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
             bins partial[] = { [2 : NT-1] };
             bins full      = { NT };
         }
-        cp_join_depth : coverpoint depth;    // stack depth at reconverge
+        // Stack depth at reconverge — same 0..NUM_THREADS-1 reachability bound.
+        cp_join_depth : coverpoint depth {
+            bins d[]           = { [0 : DV_DEPTH_MAX] };
+            ignore_bins deeper = { [DV_DEPTH_MAX+1 : $] };
+        }
 
-        cross_join : cross cp_join_dvg, cp_join_else;
+        cross_join : cross cp_join_dvg, cp_join_else {
+            // A uniform (non-divergent) join has no diverged else-side to
+            // reconverge into, so <uniform, else_path> is structurally
+            // unreachable (a join into the else side implies real divergence).
+            ignore_bins uniform_else = binsof(cp_join_dvg) intersect {1'b0}
+                                    && binsof(cp_join_else) intersect {1'b1};
+        }
     endgroup
 
     // =========================================================================
@@ -197,12 +228,15 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         cp_bar_id    : coverpoint bar_id;            // which barrier (auto)
         cp_bar_scope : coverpoint is_global {
             bins local_bar  = { 1'b0 };
-            bins global_bar = { 1'b1 };
+            // Global (cross-core) barriers require GBAR_ENABLE / multi-core; in the
+            // single-cluster single-core config no global barrier is ever issued.
+            ignore_bins global_bar = { 1'b1 };
         }
-        // Participating warps minus 1. Range is [0 : NUM_WARPS-1]; auto-bins
-        // the full NW_WIDTH bit-range creates structurally-unreachable bins.
+        // Participating warps minus 1. size_m1==0 (a 1-warp barrier) is is_noop,
+        // so the probe's !is_noop sample guard never fires for it -> structurally
+        // unreachable. Reachable participant counts are [1 : NUM_WARPS-1].
         cp_bar_size : coverpoint size_m1 {
-            bins size[]  = { [0 : `NUM_WARPS-1] };
+            bins size[]  = { [1 : `NUM_WARPS-1] };
         }
         cp_bar_event : coverpoint is_release {
             bins hold = { 1'b0 };                    // arrival, not last
@@ -237,7 +271,9 @@ module vx_sched_probe import VX_gpu_pkg::*; #(
         cp_spawn_cnt : coverpoint spawn_cnt {
             bins one     = { 1 };
             bins some[]  = { [2 : NW-1] };
-            bins all     = { NW };
+            // vx_wspawn's wmask excludes the issuing warp, so a single wspawn
+            // activates at most NW-1 warps; spawning exactly NW is unreachable.
+            ignore_bins all_excludes_issuer = { NW };
         }
     endgroup
 

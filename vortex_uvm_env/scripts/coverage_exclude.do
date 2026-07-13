@@ -37,11 +37,36 @@ coverage exclude -du rr_arb_tree -reason EOTH
 coverage exclude -du VX_fpu_fpnew -reason EOTH
 
 # -----------------------------------------------------------------------------
-# 2. TCU (tensor core) — compiled in but not exercised until a TCU test exists.
-#    Harmless skip if TCU files weren't compiled (--no-tcu). Revisit Stage 2b.
+# 2. TCU (tensor core) — FUNCTIONALLY VERIFIED (100% functional cov: tcu_test +
+#    tcu_mt issue INST_TCU_WMMA, checked DUT-vs-SimX byte-exact). Its exhaustive
+#    bf16 matrix STRUCTURAL coverage is out of scope: the tcu_fp datapath is built
+#    from Berkeley HardFloat third-party IP (Vortex/third_party/hardfloat/*:
+#    fNToRecFN/recFNToFN/addRecFN/mulRecFN/recFNToRawFN/... — NOT Vortex DUT) and
+#    is replicated per matrix element, and it is exercised only by identity-WMMA
+#    for functional intent. `-du {VX_tcu_*}` catches the Vortex control modules but
+#    NOT the HardFloat submodules (they are named fNToRecFN etc.), so ~5k statements
+#    + wide FP toggles leaked into the denominator. Scope-exclude the whole tcu_unit
+#    to complete the waiver (config-pinned 1CL/1C path; no-ops harmlessly elsewhere).
 # -----------------------------------------------------------------------------
-# TCU design units
+# TCU design units (Vortex control)
 coverage exclude -du {VX_tcu_*}       -reason EOTH
+# TCU FP datapath incl. Berkeley HardFloat third-party IP (catches the -du leak)
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/execute/tcu_unit} -recursive -reason EOTH
+
+# -----------------------------------------------------------------------------
+# 4. Config-DEAD cache-hierarchy interfaces — L2 (per-cluster) and L3 (per-GPU)
+#    are instantiated PASSTHRU at this config (L2_ENABLE/L3_ENABLE undefined =>
+#    VX_cache_cluster .PASSTHRU(1), Vortex.sv:96 / VX_cluster.sv:107). In passthru
+#    mode the cache-side bus interfaces are tied off and NEVER toggle (0% toggle,
+#    ~9.8k bins). Structurally unreachable at 1CL/1C — surgically exclude the dead
+#    interfaces (NOT the whole l2/l3 scope: the passthru mux path IS exercised and
+#    is 82% covered — excluding it would REMOVE hits and lower the number). Verified:
+#    +1.75% toggle (removes 9760 miss bins, 0 hits). Config-pinned 1CL/1C paths.
+# -----------------------------------------------------------------------------
+coverage exclude -scope {/vortex_tb_top/dut/vortex/l3cache/core_bus_cache_if[0]} -recursive -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/l3cache/mem_bus_cache_if[0]}  -recursive -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/l2cache/core_bus_cache_if[0]} -recursive -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/l2cache/mem_bus_cache_if[0]}  -recursive -reason EUR
 
 # -----------------------------------------------------------------------------
 # 3. Idle-interface functional coverpoints — DO NOT exclude when MERGING.

@@ -33,6 +33,7 @@ package vortex_test_pkg;
     import host_agent_pkg::*;
     import status_agent_pkg::*;
     import mem_model_pkg::*;
+    import simx_pkg::*;
 
     //==========================================================================
     // Sequence base classes (must come before any test that uses them)
@@ -46,6 +47,7 @@ package vortex_test_pkg;
     `include "vortex_functional_mem_vseq.sv"
     `include "kernel_launch_vseq.sv"
     `include "random_instr_stress_vseq.sv"          // ← NEW
+    `include "host_coverage_vseq.sv"                // ← NEW (coverage push)
 
     //==========================================================================
     // Include Test Files
@@ -54,14 +56,15 @@ package vortex_test_pkg;
     `include "vortex_sanity_test.sv"
     `include "vortex_smoke_test.sv"
     `include "kernel_launch_test.sv"
+    `include "host_coverage_test.sv"                // ← NEW (extends kernel_launch_test)
     `include "negative_result_test.sv"
+    `include "negative_dropped_store_test.sv"        // ← SB-DIR bidirectional (dropped-store) proof
     `include "random_instruction_stress_test.sv"    // ← NEW
     `include "warp_scheduling_test.sv"
     `include "barrier_sync_test.sv"
     `include "functional_memory_test.sv"            // ← NEW (extends kernel_launch_test; must follow it)
     `include "axi_memory_test.sv"                   // ← NEW (extends kernel_launch_test; AXI path only)
-    // `include "sgemm_test.sv"       // To be added later
-    // `include "riscv_dv_test.sv"    // To be added later
+    `include "regression_test.sv"       
 
 endpackage : vortex_test_pkg
 

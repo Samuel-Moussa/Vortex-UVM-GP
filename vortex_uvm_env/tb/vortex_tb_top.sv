@@ -51,8 +51,12 @@ module vortex_tb_top;
     // INTERFACE INSTANTIATION
     //==========================================================================
 
-    logic reset_n = 1'b0; 
+    logic reset_n = 1'b0;
     vortex_if vif (.clk(clk), .reset_n(reset_n));
+
+    // INV-2 Change-2: handshake so reset release waits for the DCR bootstrap (startup_addr
+    // etc.) to be written. Triggered by the DCR driver at the end of its reset_phase.
+    uvm_event dcr_bootstrap_done_ev = uvm_event_pool::get_global("dcr_bootstrap_done");
 
     //=========================================================================
     // RESET GENERATION
@@ -61,6 +65,18 @@ module vortex_tb_top;
     initial begin
         // Disable strict reset assertion because we intentionally drive DCR during reset in UVM
         $assertoff(0, vif.assert_reset_clears_valids);
+
+        // INV-2 root-cause / Change-1: the core SELF-STARTS from reset — VX_schedule.sv:230-231
+        // arm warp0 (active_warps[0]<=1) and latch its PC (warp_pcs[0]<=base_dcrs.startup_addr)
+        // *inside* the reset block, so status_if.busy asserts the instant reset deasserts while
+        // the startup DCR config sequence is still draining (its tail lands ~6 cycles past reset
+        // release). Those DCR writes are LEGITIMATE startup config, but they trip
+        // assert_dcr_write_timing (dcr_if.wr_valid |-> !status_if.busy). Gate the assertion OFF
+        // during the startup-config window; it is re-armed below once config has drained, so it
+        // still catches a genuine DCR write during kernel execution.  (base DCRs have no reset —
+        // VX_dcr_data.sv:27 `UNUSED_VAR(reset) — so startup_addr MUST be programmed before reset
+        // release; the deeper fix is to hold reset until the DCR sequence signals done: INV-2 §Change-2.)
+        $assertoff(0, vif.assert_dcr_write_timing);
 
         $display("================================================================================");
         $display("[TB_TOP @ %0t] Vortex GPGPU UVM Testbench Initialized", $time);
@@ -73,14 +89,42 @@ module vortex_tb_top;
         vif.dcr_if.wr_addr  = 12'h0;
         vif.dcr_if.wr_data  = 32'h0;
 
+        // Minimum reset-assertion window.
         if (RESET_CYCLES > 15)
             repeat(RESET_CYCLES - 15) @(posedge clk);
+
+        // INV-2 Change-2: do NOT release reset until the DCR bootstrap (startup_addr etc.)
+        // is confirmed written — base DCRs have no reset (VX_dcr_data.sv:27) and the core
+        // latches startup_addr at reset-release (VX_schedule.sv:230), so an early release
+        // would boot from an undefined PC. Normally the bootstrap (DCR driver reset_phase)
+        // is long done by RESET_CYCLES; this makes the ordering explicit instead of relying
+        // on the RESET_CYCLES >> bootstrap-time margin. Timeout-guarded so a config with no
+        // active DCR agent cannot hang (releases with a warning after 500 cycles).
+        if (!dcr_bootstrap_done_ev.is_on()) begin
+            $display("[TB_TOP @ %0t] Reset held: waiting for DCR bootstrap to complete...", $time);
+            fork : wait_dcr_boot
+                dcr_bootstrap_done_ev.wait_ptrigger();
+                begin
+                    repeat(500) @(posedge clk);
+                    $warning("[TB_TOP] DCR bootstrap not signalled within 500 cycles; releasing reset anyway");
+                end
+            join_any
+            disable wait_dcr_boot;
+        end
 
         reset_n = 1'b1;
         $display("[TB_TOP @ %0t] Releasing reset", $time);
 
         repeat(5) @(posedge clk);
         $display("[TB_TOP @ %0t] Hardware Reset Complete - System ready", $time);
+
+        // Re-arm assert_dcr_write_timing once the startup DCR config has drained (empirically
+        // it completes within ~10 cycles of reset release; 64 is a safe margin). From here a
+        // DCR write while busy=1 is a REAL error (config mutating a running kernel), so the
+        // check is active for the rest of the run.
+        repeat(64) @(posedge clk);
+        $asserton(0, vif.assert_dcr_write_timing);
+        $display("[TB_TOP @ %0t] DCR-write-timing assertion armed (startup config window closed)", $time);
     end
 
     //==========================================================================
@@ -417,7 +461,16 @@ module vortex_tb_top;
                     $display("\n[TB_STATUS @ %0t] Execution STARTED", $time);
                 end
             end else if (tb_execution_started && !tb_execution_complete) begin
-                tb_idle_cycles <= tb_idle_cycles + 1;
+                // PROGRESS is instruction retirement, not just memory activity. A
+                // compute-bound kernel (long ALU loop, no memory ops) is busy and
+                // making progress -> it must NOT count as idle, else the idle
+                // safety net (below) cuts it short mid-compute (was the root cause
+                // of compute-kernel thread-0-only failures: the tail stores never
+                // executed). Reset the hang counter on any commit this cycle.
+                if (tb_commit_count_cyc != 0)
+                    tb_idle_cycles <= 0;
+                else
+                    tb_idle_cycles <= tb_idle_cycles + 1;
             end
 
             // C3 PRIMARY: ebreak (0x00100073) decoded at fetch stage
@@ -465,7 +518,27 @@ module vortex_tb_top;
     assign vif.status_if.ebreak_detected = tb_execution_complete && axi_channels_idle && mem_channels_idle;
     assign vif.status_if.cycle_count     = tb_cycle_count;
     assign vif.status_if.instr_count     = tb_instr_count;
-    assign vif.status_if.pc              = 32'h0;
+    // Real fetched-instruction PC (core[0]) so cp_pc_region samples the actual
+    // program text region instead of a constant 0 (was hardcoded 0 -> cp_pc_region
+    // 0% ZERO). tb_status_pc is driven from fetch_pc_full inside each ifdef branch
+    // of the pipeline-probe block below (declared here at module scope).
+    wire [31:0] tb_status_pc;
+    assign vif.status_if.pc              = tb_status_pc;
+    // Pipeline stall flags for cp_fetch_stall / cp_memory_stall (driven from the
+    // icache/dcache req-stall probes inside each ifdef branch below; core[0]).
+    wire tb_fetch_stall, tb_memory_stall;
+    assign vif.status_if.fetch_stall     = tb_fetch_stall;
+    assign vif.status_if.memory_stall    = tb_memory_stall;
+    // Pipeline backpressure stalls for cp_decode/issue/execute_stall (driven from
+    // fetch_if/decode_if/dispatch_if valid&&!ready probes in each ifdef branch; core[0]).
+    wire tb_decode_stall, tb_issue_stall, tb_execute_stall;
+    assign vif.status_if.decode_stall    = tb_decode_stall;
+    assign vif.status_if.issue_stall     = tb_issue_stall;
+    assign vif.status_if.execute_stall   = tb_execute_stall;
+    // core[0] scheduler active-warp bitmask for cp_active_warps (per-cycle sampled,
+    // driven from core.schedule.active_warps in each ifdef branch; zero-extended).
+    wire [31:0] tb_active_warps;
+    assign vif.status_if.active_warps    = tb_active_warps;
 
     always @(posedge clk) begin
         if (reset_n && tb_cycle_count % 1000 == 0 && tb_cycle_count > 0 &&
@@ -552,6 +625,7 @@ module vortex_tb_top;
 
         assign fetch_valid   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
+        assign tb_status_pc  = fetch_pc_full[31:0];  // drive status_if.pc for cp_pc_region
         assign fetch_instr   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         // DCACHE is an array; measure the first port (0)
@@ -560,10 +634,30 @@ module vortex_tb_top;
         assign dcache_rsp_valid = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_valid;
         assign dcache_rsp_ready = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_ready;
 
+        // Pipeline backpressure stalls (core[0]): valid && !ready at each stage boundary.
+        //   decode_stall : decode not ready for fetch  (fetch_if.valid & !ready)
+        //   issue_stall  : issue  not ready for decode (decode_if.valid & !ready)
+        //   execute_stall: any EX unit not ready for dispatch (|dispatch_if[*].valid & !ready)
+        localparam int TB_NDISP_A = VX_gpu_pkg::NUM_EX_UNITS * TB_ISSUE_W;
+        wire [TB_NDISP_A-1:0] tb_disp_bp_a;
+        for (genvar d = 0; d < TB_NDISP_A; d++) begin : g_disp_bp_a
+            assign tb_disp_bp_a[d] =
+                 dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].valid &&
+                !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].ready;
+        end
+        assign tb_decode_stall  = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid &&
+                                 !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.ready;
+        assign tb_issue_stall   = dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.valid &&
+                                 !dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.ready;
+        assign tb_execute_stall = |tb_disp_bp_a;
+        assign tb_active_warps  = 32'(dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps);
+
         // Pipeline flow signals
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
         wire dcache_stalled = dcache_req_valid && !dcache_req_ready;
+        assign tb_fetch_stall  = icache_stalled;   // drive status_if.fetch_stall  (cp_fetch_stall)
+        assign tb_memory_stall = dcache_stalled;   // drive status_if.memory_stall (cp_memory_stall)
         wire icache_firing = icache_req_valid && icache_req_ready;
         wire dcache_firing = dcache_req_valid && dcache_req_ready;
 
@@ -643,6 +737,7 @@ module vortex_tb_top;
 
         assign fetch_valid   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid;
         assign fetch_pc_full = VX_gpu_pkg::to_fullPC(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.PC);
+        assign tb_status_pc  = fetch_pc_full[31:0];  // drive status_if.pc for cp_pc_region
         assign fetch_instr   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.data.instr;
 
         assign dcache_req_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].req_valid;
@@ -650,9 +745,26 @@ module vortex_tb_top;
         assign dcache_rsp_valid = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_valid;
         assign dcache_rsp_ready = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dcache_bus_if[0].rsp_ready;
 
+        // Pipeline backpressure stalls (core[0]) — see AXI branch for semantics.
+        localparam int TB_NDISP_M = VX_gpu_pkg::NUM_EX_UNITS * TB_ISSUE_W;
+        wire [TB_NDISP_M-1:0] tb_disp_bp_m;
+        for (genvar d = 0; d < TB_NDISP_M; d++) begin : g_disp_bp_m
+            assign tb_disp_bp_m[d] =
+                 dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].valid &&
+                !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.dispatch_if[d].ready;
+        end
+        assign tb_decode_stall  = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.valid &&
+                                 !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.fetch_if.ready;
+        assign tb_issue_stall   = dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.valid &&
+                                 !dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.decode_if.ready;
+        assign tb_execute_stall = |tb_disp_bp_m;
+        assign tb_active_warps  = 32'(dut.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.schedule.active_warps);
+
         reg [31:0] icache_stall_cycles, dcache_stall_cycles;
         wire icache_stalled = icache_req_valid && !icache_req_ready;
         wire dcache_stalled = dcache_req_valid && !dcache_req_ready;
+        assign tb_fetch_stall  = icache_stalled;   // drive status_if.fetch_stall  (cp_fetch_stall)
+        assign tb_memory_stall = dcache_stalled;   // drive status_if.memory_stall (cp_memory_stall)
 
         always @(posedge clk) begin
             if (!reset_n) begin
@@ -824,6 +936,14 @@ module vortex_tb_top;
         .clk        (clk),
         .reset      (reset),
         .dispatch_if(dispatch_if)
+    );
+
+    // P1-bind: passive commit/retire probe into every VX_commit instance
+    // (observability only; Ahmad samples commit_arb_if for coverage).
+    bind VX_commit vx_commit_probe u_commit_probe (
+        .clk          (clk),
+        .reset        (reset),
+        .commit_arb_if(commit_arb_if)
     );
     
 

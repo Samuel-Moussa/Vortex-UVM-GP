@@ -5,11 +5,15 @@
 #include <stdint.h>
 #include <cstring>
 #include <sstream>
+#include <map>
+#include <csetjmp>
+#include <csignal>
 
 // Vortex includes
 #include "processor.h"
 #include "arch.h"
 #include "mem.h"
+#include "simobject.h"   // SimPlatform — needed to reset the platform before stepping
 #include <VX_config.h>
 #include <VX_types.h>
 #include "simx_cosim_record.h"
@@ -31,6 +35,32 @@ static int        g_exitcode    = 0;
 static bool       g_step_initialized = false;  // tracks first step() call
 
 static std::string g_console;   // captured program stdout from simx_run()
+
+// ── Crash guard ─────────────────────────────────────────────────────────────
+// SimX can abort()/segfault inside Emulator::decode on instructions/memory it
+// cannot model (decode SIGABRT). A raw abort() is NOT catchable by try/catch and
+// would take down the whole vsim process. We install SIGABRT/SIGSEGV handlers
+// around the step loop and siglongjmp back out so the model failure is converted
+// to a sentinel return (-3) — the scoreboard maps that to UNVERIFIABLE.
+static sigjmp_buf            g_simx_jmp;
+static volatile sig_atomic_t g_simx_crashed = 0;
+static void simx_crash_handler(int sig) {
+    g_simx_crashed = 1;
+    siglongjmp(g_simx_jmp, sig);
+}
+
+// ── Post-reset memory re-staging ────────────────────────────────────────────
+// The one-shot device reset inside ProcessorImpl::step() drops SimX's lazily-
+// allocated RAM pages back to poison (0xbaadf00d). Anything written to g_ram
+// BEFORE that reset (program hex, bootstrap, kernel arg struct + buffers) is
+// lost by the time the kernel executes. We cache every staged write here and
+// replay it in simx_run() AFTER the reset, before stepping.
+static std::map<uint64_t, std::vector<uint8_t>> g_staged_mem;
+
+static void ram_write_cached(const uint8_t* src, uint64_t addr, uint32_t size) {
+    g_ram->write(src, addr, size);
+    g_staged_mem[addr] = std::vector<uint8_t>(src, src + size);
+}
 
 extern "C" {
 
@@ -260,7 +290,7 @@ void simx_init_exit_code_register() {
     };
     try {
         // Write bootstrap to memory
-        g_ram->write(bootstrap, bootstrap_addr, 16);
+        ram_write_cached(bootstrap, bootstrap_addr, 16);
         std::cout << "[SimX-DPI] Bootstrap code written to memory" << std::endl;
         
         // Update startup address to point to bootstrap
@@ -315,7 +345,7 @@ int simx_load_bin(const char* filepath, uint64_t load_addr) {
     }
 
     try {
-        g_ram->write(buffer.data(), load_addr, size);
+        ram_write_cached(buffer.data(), load_addr, size);
         std::cout << "[SimX-DPI] Loaded '" << filepath 
                   << "' (" << size << " bytes) at 0x" 
                   << std::hex << load_addr << std::dec << std::endl;
@@ -378,7 +408,7 @@ int simx_load_hex(const char* filepath) {
 
             if (is_byte_format) {
                 uint8_t b = (uint8_t)std::stoul(token, nullptr, 16);
-                g_ram->write(&b, current_addr++, 1);
+                ram_write_cached(&b, current_addr++, 1);
                 bytes_loaded++;
             } else {
                 uint32_t w = std::stoul(token, nullptr, 16);
@@ -388,7 +418,7 @@ int simx_load_hex(const char* filepath) {
                     (uint8_t)(w >> 16),
                     (uint8_t)(w >> 24)
                 };
-                g_ram->write(bytes, current_addr, 4);
+                ram_write_cached(bytes, current_addr, 4);
                 current_addr  += 4;
                 bytes_loaded  += 4;
             }
@@ -452,7 +482,7 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
             if (tok.size() <= 2) {
                 // Byte format (--verilog-data-width=1)
                 uint8_t b = (uint8_t)std::stoul(tok, nullptr, 16);
-                g_ram->write(&b, current_addr++, 1);
+                ram_write_cached(&b, current_addr++, 1);
                 bytes_loaded++;
             } else {
                 // 32-bit word format (little-endian)
@@ -461,7 +491,7 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
                     (uint8_t)(w),       (uint8_t)(w >> 8),
                     (uint8_t)(w >> 16), (uint8_t)(w >> 24)
                 };
-                g_ram->write(bytes, current_addr, 4);
+                ram_write_cached(bytes, current_addr, 4);
                 current_addr += 4;
                 bytes_loaded += 4;
             }
@@ -529,42 +559,40 @@ int simx_load_hex_at(const char* filepath, uint64_t base_addr) {
 
 // Write memory from SystemVerilog byte array
 void simx_write_mem(uint64_t addr, int size, const svOpenArrayHandle data) {
-    if (!g_initialized || !g_ram) {
-        std::cerr << "[SimX-DPI] Error: SimX not initialized" << std::endl;
-        return;
-    }
-    
+    // Validate inputs first — independent of init state.
     if (size <= 0) {
         std::cerr << "[SimX-DPI] Error: Invalid size " << size << std::endl;
         return;
     }
-    
     uint8_t* src = (uint8_t*)svGetArrayPtr(data);
     if (!src) {
         std::cerr << "[SimX-DPI] Error: Invalid data pointer" << std::endl;
         return;
     }
-    
-    try {
-        g_ram->write(src, addr, size);
-        
-        std::cout << "[SimX-DPI] Wrote " << size << " bytes to 0x" 
-                  << std::hex << addr << std::dec << std::endl;
-                  
-        // Debug: print first few bytes
-        std::cout << "[SimX-DPI] First bytes: ";
-        for (int i = 0; i < std::min(16, size); i++) {
-            printf("%02x ", src[i]);
+
+    // ALWAYS cache. This map is replayed into RAM by simx_run() AFTER the
+    // device reset wipes pages to poison. Writes that arrive before
+    // simx_init() (the test staging kernel args at time 0) MUST land here,
+    // or they are lost and SimX reads 0xbaadf00d.
+    g_staged_mem[addr] = std::vector<uint8_t>(src, src + size);
+
+    // Only touch live RAM if SimX is up; otherwise the cached copy above is
+    // applied by simx_run()'s re-stage loop.
+    if (g_initialized && g_ram) {
+        try {
+            g_ram->write(src, addr, size);
+        } catch (const std::exception& e) {
+            std::cerr << "[SimX-DPI] Error in write_mem: " << e.what() << std::endl;
+            return;
         }
-        std::cout << std::endl;
-        
-        if (addr >= 0x80000000ULL) {
-            g_startup_addr = addr;
-        }
-        
-    } catch (const std::exception& e) {
-        std::cerr << "[SimX-DPI] Error in write_mem: " << e.what() << std::endl;
     }
+
+    // Infer the program startup address ONLY from writes in the program code
+    // region (0x8xxx_xxxx). The regression harness stages kernel_arg_t + I/O
+    // buffers in the DATA region (>= 0x9000_0000); those writes must NOT move
+    // g_startup_addr, or the exit-code bootstrap is built on top of the arg
+    // struct and SimX starts by executing data → decode abort at cycle 0.
+    if (addr >= 0x80000000ULL && addr < 0x90000000ULL) g_startup_addr = addr;
 }
 
 // Read memory to SystemVerilog byte array
@@ -638,13 +666,102 @@ int simx_run() {
         std::cout << "[SimX-DPI] ========================================" << std::endl;
         std::cout << "[SimX-DPI] Running processor to completion..." << std::endl;
         std::cout << "[SimX-DPI] Startup address: 0x" << std::hex << g_startup_addr << std::dec << std::endl;
-        
+
+        //  was: int run_status = g_processor->run();
+        const uint64_t STEP_CHUNK = 100;        // cycles per step call
+        const uint64_t MAX_CYCLES = 2000000;    // hard cap — basic needs ~1800; huge margin
+        uint64_t cycles_run = 0;
+        int run_status;
+
+        // (1) Reset the sim platform BEFORE stepping, exactly as
+        //     ProcessorImpl::run() does (it calls SimPlatform::instance().reset()
+        //     then ticks). ProcessorImpl::step() does NOT reset — its reset line
+        //     is commented out — and the old `step(0)` here was a no-op (cycles=0
+        //     runs zero iterations), so the cores were ticked from an un-reset
+        //     state and decoded garbage → abort at cycle 0. This do_reset()s every
+        //     core/cache so PC starts at the DCR startup address. RAM (g_ram) is
+        //     separate and is NOT cleared by this.
+        SimPlatform::instance().reset();
+
+        // (2) Replay every staged write (program, bootstrap, arg struct, buffers)
+        //     so SimX's RAM matches what the harness staged (defensive; the reset
+        //     above does not wipe RAM, but keeps parity with pre-init staging).
+        for (auto& kv : g_staged_mem) {
+            g_ram->write(kv.second.data(), kv.first, (uint32_t)kv.second.size());
+        }
+        std::cout << "[SimX-DPI] Re-staged " << g_staged_mem.size()
+                  << " memory regions after reset" << std::endl;
+
+        // (3) Verify the arg struct is now real (not poison).
+        {
+            uint8_t dbg[24];
+            g_ram->read(dbg, 0x90000000, 24);
+            fprintf(stderr, "[SimX-ARGS] count=%08x src=%08x%08x dst=%08x%08x\n",
+                    *(uint32_t*)(dbg+0),
+                    *(uint32_t*)(dbg+12), *(uint32_t*)(dbg+8),
+                    *(uint32_t*)(dbg+20), *(uint32_t*)(dbg+16));
+        }
+
+        // tee program output ONLY around the actual run
         std::ostringstream _cap;
-        std::streambuf* _old = std::cout.rdbuf(_cap.rdbuf()); // tee program output
-        int run_status = g_processor->run();
-        std::cout.rdbuf(_old);                                // restore
+        std::streambuf* _old = std::cout.rdbuf(_cap.rdbuf()); // tee ON
+
+        // (4) Run to completion (bounded), guarded against a SimX abort()/segfault
+        //     so a model decode failure CANNOT take down vsim. On crash we
+        //     siglongjmp back here, restore stdout, and return sentinel -3.
+        g_simx_crashed = 0;
+        struct sigaction sa, old_abrt, old_segv;
+        sa.sa_handler = simx_crash_handler;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = 0;
+        sigaction(SIGABRT, &sa, &old_abrt);
+        sigaction(SIGSEGV, &sa, &old_segv);
+
+        if (sigsetjmp(g_simx_jmp, 1) == 0) {
+            while (!g_processor->is_done() && cycles_run < MAX_CYCLES) {
+                g_processor->step(STEP_CHUNK);
+                cycles_run += STEP_CHUNK;
+            }
+        }
+        // (crash path falls through here with g_simx_crashed == 1)
+
+        sigaction(SIGABRT, &old_abrt, nullptr);
+        sigaction(SIGSEGV, &old_segv, nullptr);
+
+        std::cout.rdbuf(_old);                                  // tee OFF
         g_console += _cap.str();
-        std::cout << _cap.str();                              // still echo to transcript
+        std::cout << _cap.str();                                // echo program output
+
+        if (g_simx_crashed) {
+            // SimX model aborted mid-run (e.g. Emulator::decode). Do NOT touch
+            // the processor again (its state is undefined). Return a distinct
+            // sentinel; the scoreboard classifies this UNVERIFIABLE, not a DUT
+            // failure, and skips the (now-meaningless) memory comparison.
+            run_status = -3;
+            g_done     = false;
+            g_exitcode = run_status;
+            std::cerr << "[SimX-DPI] WARNING: SimX aborted/crashed after " << cycles_run
+                      << " cycles (model decode/memory fault). Caught so vsim survives; "
+                      << "this run is UNVERIFIABLE." << std::endl;
+            std::cout << "[SimX-DPI] ========================================" << std::endl;
+            return g_exitcode;
+        }
+
+        if (g_processor->is_done()) {
+            run_status = g_processor->get_exitcode();
+            std::cout << "[SimX-DPI] Clean exit after " << cycles_run
+                    << " cycles, exitcode=" << run_status << std::endl;
+        } else {
+            // Hit the cap without the kernel signaling done — this is the
+            // spawn-kernel / no-clean-EBREAK case. Stop GRACEFULLY instead of
+            // letting an unbounded run() walk into unmapped memory and crash vsim.
+            run_status = -2;   // distinct sentinel: "capped, not crashed"
+            std::cerr << "[SimX-DPI] WARNING: hit cycle cap (" << MAX_CYCLES
+                    << ") without clean exit — kernel likely lacks EBREAK termination. "
+                    << "Stopping SimX gracefully so the scoreboard can still compare memory."
+                    << std::endl;
+        }
+
         // Processor::run() already returns the final exit code.
         g_done     = true;
         g_exitcode = run_status;

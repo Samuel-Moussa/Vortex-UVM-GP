@@ -188,6 +188,7 @@ class vortex_config extends uvm_object;
     int unsigned        mem_tag_width;    // always VX_MEM_TAG_WIDTH (= VX_gpu_pkg::VX_MEM_TAG_WIDTH)
 
     rand bit [63:0]     startup_addr;
+    bit [63:0]          startup_arg = 64'h0;   // kernel-arg ptr -> MSCRATCH at reset; 0 = none
     rand bit [63:0]     stack_base_addr;
     rand bit [63:0]     io_base_addr;
     rand bit [63:0]     io_addr_end;
@@ -304,6 +305,13 @@ class vortex_config extends uvm_object;
 
     rand bit [63:0]     result_base_addr;
     rand int unsigned   result_size_bytes;
+
+    // Set by the regression test for kernels that invoke vx_spawn_threads().
+    // Such kernels stage their scheduler args on the runtime stack (local mem
+    // @ ~0xffff0000), which is NOT replicated into SimX, so DUT/SimX cannot be
+    // made bit-equivalent without lockstep co-sim. The scoreboard treats these
+    // as UNVERIFIABLE rather than PASS/FAIL. (See VERIFICATION_PLAN.md Future Work.)
+    bit                 is_spawn_kernel;
 
     //==========================================================================
     // SCOREBOARD
@@ -707,7 +715,16 @@ class vortex_config extends uvm_object;
         max_latency_cycles   = 200;
         min_inter_req_delay  = 0;
         max_inter_req_delay  = 10;
-        status_sample_interval = 100;
+        // 10 (constraint floor): the stall taps (fetch/decode/issue/mem/execute)
+        // are INSTANTANEOUS RTL signals whose co-occurrence windows are 1-2 cycles;
+        // at 100-cycle sampling the periodic snapshot almost never lands on them, so
+        // cross_stall_types / cross_ipc_stalls asymmetric-and-simultaneous tuples
+        // (<*,stalled,stalled>, <active,stalled,*>, <stalled,active,*>) and the
+        // system_axi idle<->busy edge tuples stay ZERO. Dense sampling (10) observes
+        // these real transient states without altering them — the windowed IPC bucket
+        // refreshes on its own IPC_WINDOW clock (status_monitor.sv), independent of
+        // this interval, so already-banked ipc_bucket coverage is unaffected.
+        status_sample_interval = 10;
 
         // --- Simulation ---
         global_timeout_cycles = 100000;
@@ -763,6 +780,7 @@ class vortex_config extends uvm_object;
         clear_memory_on_reset = 1;
         result_base_addr    = startup_addr + 64'h100000;
         result_size_bytes   = 1024;
+        is_spawn_kernel     = 0;   // regression_test overrides per program kind
 
         // --- Scoreboard ---
         enable_scoreboard  = 1;

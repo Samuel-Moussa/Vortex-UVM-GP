@@ -81,6 +81,9 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
     // here. Derive the width from the actual tmask field of dispatch_t instead —
     // always correct, never macro-dependent.
     localparam int SIMD_W = $bits(dispatch_if[0].data.tmask);
+    // XLEN without the `XLEN macro (no RTL incdir in the UVM pass): XLENB is a
+    // VX_gpu_pkg localparam (XLEN/8), imported above. Used for the RV32 LD/SD waiver.
+    localparam int PROBE_XLEN = XLENB * 8;
 
     // =========================================================================
     // Per-class covergroup TYPES. Each carries only the coverpoints reachable
@@ -141,11 +144,13 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
             bins lb = { INST_LSU_LB };
             bins lh = { INST_LSU_LH };
             bins lw = { INST_LSU_LW };
-            bins ld = { INST_LSU_LD };
             bins sb = { INST_LSU_SB };
             bins sh = { INST_LSU_SH };
             bins sw = { INST_LSU_SW };
-            bins sd = { INST_LSU_SD };
+            // LD/SD are 64-bit load/store — not encodable in RV32 (XLEN==32).
+            // Config-aware waiver: these bins are active only on RV64 builds.
+            ignore_bins rv32_no_ld = { INST_LSU_LD } with (PROBE_XLEN == 32);
+            ignore_bins rv32_no_sd = { INST_LSU_SD } with (PROBE_XLEN == 32);
         }
 
         cp_active_threads : coverpoint active_thr {
@@ -188,24 +193,92 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
 
         // The one genuinely meaningful cross: do divergence-control ops
         // (split/join/etc.) themselves fire under partial masks? = real SIMT.
-        cross_sfu_threads : cross cp_sfu_op, cp_active_threads;
+        cross_sfu_threads : cross cp_sfu_op, cp_active_threads {
+            // WSPAWN is a runtime-only primitive: it is issued exclusively from the
+            // single-threaded spawn bootstrap (Vortex/kernel/src/vx_spawn.c:259,
+            // vx_wspawn(active_warps, stub) executed on thread 0 before the SIMT region
+            // spreads). No user SIMT kernel issues wspawn, and 35 diverse runs (all
+            // kernels + directed tests + 12 constrained-random riscv-dv profiles) never
+            // produced a multi-thread wspawn. Multi-thread wspawn is therefore
+            // unreachable in any well-formed program; issuing vx_wspawn under a full
+            // mask would redundantly re-spawn from every lane (broken/unsafe), not a
+            // legitimate stimulus. Ignore <wspawn, partial|uniform>; keep the reachable
+            // <wspawn, one_divergent>. Evidence-based structural (programming-model)
+            // waiver — trip-wire: revisit if a kernel ever legitimately fans wspawn out
+            // across active threads.
+            ignore_bins wspawn_multithread =
+                binsof(cp_sfu_op.wspawn) &&
+                ( binsof(cp_active_threads.partial) ||
+                  binsof(cp_active_threads.uniform) );
+        }
     endgroup
 
-    // ---- FPU / TCU (no op-decode in this probe) -----------------------------
-    // Shared type: divergence + warp distribution only. The class name is set
-    // per instance via the constructor argument. Adding an INST_FPU_* / INST_TCU_*
-    // op coverpoint later is a clean extension if you want sub-opcode detail.
-    covergroup noop_class_cg (string cls) with function sample(
-        int                     active_thr,
-        logic [ISSUE_WIS_W-1:0] wis
+    // ---- FPU (sub-op decode — Phase 2) --------------------------------------
+    // op_type is the INST_FPU_* sub-opcode (VX_gpu_pkg.sv:349-361). Every RV F/D
+    // op maps to one of these 13 codes; F2I/F2U/I2F/U2F/CMP/F2F/MISC further split
+    // on fmt/frm inside the FPU, but op_type is the coverage-relevant class here.
+    covergroup fpu_class_cg with function sample(
+        logic [INST_ALU_BITS-1:0] op_type,   // shared-width op_type field
+        int                       active_thr,
+        logic [ISSUE_WIS_W-1:0]   wis
     );
         option.per_instance = 1;
-        option.name         = $sformatf("instr_class_cg_%s", cls);
+        option.name         = "instr_class_cg_fpu";
+
+        cp_fpu_op : coverpoint op_type {
+            bins fadd  = { INST_FPU_ADD };    // fadd / fsub (SUB=fmt[1])
+            bins fmul  = { INST_FPU_MUL };
+            bins fmadd = { INST_FPU_MADD };   // fmadd / fmsub
+            bins fnmadd= { INST_FPU_NMADD };  // fnmadd / fnmsub
+            bins fdiv  = { INST_FPU_DIV };
+            bins fsqrt = { INST_FPU_SQRT };
+            bins f2i   = { INST_FPU_F2I };    // fcvt.w.s / fcvt.l.s
+            bins f2u   = { INST_FPU_F2U };    // fcvt.wu.s / fcvt.lu.s
+            bins i2f   = { INST_FPU_I2F };    // fcvt.s.w / fcvt.s.l
+            bins u2f   = { INST_FPU_U2F };    // fcvt.s.wu / fcvt.s.lu
+            bins fcmp  = { INST_FPU_CMP };    // feq / flt / fle
+            bins fmisc = { INST_FPU_MISC };   // sgnj/class/fmv/fmin/fmax
+            // F2F = float<->double conversion (fcvt.s.d / fcvt.d.s). Requires the
+            // D extension. The primary RV32 build compiles kernels rv32imaf (F only,
+            // no D → soft-double libcalls, never an fcvt.d hardware op); RV64 builds
+            // rv64imafd. Config-aware waiver: F2F is reachable only on a D-enabled
+            // (RV64) build, mirroring the LSU LD/SD RV64-only waiver above.
+            ignore_bins rv32_no_f2f = { INST_FPU_F2F } with (PROBE_XLEN == 32);
+            bins f2f   = { INST_FPU_F2F };    // fcvt.s.d / fcvt.d.s (RV64/D only)
+        }
 
         cp_active_threads : coverpoint active_thr {
             bins one_divergent = { 1 };
             bins partial[]     = { [2 : SIMD_W-1] };
             bins uniform       = { SIMD_W };
+        }
+
+        cp_warp : coverpoint wis;
+    endgroup
+
+    // ---- TCU (no op-decode: only INST_TCU_WMMA exists) ----------------------
+    // Divergence + warp distribution only. INST_TCU_WMMA is the single TCU op, so
+    // there is no sub-opcode coverpoint (nothing to decode).
+    //
+    // COLLECTIVE-OP WAIVER (cp_active_threads): WMMA is a warp-COLLECTIVE tensor op
+    // — every lane of the warp contributes a slice of the A/B/D matrix tiles,
+    // indexed by vx_thread_id() (vx_tensor.h:181). It is only well-formed under a
+    // FULL (uniform) thread mask; a partial or single-thread mask would drop lanes
+    // from the collective matrix product, which is not a valid WMMA (structurally
+    // analogous to the wspawn multi-thread waiver in sfu_class_cg). tcu_test +
+    // tcu_mt only ever produce uniform-mask WMMA. Waive one_divergent + partial;
+    // cp_warp (which warp issued) is fully reachable and filled by tcu_mt.
+    covergroup tcu_class_cg with function sample(
+        int                     active_thr,
+        logic [ISSUE_WIS_W-1:0] wis
+    );
+        option.per_instance = 1;
+        option.name         = "instr_class_cg_tcu";
+
+        cp_active_threads : coverpoint active_thr {
+            ignore_bins collective_one_divergent = { 1 };            // WMMA needs full warp
+            ignore_bins collective_partial       = { [2 : SIMD_W-1] };
+            bins uniform                          = { SIMD_W };
         }
 
         cp_warp : coverpoint wis;
@@ -260,10 +333,11 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
             end
 
             else if (gi == C_FPU) begin : g_fpu
-                noop_class_cg cg = new("fpu");
+                fpu_class_cg cg = new();
                 always @(posedge clk) begin
                     if (!reset && dispatch_if[gi].valid && dispatch_if[gi].ready) begin
                         cg.sample(
+                            dispatch_if[gi].data.op_type,
                             $countones(dispatch_if[gi].data.tmask),
                             dispatch_if[gi].data.wis
                         );
@@ -272,7 +346,14 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
             end
 
             else if (gi == C_TCU) begin : g_tcu
-                noop_class_cg cg = new("tcu");
+                // NOTE [Samuel 2026-06-29, REVIEW: Ahmad — coverage lane]: TCU is
+                // a config-optional EX unit (EXT_TCU_ENABLE, OFF by default). The
+                // TCU slot still exists in NUM_EX_UNITS but never dispatches when
+                // disabled, so its covergroup was an UNREACHABLE 0% block (~195
+                // bins) inflating the functional denominator. Only build it when
+                // TCU is actually enabled.
+`ifdef EXT_TCU_ENABLE
+                tcu_class_cg cg = new();
                 always @(posedge clk) begin
                     if (!reset && dispatch_if[gi].valid && dispatch_if[gi].ready) begin
                         cg.sample(
@@ -281,6 +362,7 @@ module vx_instr_probe import VX_gpu_pkg::*; #(
                         );
                     end
                 end
+`endif
             end
 
         end

@@ -104,6 +104,23 @@ else
         cd "$SIMX_REF_DIR" || exit 1
         ARCH_FLAGS="-DNUM_CLUSTERS=${NUM_CLUSTERS} -DNUM_CORES=${NUM_CORES}"
         ARCH_FLAGS="$ARCH_FLAGS -DNUM_WARPS=${NUM_WARPS} -DNUM_THREADS=${NUM_THREADS}"
+        # TCU: the RTL is compiled with EXT_TCU_ENABLE (vortex_rtl.flist), so the SimX
+        # golden model MUST match — otherwise SimX has no tensor_unit, can't decode the
+        # WMMA op, and aborts (run classified UNVERIFIABLE). The simx Makefile keys the
+        # tensor_unit.cpp source off -DEXT_TCU_ENABLE in CONFIGS; the DPI wrapper needs
+        # the same define so its decode path matches. Format (bf16/…) is decoded from the
+        # instruction at runtime, so no separate TCU_BHF define is required for SimX.
+        ARCH_FLAGS="$ARCH_FLAGS -DEXT_TCU_ENABLE"
+        # Rebuild the SimX CORE objects with the per-config macros, not just the DPI
+        # wrapper. SimX sizes ibuffers_/etc. at runtime from arch.num_warps() but
+        # bounds its issue loops with COMPILE-TIME macros (PER_ISSUE_WARPS,
+        # ISSUE_WIDTH = UP(NUM_WARPS/16)). If obj/*.o were built with a different
+        # NUM_WARPS than the run config, Core::issue() over-indexes ibuffers_ and
+        # SimX aborts (vector::_M_range_check) — leaving memory poison and a vacuous
+        # scoreboard. The simx Makefile keys a CONFIG_FILE off CONFIGS, so this only
+        # recompiles when the config actually changes. (Fixes multi-config SimX;
+        # enables the D-matrix to verify at any NUM_WARPS/NUM_THREADS.)
+        make -C "$VORTEX_HOME/sim/simx" CONFIGS="$ARCH_FLAGS" 2>&1
         make build \
             VORTEX_HOME="$VORTEX_HOME" \
             QUESTA_HOME="$QUESTA_HOME" \
@@ -393,6 +410,73 @@ if [[ -n "$PROGRAM" ]]; then
                     -e 's/\becall\b/ebreak/g' \
                     "$PROGRAM_SOURCE" > "$ASM_CLEAN"
                 print_info "Stripped machine-mode CSRs/mret, replaced ecall→ebreak → $ASM_CLEAN"
+
+                # ── Self-checking signature epilogue ─────────────────────────
+                # Pure-arithmetic riscv-dv tests compute only in registers and write
+                # nothing to memory → the black-box end-state scoreboard has nothing
+                # to compare (vacuous pass). Make them self-checking like a kernel:
+                # replace just the test_done exit (test_done: li gp,N; ecall/ebreak)
+                # with a dump of x1..x30 to a linked .data buffer (vortex_sig), then
+                # vx_tmc 0 to retire the warp. DUT and SimX run identical code → buffer
+                # → real DUT-vs-SimX comparison. Three things make this work:
+                #   1. LINKED buffer (not a bare absolute addr): Vortex L1 is
+                #      write-allocate, so the first store to a fresh line issues a
+                #      FILL READ. An unloaded address (e.g. 0x80100000) gets no read
+                #      response → the store wedges. A .data buffer of explicit zeros
+                #      is in the loaded image, so the fill returns data and completes.
+                #   2. vx_tmc 0 (RISCV_CUSTOM0=0x0B) RETIRES the warp. Vortex ebreak
+                #      does NOT deactivate the warp — without a real retire the core
+                #      never quiesces, the dirty-line write-back never drains, and the
+                #      completion gate (tb_execution_complete && axi_idle && mem_idle)
+                #      never opens (the prior hangs). Retiring = the kernel busy=0 path.
+                #   3. NO fence (would stall the warp before it can retire).
+                # x31 is the base pointer (la). write_tohost/_exit labels are kept (a
+                # trap handler does `la x20, write_tohost`) but share the retire path.
+                # Replace ONLY the 3-line test_done exit block (test_done: li gp,N;
+                # ecall/ebreak). riscv-dv places the sub_N sub-programs and the
+                # write_tohost handshake AFTER test_done, so spanning the range up to
+                # `j write_tohost` would delete the sub-programs and break linking for
+                # loop/jump profiles. vx_tmc 0 retires the warp right at test_done, so
+                # write_tohost is never reached and is left untouched.
+                # Bounded + portable: buffer the test_done block and inject on its
+                # ecall/ebreak terminator (plain match — gawk treats \b as backspace,
+                # not a word boundary, so it is NOT used). If the terminator is not
+                # within a few lines (unexpected exit shape), flush the buffer
+                # UNCHANGED — never run to EOF deleting the rest of the file.
+                awk '
+                  /^test_done:/ && !injected { inblk = 1; buf = ""; cnt = 0 }
+                  inblk {
+                    buf = buf $0 "\n"; cnt++;
+                    if ($0 ~ /ebreak/ || $0 ~ /ecall/) {
+                      print "test_done:";
+                      print "                  la x31, vortex_sig";
+                      for (i = 1; i <= 30; i++)
+                        print "                  sw x" i ", " (i-1)*4 "(x31)";
+                      print "                  .insn r 0x0B, 0, 0, x0, x0, x0";  # vx_tmc 0 — retire warp
+                      print "_vortex_done:     j _vortex_done";                 # safety (unreached after retire)
+                      inblk = 0; injected = 1; next;
+                    }
+                    if (cnt >= 6) { printf "%s", buf; inblk = 0; next; }        # not the exit block — emit unchanged
+                    next;
+                  }
+                  { print }
+                  END {
+                    if (injected) {
+                      print ".section .data";
+                      print ".align 6";
+                      print "vortex_sig:";
+                      print ".rept 32";
+                      print ".4byte 0";
+                      print ".endr";
+                    }
+                  }
+                ' "$ASM_CLEAN" > "${ASM_CLEAN}.sig" && mv "${ASM_CLEAN}.sig" "$ASM_CLEAN"
+                if grep -q "^_vortex_done:" "$ASM_CLEAN"; then
+                    print_info "Injected self-checking GPR dump (x1..x30 → vortex_sig) + vx_tmc 0 retire"
+                else
+                    print_warning "No 'test_done:'..'j write_tohost' exit block found — signature epilogue NOT injected (run stays vacuous)"
+                fi
+
                 PROGRAM_SOURCE="$ASM_CLEAN"
 
                 ASM_ELF="${PROGRAM_HEX%.hex}.elf"

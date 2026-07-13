@@ -71,6 +71,15 @@ class status_monitor extends uvm_monitor;
     int  total_execution_cycles;
     real peak_ipc;
     longint total_instructions;
+    // Windowed (instantaneous) IPC state — retired instrs over a fixed cycle
+    // window, updated each time the window elapses. Cumulative IPC only ever
+    // occupies 1-2 buckets; windowed IPC exercises the full cp_ipc_bucket range.
+    localparam int IPC_WINDOW = 64;    // cycles per throughput window (small enough
+                                       // to capture real compute bursts between
+                                       // icache refills -> reaches the high_ipc bin)
+    real    ipc_window;
+    longint win_prev_instr;
+    longint win_prev_cycle;
 
     //==========================================================================
     // Sampling Control
@@ -104,6 +113,9 @@ class status_monitor extends uvm_monitor;
         total_execution_cycles = 0;
         peak_ipc               = 0.0;
         total_instructions     = 0;
+        ipc_window             = 0.0;
+        win_prev_instr         = 0;
+        win_prev_cycle         = 0;
 
         sample_interval = 1;
         sample_counter  = 0;
@@ -166,6 +178,21 @@ class status_monitor extends uvm_monitor;
             trans.cycle_count     = vif.monitor_cb.cycle_count;
             trans.instr_count     = vif.monitor_cb.instr_count;
             trans.pc              = vif.monitor_cb.pc;
+            trans.fetch_stall     = vif.monitor_cb.fetch_stall;
+            trans.memory_stall    = vif.monitor_cb.memory_stall;
+            trans.decode_stall    = vif.monitor_cb.decode_stall;
+            trans.issue_stall     = vif.monitor_cb.issue_stall;
+            trans.execute_stall   = vif.monitor_cb.execute_stall;
+            // Windowed (instantaneous) IPC: retired instrs over the last
+            // IPC_WINDOW cycles, refreshed when the window elapses, held between.
+            if (vif.monitor_cb.cycle_count - win_prev_cycle >= IPC_WINDOW) begin
+                ipc_window     = real'(vif.monitor_cb.instr_count - win_prev_instr)
+                               / real'(vif.monitor_cb.cycle_count - win_prev_cycle);
+                win_prev_instr = vif.monitor_cb.instr_count;
+                win_prev_cycle = vif.monitor_cb.cycle_count;
+            end
+            trans.ipc_window      = ipc_window;
+            trans.active_warps    = vif.monitor_cb.active_warps;
             trans.sample_time     = $time;
             trans.calculate_metrics();
             ap.write(trans);
@@ -230,6 +257,13 @@ class status_monitor extends uvm_monitor;
                 ebreak_txn.cycle_count     = vif.monitor_cb.cycle_count;
                 ebreak_txn.instr_count     = vif.monitor_cb.instr_count;
                 ebreak_txn.pc              = vif.monitor_cb.pc;
+                ebreak_txn.fetch_stall     = vif.monitor_cb.fetch_stall;
+                ebreak_txn.memory_stall    = vif.monitor_cb.memory_stall;
+                ebreak_txn.decode_stall    = vif.monitor_cb.decode_stall;
+                ebreak_txn.issue_stall     = vif.monitor_cb.issue_stall;
+                ebreak_txn.execute_stall   = vif.monitor_cb.execute_stall;
+                ebreak_txn.ipc_window      = ipc_window;   // last windowed IPC
+                ebreak_txn.active_warps    = vif.monitor_cb.active_warps;
                 ebreak_txn.sample_time     = $time;
                 ebreak_txn.calculate_metrics();
                 ap.write(ebreak_txn);   // <— immediate, before any objection drop
