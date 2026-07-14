@@ -73,6 +73,8 @@ package simx_pkg;
         output byte     unsigned rd,
         output byte     unsigned sop,
         output byte     unsigned eop,
+        output byte     unsigned fu_type,
+        output byte     unsigned is_volatile,
         output longint unsigned result[]
     );
     import "DPI-C" context function int  simx_cosim_pending();
@@ -91,6 +93,8 @@ package simx_pkg;
         byte     unsigned rd;
         byte     unsigned sop;
         byte     unsigned eop;
+        byte     unsigned fu_type;
+        byte     unsigned is_volatile;
         longint unsigned result[];
     } simx_retire_s;
 

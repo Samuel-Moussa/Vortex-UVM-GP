@@ -74,6 +74,11 @@ class vortex_env extends uvm_env;
   vortex_scoreboard m_scoreboard;
 
   //==========================================================================
+  // Lockstep Scoreboard  (Phase A0 — enabled via cfg.enable_lockstep/+LOCKSTEP)
+  //==========================================================================
+  lockstep_scoreboard m_lockstep_scoreboard;
+
+  //==========================================================================
   // Coverage Collector  (enabled via cfg.enable_coverage)
   //==========================================================================
   vortex_coverage_collector m_coverage;
@@ -166,6 +171,17 @@ class vortex_env extends uvm_env;
     end else begin
       `uvm_info("VORTEX_ENV", "Scoreboard DISABLED (cfg.enable_scoreboard=0)",
                 UVM_MEDIUM)
+    end
+
+    // ------------------------------------------------------------------
+    // Lockstep scoreboard (Phase A0) — per-instruction DUT-vs-SimX checker.
+    // No AP wiring: it reads lockstep_pkg::dut_retire_q (probe-filled) and
+    // SimX's cosim drain queue directly in check_phase.
+    // ------------------------------------------------------------------
+    if (cfg.enable_lockstep) begin
+      m_lockstep_scoreboard =
+        lockstep_scoreboard::type_id::create("m_lockstep_scoreboard", this);
+      `uvm_info("VORTEX_ENV", "Lockstep scoreboard created (+LOCKSTEP)", UVM_MEDIUM)
     end
 
     // ------------------------------------------------------------------

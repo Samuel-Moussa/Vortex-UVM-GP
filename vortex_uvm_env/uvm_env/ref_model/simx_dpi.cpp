@@ -877,6 +877,8 @@ int simx_cosim_pop(
     unsigned char* rd,
     unsigned char* sop,
     unsigned char* eop,
+    unsigned char* fu_type,
+    unsigned char* is_volatile,
     const svOpenArrayHandle result
 ) {
     if (!g_processor) {
@@ -896,6 +898,8 @@ int simx_cosim_pop(
     *rd    = rec.rd;
     *sop   = rec.sop;
     *eop   = rec.eop;
+    *fu_type = rec.fu_type;
+    *is_volatile = rec.is_volatile;
 
     const int lo = svLow(result, 1);
     const int hi = svHigh(result, 1);

@@ -39,7 +39,7 @@
 //   No CORE_ID parameter: per-core attribution comes from the UCDB hierarchy
 //   path (...core[N].u_commit_probe), not from a bind-time constant.
 //==============================================================================
-module vx_commit_probe import VX_gpu_pkg::*; (
+module vx_commit_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
     input wire clk,
     input wire reset,
     // No modport -> read-only by discipline. Using .slave would drive ready and
@@ -52,6 +52,21 @@ module vx_commit_probe import VX_gpu_pkg::*; (
         else $fatal(1, "[P1-PROBE] uuid width=%0d <= 1 -- degenerate UUID config",
                     $bits(commit_arb_if[0].data.uuid));
 
+    // Phase-A0 lockstep gate. Read once at time 0 from +LOCKSTEP. When 0 the
+    // capture block below never pushes → default run stays byte-identical.
+    // Set here (module domain) so the RTL-side gate matches cfg.enable_lockstep
+    // (the class-side scoreboard reads the same plusarg independently).
+    initial if ($test$plusargs("LOCKSTEP")) lockstep_pkg::lockstep_en = 1'b1;
+    initial if ($test$plusargs("LOCKSTEP_INJECT")) lockstep_pkg::inject_en = 1'b1;
+
+    // SIMD lane count of the commit `data` field, derived from the signal itself
+    // (total bits / one-lane bits) so no `SIMD_WIDTH / `XLEN macro is needed —
+    // those are not visible in this compile unit. Correct for any config.
+    localparam int LS_LANES =
+        $bits(commit_arb_if[0].data.data) / $bits(commit_arb_if[0].data.data[0]);
+    initial if ($test$plusargs("LOCKSTEP"))
+        $display("[LS %m] LS_LANES(SIMD_WIDTH)=%0d ISSUE_WIDTH=%0d", LS_LANES, `ISSUE_WIDTH);
+
     // Per-lane passive retire observation. Exposed for bound covergroups (Ahmad).
     // Liveness self-check: per-lane counter proves the bind elaborated + observes
     // real retires. Passive only — never drives the DUT. commit_arb_if must be
@@ -63,6 +78,40 @@ module vx_commit_probe import VX_gpu_pkg::*; (
         always @(posedge clk)
             if (!reset && retire_fire)
                 p1_lane_count[i] <= p1_lane_count[i] + 1;
+
+        // -------- A0 lockstep capture (passive, +LOCKSTEP only) -------------
+        // Push one dut_retire_s per writeback commit BEAT into the package queue.
+        // Stays read-only (no drive of commit_arb_if). PC is converted to a full
+        // byte address via to_fullPC() so it matches SimX's byte PC. Only wb
+        // beats are captured (non-wb retirements have no architectural result to
+        // compare). cid=0 here — A0 is single-core; A1 adds per-core attribution.
+        always @(posedge clk) begin
+            if (lockstep_pkg::lockstep_en && !reset && retire_fire
+                    && commit_arb_if[i].data.wb) begin
+                lockstep_pkg::dut_retire_s rec;
+                rec.uuid  = commit_arb_if[i].data.uuid;
+                rec.cid   = 0;
+                rec.wid   = commit_arb_if[i].data.wid;
+                rec.sid   = commit_arb_if[i].data.sid;
+                rec.pc    = to_fullPC(commit_arb_if[i].data.PC);
+                rec.rd    = commit_arb_if[i].data.rd;
+                rec.wb    = commit_arb_if[i].data.wb;
+                rec.tmask = commit_arb_if[i].data.tmask;
+                rec.sop   = commit_arb_if[i].data.sop;
+                rec.eop   = commit_arb_if[i].data.eop;
+                rec.data  = new[LS_LANES];
+                for (int l = 0; l < LS_LANES; l++)
+                    rec.data[l] = commit_arb_if[i].data.data[l];
+                // Negative-test: corrupt exactly the first captured lane once.
+                if (lockstep_pkg::inject_en && !lockstep_pkg::inject_done) begin
+                    rec.data[0] = rec.data[0] ^ 64'h1;
+                    lockstep_pkg::inject_done = 1'b1;
+                    $display("[LOCKSTEP-INJECT %m] flipped bit0 of uuid=%0h wid=%0d lane0",
+                             rec.uuid, rec.wid);
+                end
+                lockstep_pkg::ls_push(rec);
+            end
+        end
     end
 
     final begin

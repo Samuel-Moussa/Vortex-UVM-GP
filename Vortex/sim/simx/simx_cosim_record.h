@@ -25,7 +25,9 @@ struct simx_retire_t {
     uint8_t  rd;          // destination register index
     uint8_t  sop;
     uint8_t  eop;
-    uint8_t  _pad[7];   // align result[] to 8 bytes after the 33 preceding bytes
+    uint8_t  fu_type;    // FUType: 0=ALU 1=LSU 2=FPU 3=SFU ... (load-data not observable at DUT commit probe)
+    uint8_t  is_volatile;// 1 = read a perf-counter CSR (mcycle/minstret/...) → exclude from lockstep compare
+    uint8_t  _pad[5];    // align result[] to 8 bytes after the 35 preceding bytes
     uint64_t result[SIMX_COSIM_MAX_THREADS];
 };
 

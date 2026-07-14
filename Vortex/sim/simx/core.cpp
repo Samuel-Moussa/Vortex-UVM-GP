@@ -245,6 +245,8 @@ void Core::schedule() {
     rec.rd    = static_cast<uint8_t>(trace->dst_reg.idx);
     rec.sop   = trace->sop ? 1 : 0;
     rec.eop   = trace->eop ? 1 : 0;
+    rec.fu_type = static_cast<uint8_t>(trace->fu_type);  // for lockstep: LSU load-data isn't on the DUT commit probe
+    rec.is_volatile = trace->volatile_result ? 1 : 0;    // perf-counter CSR read → excluded from lockstep compare
     auto vals = emulator_.read_dst_reg(trace->wid, trace->dst_reg);
     for (uint32_t t = 0, n = vals.size(); t < n && t < SIMX_COSIM_MAX_THREADS; ++t) {
       rec.result[t] = vals[t];

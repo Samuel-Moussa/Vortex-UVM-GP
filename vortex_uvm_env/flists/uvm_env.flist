@@ -40,6 +40,11 @@ $VORTEX_UVM_HOME/tb/vortex_if.sv
 # 4. Memory model package (standalone package; imported by multiple packages)
 $VORTEX_UVM_HOME/tb/mem_model.sv
 
+# Lockstep hand-off package (Phase A0): probe (module) pushes DUT retires here,
+# lockstep_scoreboard (owned by vortex_env_pkg) drains it. MUST precede the
+# commit probe (imports it) and vortex_env_pkg.
+$VORTEX_UVM_HOME/uvm_env/lockstep_pkg.sv
+
 # White-box architectural instruction coverage (ARCH-COV / instr_class_cg / Warp/scheduler-state functional coverage)
 $VORTEX_UVM_HOME/tb/vx_instr_probe.sv
 $VORTEX_UVM_HOME/tb/vx_sched_probe.sv

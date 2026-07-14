@@ -29,6 +29,7 @@ package vortex_env_pkg;
     import status_agent_pkg::*;
     import mem_model_pkg::*;
     import simx_pkg::*;
+    import lockstep_pkg::*;
     import VX_gpu_pkg::*;
 
     // Declare analysis imp macros ONCE for the entire environment
@@ -41,6 +42,7 @@ package vortex_env_pkg;
     // INCLUDE the components so they are compiled inside this package
     `include "vortex_virtual_sequencer.sv"
     `include "vortex_scoreboard.sv"
+    `include "lockstep_scoreboard.sv"
     `include "vortex_coverage_collector.sv"
     `include "vortex_env.sv"
 

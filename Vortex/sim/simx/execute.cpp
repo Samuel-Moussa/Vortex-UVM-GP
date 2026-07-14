@@ -1308,6 +1308,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         std::abort();
       }
       trace->fetch_stall = (csr_addr <= VX_CSR_FCSR);
+      // Performance-monitor CSRs (mcycle/minstret/mhpmcounter* and their _h
+      // mirrors) are timing-model-specific → exclude from per-instruction
+      // lockstep compare (the DUT and functional SimX count differently).
+      if ((csr_addr >= VX_CSR_MPM_BASE   && csr_addr < (VX_CSR_MPM_BASE   + 32)) ||
+          (csr_addr >= VX_CSR_MPM_BASE_H && csr_addr < (VX_CSR_MPM_BASE_H + 32)))
+        trace->volatile_result = true;
       rd_write = true;
     },
     [&](WctlType wctl_type) {
