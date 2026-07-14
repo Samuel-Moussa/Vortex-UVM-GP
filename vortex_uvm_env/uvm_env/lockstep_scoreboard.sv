@@ -90,6 +90,26 @@ class lockstep_scoreboard extends uvm_scoreboard;
         return int'((cid << 16) | wid);
     endfunction
 
+    // Number of low uuid[63:32] bits used for the local warp id (= log2 NUM_WARPS,
+    // NW_BITS in RTL). Above that sits CORE_ID. See VX_uuid_gen.sv:40.
+    function automatic int nw_bits();
+        return (cfg.num_warps <= 1) ? 0 : $clog2(cfg.num_warps);
+    endfunction
+
+    // Recover the flat global core id from a DUT uuid. VX_uuid_gen packs
+    //   uuid = { g_wid[UUID_WIDTH-33:0], counter[31:0] },  g_wid = (CORE_ID<<NW_BITS)+wid
+    // so CORE_ID == (uuid >> 32) >> NW_BITS. This matches SimX's flat cid
+    // (core.cpp asserts trace->cid == core_id_). Lets multi-core lockstep key by
+    // (cid,wid) without a probe/RTL change (probe's pushed cid is superseded).
+    function automatic int unsigned cid_of_uuid(longint unsigned uuid);
+        return int'((uuid >> 32) >> nw_bits());
+    endfunction
+    function automatic int unsigned wid_of_uuid(longint unsigned uuid);
+        // wid occupies the low NW_BITS of g_wid; mask by (2^NW_BITS - 1) so this
+        // is correct for ANY NUM_WARPS (incl. non-power-of-2), not just num_warps-1.
+        return int'((uuid >> 32) & ((1 << nw_bits()) - 1));
+    endfunction
+
     //--------------------------------------------------------------------------
     // Drain SimX's cosim queue into per-(cid,wid) gold FIFOs (wb records only).
     //--------------------------------------------------------------------------
@@ -141,7 +161,9 @@ class lockstep_scoreboard extends uvm_scoreboard;
         lockstep_pkg::dut_retire_s b;
         for (i = 0; i < lockstep_pkg::dut_retire_q.size(); i++) begin
             b      = lockstep_pkg::dut_retire_q[i];
-            key    = key_of(b.cid, b.wid);
+            // Derive the flat global (cid,wid) from the uuid rather than trusting
+            // the probe's pushed cid (hardcoded 0). uuid embeds CORE_ID + wid.
+            key    = key_of(cid_of_uuid(b.uuid), wid_of_uuid(b.uuid));
             simd_w = b.data.size();
             base   = b.sid * simd_w;
             if (!merged[key].exists(b.uuid)) begin
@@ -259,7 +281,13 @@ class lockstep_scoreboard extends uvm_scoreboard;
     function void report_phase(uvm_phase phase);
         super.report_phase(phase);
         if (cfg == null || !cfg.enable_lockstep) return;
-        `uvm_info("LOCKSTEP", "==================== A0 LOCKSTEP SUMMARY ====================", UVM_LOW)
+        begin
+            bit seen_cid [int];
+            int ncid = 0;
+            foreach (gold_fifo[k]) if (!seen_cid.exists(k >> 16)) begin seen_cid[k>>16]=1; ncid++; end
+            `uvm_info("LOCKSTEP", "==================== A0 LOCKSTEP SUMMARY ====================", UVM_LOW)
+            `uvm_info("LOCKSTEP", $sformatf("  cores exercised     : %0d (distinct cid)  warps/core buckets: %0d", ncid, gold_fifo.num()), UVM_LOW)
+        end
         `uvm_info("LOCKSTEP", $sformatf("  compared pairs      : %0d", n_pairs),        UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  matched             : %0d", n_matched),      UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  dut_orphan          : %0d", n_dut_orphan),   UVM_LOW)

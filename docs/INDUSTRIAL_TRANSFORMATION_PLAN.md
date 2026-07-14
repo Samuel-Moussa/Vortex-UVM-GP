@@ -11,7 +11,13 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 (lockstep PoC) DONE ✅. NEXT: A1 (multi-thread + divergence + D2b rvvi_if migration).**
+**CURRENT MILESTONE: Phase A → A0 DONE ✅ · A1(a) divergence DONE ✅ · A1(b) multi-core DONE ✅. NEXT: A1(c) rvvi_if migration + A1(d) 2CL/suite/no_fence first-divergence.**
+
+**A1 progress (branch `industrial_transformations`):**
+- **A1(a) divergence — DONE:** `diverge_uni3` (nested asymmetric 3v1→2v1→1v1, heavy partial masks) `+LOCKSTEP` → **2668/2668 matched, 0 mismatches, PASSED.** uuid-group aggregation + tmask-union handle divergence with no code change.
+- **A1(b) multi-core cid — DONE:** DUT `uuid` embeds flat `CORE_ID` (OBS-006 / `VX_uuid_gen.sv:40`), and `CORE_ID` is flat-global across clusters (`VX_socket.sv:227` + `VX_cluster.sv:132`), matching SimX `rec.cid`. Scoreboard now derives `(cid,wid)` from the uuid (`cid_of_uuid`/`wid_of_uuid`) — no probe/RTL change. 1CL/2C/4W/4T `+LOCKSTEP` → **cores exercised 2, 1801/1801 matched, 0 cross-core orphans, PASSED.** All lockstep edits audited config-generic for ANY NC/NCL/NW/NT (fixed wid mask → `(1<<NW_BITS)-1` for non-power-of-2 NW). See `MEMORY.md` config-generic-edits.
+- **A1(c) NEXT:** migrate the D2a package-queue hand-off → **D2b `rvvi_if` + monitor** (core-v-verif `uvma_rvvi` style) — an SV interface bound at the probe, a UVM monitor publishing RVVI transactions, scoreboard subscribes via analysis port (replaces the global package queue).
+- **A1(d):** run lockstep across the directed suite at 2CL/2C/4W/4T; use it to pinpoint the 2CL `no_fence`/`full_interrupt` FIRST-divergence instruction (the original motivation — currently "Future Work — needs lockstep"). Verify DUT/SimX flat-cid numbering agrees at ≥2 clusters (1CL/2C proved it at socket level; 2CL exercises the cluster term of the CORE_ID formula).
 
 **A0 RESULT (verified in sim, branch `industrial_transformations`):** per-instruction RVVI-style lockstep working on `vecadd_lite` 1CL/1C/4W/4T → **1035/1035 architectural writebacks matched, 0 orphans, 0 field mismatches, TEST PASSED, 0 UVM_ERROR.** Injection (`+LOCKSTEP_INJECT`) caught at exact uuid/PC/lane (`DUT=5 vs SimX=4`) = non-vacuous. Default (no `+LOCKSTEP`) path byte-identical (lockstep SB not built), PASSED. Loads (187) + perf-CSRs (62) correctly scoped out of the data compare.
 
