@@ -230,7 +230,7 @@ A group project delivered to one shared verification plan.
 | **Samuel Mousa** | verification infrastructure · full configurability (parameter harness, elaboration asserts, scripts) · constrained-random (riscv-dv) |
 | **Ahmad Mahmoud** | functional & code coverage · scoreboard |
 | **Abanoub Nabil** | Vortex architecture |
-| **Steven Ibrahim** | golden model (SimX / DPI-C) · directed tests · AXI SVA |
+| **Steven Ibrahim** | golden model (SimX / DPI-C) · directed tests · AXI SVA . Regression Tests . Building Configrable master Makefile |
 | **Ahmad Fawzy** | UVM agents |
 
 ---
