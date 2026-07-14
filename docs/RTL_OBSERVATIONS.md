@@ -81,6 +81,23 @@ not scattered across per-fix docs.
   `Vortex/sim/simx/execute.cpp` for the MPM range); lockstep excludes them from the
   DATA compare (PC/rd still checked). Standard RVVI / core-v-verif exclusion class.
 
+### OBS-006 — DUT `uuid` encodes the flat global core id + local warp id
+- **Class:** QUIRK/EXPECTED · **Disposition:** worked-around (depended on) · **Found:** Phase A1 (2026-07-14)
+- **What:** The commit `uuid` is `{ g_wid, counter[31:0] }` where
+  `g_wid = (CORE_ID << NW_BITS) + wid` (`NW_BITS = log2(NUM_WARPS)`). So
+  `uuid[31:0]` is a per-warp issue counter, and `uuid>>32` holds
+  `(CORE_ID<<NW_BITS)+wid`. `CORE_ID` is the FLAT global core index (matches
+  SimX: `core.cpp` asserts `trace->cid == core_id_`). Verified: wid=2, CORE_ID=0
+  → `uuid=0x2_000000xx`.
+- **Evidence:** `Vortex/hw/rtl/core/VX_uuid_gen.sv:25,40-41`
+  (`GNW_WIDTH=UUID_WIDTH-32`, `g_wid=(CORE_ID<<NW_BITS)+wid`, `uuid={g_wid,cntr}`);
+  `VX_schedule.sv:330-341`. `UUID_WIDTH=44` (`VX_gpu_pkg.sv:66`).
+- **Impact / handling:** Multi-core lockstep derives the real `(cid,wid)` from the
+  uuid (`cid=(uuid>>32)>>NW_BITS`, `wid=(uuid>>32)&(NUM_WARPS-1)`) — no probe param
+  or RTL change needed; the probe's hardcoded `cid=0` is superseded. Requires
+  `UUID_ENABLE` (on here); with it off, `uuid=0` and this + all uuid-alignment
+  breaks (see OBS-005 for the golden-side uuid=0 case).
+
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)
 - **What:** The SimX golden's cosim retire record carries `uuid == 0` for every
