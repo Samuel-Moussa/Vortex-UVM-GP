@@ -320,6 +320,7 @@ class vortex_config extends uvm_object;
     rand bit            enable_scoreboard;
     rand bit            strict_ordering;
     rand bit            compare_on_the_fly;
+    rand bit            enable_lockstep;    // Phase-A0: per-instruction lockstep (default 0, +LOCKSTEP)
 
     //==========================================================================
     // SYNCHRONIZATION EVENTS
@@ -786,6 +787,7 @@ class vortex_config extends uvm_object;
         enable_scoreboard  = 1;
         strict_ordering    = 0;
         compare_on_the_fly = 1;
+        enable_lockstep    = 0;   // opt-in via +LOCKSTEP (default byte-identical)
 
     endfunction
 
@@ -905,6 +907,14 @@ class vortex_config extends uvm_object;
             simx_path = str_tmp;
         if ($test$plusargs("DISABLE_SIMX") || $test$plusargs("disable_simx"))
             simx_enable = 0;
+
+        // --- Lockstep (Phase A0) — per-instruction DUT-vs-SimX checking.
+        //     Requires SimX (the golden retire stream), so force it on.
+        if ($test$plusargs("LOCKSTEP")) begin
+            enable_lockstep = 1;
+            simx_enable     = 1;
+            `uvm_info("VORTEX_CFG", "Lockstep ENABLED (+LOCKSTEP): per-instruction DUT-vs-SimX", UVM_MEDIUM)
+        end
 
         // --- Driver selection ---
         if ($value$plusargs("DRIVER=%s", str_tmp)) begin

@@ -84,6 +84,16 @@ if [[ -n "${AXI_FLOOD:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +AXI_FLOOD=$AXI_FLOOD"
 fi
 
+# Phase-A0 lockstep — env LOCKSTEP=1 enables per-instruction DUT-vs-SimX checking
+# (forces SimX on in vortex_config). LOCKSTEP_INJECT=1 adds a 1-bit fault to the
+# first captured wb lane to prove the comparator is non-vacuous. Both OFF by default.
+if [[ -n "${LOCKSTEP:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP"
+fi
+if [[ -n "${LOCKSTEP_INJECT:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_INJECT"
+fi
+
 
 print_info "Test:      $TEST_NAME"
 print_info "Config:    ${NUM_CLUSTERS}CL ${NUM_CORES}C ${NUM_WARPS}W ${NUM_THREADS}T"
