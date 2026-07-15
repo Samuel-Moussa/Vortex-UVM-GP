@@ -32,6 +32,24 @@
 
 using namespace vortex;
 
+// ── Decode-failure diagnostic ────────────────────────────────────────────────
+// SimX's decoder aborts (default: std::abort()) on any instruction word it does
+// not model. Previously that abort was silent — the DPI crash-guard masked it to
+// a bare sentinel (-3 / UNVERIFIABLE) with no reason. This macro prints the exact
+// faulting instruction word + PC + warp + decode.cpp line BEFORE aborting, so an
+// UNVERIFIABLE-by-decode-abort case is self-documenting (garbage from a computed
+// jump vs a genuinely-unimplemented RISC-V instruction). Used ONLY inside
+// Emulator::decode() where `code`/`wid` and `warps_` are in scope; the abort is
+// intentionally NOT silenced (a golden model must refuse, not fabricate, a result).
+#define DECODE_ABORT() do {                                                     \
+    std::cerr << "[SimX-DECODE-ABORT] cannot decode instr=0x" << std::hex       \
+              << std::setw(8) << std::setfill('0') << (code)                    \
+              << " at PC=0x" << warps_.at(wid).PC << std::dec                   \
+              << " (wid=" << (wid) << ", decode.cpp:" << __LINE__ << ")"        \
+              << std::endl;                                                     \
+    std::abort();                                                               \
+  } while (0)
+
 static op_string_t op_string(const Instr &instr) {
   auto op_type = instr.getOpType();
   auto instrArgs = instr.getArgs();
@@ -547,7 +565,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       if (funct3 == 0x7) { // CZERO.NEZ
         imm = 1;
       } else {
-        std::abort();
+        DECODE_ABORT();
       }
       instr->setOpType(AluType::CZERO);
       instr->setArgs(IntrAluArgs{0, 0, imm});
@@ -587,7 +605,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         break;
       }
       default:
-        std::abort();
+        DECODE_ABORT();
       }
       instr->setArgs(IntrMdvArgs{is_w});
     } else {
@@ -636,7 +654,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         break;
       }
       default:
-        std::abort();
+        DECODE_ABORT();
       }
       instr->setArgs(IntrAluArgs{is_imm, is_w, imm});
     }
@@ -704,7 +722,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       case 6: instArgs.width = 2; break;
       case 7: instArgs.width = 3; break;
       default:
-        std::abort();
+        DECODE_ABORT();
       }
       instr->setSrcReg(0, rs1, RegType::Integer);
       auto mop = (code >> shift_vmop) & mask_vmop;
@@ -772,7 +790,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
     case 0x18: instr->setOpType(AmoType::AMOMINU); break;
     case 0x1c: instr->setOpType(AmoType::AMOMAXU); break;
     default:
-      std::abort();
+      DECODE_ABORT();
     }
     instr->setArgs(IntrAmoArgs{funct3, aq, rl});
     instr->setDestReg(rd, RegType::Integer);
@@ -789,7 +807,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       case 2: case 6: instr->setOpType(CsrType::CSRRS); break;
       case 3: case 7: instr->setOpType(CsrType::CSRRC); break;
       default:
-        std::abort();
+        DECODE_ABORT();
       }
       auto imm12 = code >> shift_rs2;
       if (funct3 < 5) {
@@ -899,7 +917,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       instr->setSrcReg(0, rs1, RegType::Integer);
       break;
     default:
-      std::abort();
+      DECODE_ABORT();
     }
     ibuffer.push_back(instr);
   } break;
@@ -991,7 +1009,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
       }
     } break;
     default:
-      std::abort();
+      DECODE_ABORT();
     }
     ibuffer.push_back(instr);
   } break;
@@ -1033,7 +1051,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         wctlArgs.is_neg = (rd != 0);
         break;
       default:
-        std::abort();
+        DECODE_ABORT();
       }
       instr->setArgs(wctlArgs);
       ibuffer.push_back(instr);
@@ -1072,7 +1090,7 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         instr->setSrcReg(1, rs2, RegType::Integer);
         break;
       default:
-        std::abort();
+        DECODE_ABORT();
       }
       ibuffer.push_back(instr);
     } break;
@@ -1114,15 +1132,15 @@ void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
         }
       } break;
       default:
-        std::abort();
+        DECODE_ABORT();
       }
     } break;
   #endif
     default:
-      std::abort();
+      DECODE_ABORT();
     }
   } break;
   default:
-    std::abort();
+    DECODE_ABORT();
   }
 }

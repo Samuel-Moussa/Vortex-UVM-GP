@@ -142,7 +142,13 @@ uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
   __unused(uuid);
 
   uint32_t instr_code = 0;
-  this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
+  // Word-align the fetch (drop PC[1:0]), matching the RTL icache request address
+  // (VX_fetch.sv: icache_req_addr = PC[2 +: ...], "4-byte aligned"). The DUT keeps
+  // the full (possibly odd) PC in its register but always fetches the aligned word;
+  // without this mask a jalr-to-odd-target makes SimX read misaligned bytes →
+  // undecodable garbage → std::abort() (run wrongly classified UNVERIFIABLE). The
+  // architectural warp.PC is left unchanged so the odd PC still matches the DUT.
+  this->icache_read(&instr_code, warp.PC & ~Word(3), sizeof(uint32_t));
 
   DP(1, "Fetch: code=0x" << std::hex << instr_code << std::dec << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
          << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");

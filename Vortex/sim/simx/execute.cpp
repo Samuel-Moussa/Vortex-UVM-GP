@@ -466,6 +466,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             continue;
           rd_data[t].i = next_pc;
         }
+        // NOTE: intentionally NO `& ~1` here. In the DUT's debug build (PC_BITS=XLEN,
+        // to/from_fullPC identity) the architectural PC keeps its full low bits, so a
+        // jalr to an odd target yields an ODD committed PC — SimX must mirror that for
+        // the lockstep PC compare to match. The misalignment is absorbed at FETCH
+        // (word-aligned icache read), matching VX_fetch.sv (icache_req_addr = PC[2+:...],
+        // "4-byte aligned"). See Emulator::fetch().
         next_pc = rs1_data[thread_last].i + offset;
         trace->fetch_stall = true;
         rd_write = true;
