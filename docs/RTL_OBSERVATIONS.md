@@ -126,6 +126,24 @@ not scattered across per-fix docs.
   pairs=17664, matched=17664, field_mismatch PC/rd/data=0/0/0, dut_orphan=21992,
   simx_orphan=0; first-divergence per warp = DUT-ORPHAN. DPI sentinel:
   `vortex_uvm_env/uvm_env/ref_model/simx_dpi.cpp:41-44`.
+- **ROOT CAUSE (gdb backtrace on native `sim/simx/simx`, 2026-07-15):** SIGABRT (exit
+  134) from `vortex::Emulator::decode() [.cold]` → `step()` → `Core::schedule()`.
+  The SimX decoder is `default: std::abort();` for every unrecognized opcode/funct
+  field (`Vortex/sim/simx/decode.cpp:116,126,136,151,…` — ~15 sites). The random
+  `no_fence` program executes a **computed `jalr a3,a3`** (`a3` data-dependent) that
+  jumps to an address landing on non-instruction bytes; the decoder can't model them
+  and aborts. The DUT's RTL decoder handles unrecognized instructions gracefully
+  (illegal-instr/NOP) and runs to EBREAK, so only SimX dies. This is SimX **failing
+  loud on genuinely-undefined program behaviour** (wild jump), NOT an RTL fault.
+- **ENHANCEMENT (recommended, low-risk):** the abort is arguably correct (a golden
+  model should refuse rather than fabricate a result for garbage), so do NOT silence
+  it. The real gap is **observability**: the DPI converts the abort to a bare −3 with
+  no reason. Make `decode()`'s `default:` print the faulting **PC + instruction word**
+  before aborting (or capture them in the DPI SIGABRT handler) → every
+  UNVERIFIABLE-by-abort case becomes self-documenting. Only if a printed word turns
+  out to be a REAL unimplemented RISC-V instruction (not garbage) is implementing it
+  in SimX worthwhile (recovers coverage); the observability fix is the prerequisite
+  that tells us which case each abort is.
 - **NEW value from lockstep (vs end-state):** lockstep upgrades the verdict from
   "UNVERIFIABLE (nothing known)" to **"DUT ≡ SimX byte-exact for all 17664
   retirements SimX executed, up to the crash"** — the DUT is corroborated
