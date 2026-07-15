@@ -108,3 +108,31 @@ not scattered across per-fix docs.
 - **Impact / handling:** uuid is used only as a *cross-check* (reported), never as
   the alignment key. Lockstep aligns by per-`(cid,wid)` program order instead. If a
   future SimX build populates uuid, the cross-check becomes a strict 1:1 assertion.
+
+### OBS-007 (REF-MODEL) — SimX aborts (SIGABRT/SIGSEGV → exit −3) partway through some 2CL random programs
+- **Class:** REF-MODEL · **Disposition:** worked-around (UNVERIFIABLE class) · **Found:** Phase A1(d) (2026-07-15)
+- **What:** For a freshly regenerated `riscv_no_fence_test` at 2CL/2C/4W/4T, the SimX
+  DPI golden **crashes via signal** during run-to-completion (the DPI SIGABRT/SIGSEGV
+  handler returns the sentinel −3; scoreboard maps that to UNVERIFIABLE). SimX stops
+  emitting retirements at ~seq 4416/core while the DUT runs on to EBREAK (~9900
+  wb-retires/core). This is NOT an RTL value divergence — it is a SimX-model
+  robustness gap on a random instruction/memory pattern the functional model can't
+  handle. IMPORTANT: this is a *different program* from the pinned hex in
+  `docs/investigations/SimX_2CL_no_fence_divergence.md` (which had SimX *complete*
+  with a per-cluster value divergence) — same test class, different regenerated ELF,
+  different failure mode.
+- **Evidence:** lockstep run `scratchpad/a1d_no_fence_2CL.log`: `SimX done → exit
+  code = -3`, `SimX aborted/crashed … UNVERIFIABLE`; LOCKSTEP SUMMARY compared
+  pairs=17664, matched=17664, field_mismatch PC/rd/data=0/0/0, dut_orphan=21992,
+  simx_orphan=0; first-divergence per warp = DUT-ORPHAN. DPI sentinel:
+  `vortex_uvm_env/uvm_env/ref_model/simx_dpi.cpp:41-44`.
+- **NEW value from lockstep (vs end-state):** lockstep upgrades the verdict from
+  "UNVERIFIABLE (nothing known)" to **"DUT ≡ SimX byte-exact for all 17664
+  retirements SimX executed, up to the crash"** — the DUT is corroborated
+  instruction-by-instruction across all 4 cores of both clusters until SimX dies.
+- **Non-vacuity PROVEN (config-specific):** re-run with `+LOCKSTEP_INJECT` on the
+  SAME 2CL program flips one bit in one DUT retire → lockstep catches exactly one
+  DATA mismatch at seq=0 (`matched 17664→17663`, `field_mismatch data 0→1`,
+  `DUT=1 vs SimX=0`), first-divergence on cid=0 only, other cores' orphan boundary
+  unchanged. So the 12212 non-load per-lane data compares are live, not a pass.
+  Evidence: `scratchpad/a1d_no_fence_2CL_INJECT.log`.
