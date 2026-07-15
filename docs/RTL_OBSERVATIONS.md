@@ -98,6 +98,62 @@ not scattered across per-fix docs.
   `UUID_ENABLE` (on here); with it off, `uuid=0` and this + all uuid-alignment
   breaks (see OBS-005 for the golden-side uuid=0 case).
 
+### OBS-008 (REF-MODEL BUG — confirmed & FIXED) — SimX fetches at the exact (misaligned) byte PC instead of word-aligning
+- **Class:** REF-MODEL (golden-model correctness bug) · **Disposition:** needs-fix→**FIXED** · **Found:** Phase A1(d) (2026-07-15)
+- **What (corrected root cause):** SimX's instruction fetch read at the exact byte
+  `warp.PC` (`Vortex/sim/simx/emulator.cpp:145`, `icache_read(&code, warp.PC, 4)`).
+  In the DUT's **debug** build `PC_BITS=`XLEN` and `to/from_fullPC` are IDENTITY
+  (`VX_gpu_pkg.sv:75-82`), so the architectural PC keeps its **full low bits**: a
+  `jalr` to an odd target (riscv-dv random programs produce these — e.g. `jalr a3,a3`
+  with `a3` holding a label|1) yields an **odd committed PC** (0x8000c4dd), and the DUT
+  keeps it — but the DUT's icache request is **word-aligned** (`VX_fetch.sv:101`
+  `icache_req_addr = PC[2 +: ...]`, "4-byte aligned"), so the DUT fetches the correct
+  word and runs on. SimX kept the same odd PC (correct — mirrors the DUT) but read the
+  instruction at the **exact odd byte address** → misaligned bytes → undecodable
+  `0xb3018cd0` → `std::abort()` → run wrongly classified UNVERIFIABLE.
+- **NOT a JALR-LSB bug (first hypothesis, retracted):** RISC-V's `& ~1` would make the
+  PC *even*, but the DUT's debug PC is *odd*; masking the JALR target in SimX de-synced
+  it from the DUT (21968 phantom PC mismatches). The DUT and SimX agree on the odd PC;
+  the only defect is the misaligned *fetch*.
+- **How found:** the decode-abort observability probe (built this session, KEPT)
+  printed `[SimX-DECODE-ABORT] cannot decode instr=0xb3018cd0 at PC=0x8000c4dd` — odd
+  PC + a misaligned byte-read of real `.text` (bytes d0,8c,01,b3 straddling
+  `srl ra,s9,0x18`@0x8000c4dc and the next word). Evidence: `scratchpad/simx_dpi_decode_abort.log`.
+- **Fix:** `emulator.cpp:145` → `icache_read(&instr_code, warp.PC & ~Word(3), 4)`
+  (word-align the fetch, leave the architectural `warp.PC` odd to match the DUT).
+  JALR left unmasked (`execute.cpp:469`).
+- **Impact:** every riscv-dv program with an odd-target JALR was silently UNVERIFIABLE
+  on SimX; this recovers real DUT-vs-SimX coverage. Companion to OBS-007 (the decoder's
+  `default: std::abort()` is the *mechanism* that surfaced it; the observability print
+  is what made the root cause visible).
+- **Minor RTL note (debug-only):** the DUT's debug build (PC_BITS=XLEN, identity
+  fullPC) retains an odd architectural PC after a jalr-to-odd-target; release
+  (PC_BITS=XLEN-2, `>>2`/`<<2`) word-aligns it away. Benign (fetch aligns; low bits
+  never reach an architectural result on this path) — a debug-representation artifact,
+  not a silicon bug. Noted for completeness.
+
+### OBS-009 (OPEN) — deterministic DUT↔SimX divergence at `mulhsu` (regen no_fence@2CL)
+- **Class:** unclassified (DUT-bug vs REF-MODEL vs upstream-skipped-load — TBD) · **Disposition:** open · **Found:** Phase A1(d) (2026-07-15)
+- **What:** After the OBS-008 fetch-align fix let SimX run the regen `no_fence`@2CL to
+  completion, lockstep's first divergence is `seq=4632 PC=0x8000c8cd`
+  (`8000c8cc: mulhsu a5,a3,a5`): **DUT a5=0 vs SimX a5=0xfffff9bf**, identical on ALL
+  4 cores (both clusters) → DETERMINISTIC (not the per-cluster fenceless-ordering class
+  of the pinned hex). Everything before seq 4632 matches (19008 retires); the 20576
+  downstream PC mismatches are the control-flow cascade after this value forks a branch.
+- **Context:** upstream chain feeds `a5` via `add`/`sra` from `s7`, which comes from
+  `mulh`/`mulhu` over `t0 = csrrc/csrrs mscratch` reads (`0x8000c8b0..c8cc`). Candidates
+  to check: (1) an upstream LOAD feeding a3/a5 whose data lockstep skips (OBS-002) —
+  would make this a symptom, not a root; (2) `mscratch` CSR value differing DUT↔SimX;
+  (3) a genuine `mulhsu` sign-handling difference in one model. `mulhsu` = signed(rs1) ×
+  unsigned(rs2), high word; DUT=0 ⇒ treated as small/unsigned-ish, SimX=0xfffff9bf ⇒
+  negative(rs1) — consistent with one model sign-extending rs1 and the other not, OR
+  with a diverged negative input.
+- **Evidence:** `scratchpad/no_fence_FETCHFIX.log` (LOCKSTEP FIRST-DIVERGENCE block);
+  disasm `0x8000c8b0..c8cc`.
+- **Next:** trace a3/a5 origin (is either from a skipped load?); dump `mscratch` +
+  the mulhsu operands DUT-side vs SimX-side at seq 4632. Do NOT assume a DUT bug — the
+  deterministic all-core signature could equally be a SimX M-ext or CSR modeling gap.
+
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)
 - **What:** The SimX golden's cosim retire record carries `uuid == 0` for every
