@@ -76,6 +76,17 @@ not scattered across per-fix docs.
   `simx_pkg.sv`) — then in `compare_pair` skip a load lane whose address is outside
   `[RAM_BASE, DATA_LIMIT)` or whose SimX value is POISON. Then enable by default.
   No RTL request-tap needed (avoids the `full_addr` port-width/macro-visibility risk).
+- **CLOSED 2026-07-15 (`97c4e30`).** Done exactly as planned: `simx_cosim_record.h`
+  gains `mem_addr[SIMX_COSIM_MAX_THREADS]`; `core.cpp` fills it from
+  `LsuTraceData::mem_addrs` for LSU traces; `simx_dpi.cpp`/`simx_pkg.sv` add a
+  `mem_addr[]` open-array out-param; `lockstep_scoreboard.sv` pops it and compares a
+  load lane ONLY when the SimX effective address is in `[RAM_BASE,DATA_LIMIT)` and the
+  gold value != POISON, else defers to the end-state check. Load-compare is now sound
+  and **ON by default** (`+NO_LOCKSTEP_LOADS` escapes). Validation: `vecadd_lite`
+  lockstep PASSED — **1035/1035 matched, LOAD mismatch = 0, 74 in-region load lanes
+  data-compared, 113 out-of-region/uninit filtered** (was 429 false mismatches before
+  the filter). Config-generic across NC/NCL/NW/NT (all sizings `cfg.num_threads` /
+  `nw_bits=clog2(num_warps)`; NT≤32 caveat inherited from the pre-existing `result[]`).
 
 ### OBS-003 — One load emits MULTIPLE commit records with the same uuid (partial masks)
 - **Class:** QUIRK/EXPECTED · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)
@@ -155,8 +166,15 @@ not scattered across per-fix docs.
   never reach an architectural result on this path) — a debug-representation artifact,
   not a silicon bug. Noted for completeness.
 
-### OBS-009 (OPEN) — deterministic DUT↔SimX divergence at `mulhsu` (regen no_fence@2CL)
-- **Class:** unclassified (DUT-bug vs REF-MODEL vs upstream-skipped-load — TBD) · **Disposition:** open · **Found:** Phase A1(d) (2026-07-15)
+### OBS-009 (RESOLVED — not a DUT bug) — no_fence@2CL divergence is single-hart-test-in-multihart race
+- **Class:** REF-MODEL/methodology (single-hart random test on N shared-memory cores) · **Disposition:** resolved — real-fix options pending (see investigation doc) · **Found:** Phase A1(d) (2026-07-15)
+- **CLINCHER (2026-07-15):** the first-divergence load `lw s3,0(s1)` reads fixed absolute
+  `s1=0x80020618` in `.region_1` (PROGBITS). **ELF init there = 0x7aea0e77 = the DUT value**;
+  SimX reads 0x7a000e77 (one byte zeroed) on cluster-1 only. Program reads no `mhartid` ⇒ single-hart;
+  run on 4 shared-memory cores ⇒ genuine cross-core write-ordering race. DUT reads pristine init, SimX's
+  fixed core-stepping zeroes the byte between cluster-0 and cluster-1 reads. Both are valid executions
+  of an architecturally-undefined (fenceless) program. Full proof + real-fix options:
+  `docs/investigations/SimX_2CL_no_fence_divergence.md` (DECISIVE section).
 - **What:** After the OBS-008 fetch-align fix let SimX run the regen `no_fence`@2CL to
   completion, lockstep's first divergence is `seq=4632 PC=0x8000c8cd`
   (`8000c8cc: mulhsu a5,a3,a5`): **DUT a5=0 vs SimX a5=0xfffff9bf**, identical on ALL
@@ -181,13 +199,20 @@ not scattered across per-fix docs.
   root is a **memory-content difference** (DUT and SimX read different values), i.e. the
   fenceless shared-load ordering class — **NOT** a DUT ALU/CSR bug. `mulhsu`/`mscratch`
   hypotheses are retired.
-- **Caveat:** some of those load mismatches may themselves be the uninitialised/stack
-  class (see OBS-002 update) — distinguishing "real fenceless-ordering divergence" from
-  "uninitialised read" needs the load-address region filter (OBS-002 next step). The
-  structural conclusion (load-fed, not compute) already holds regardless.
+- **Caveat CLOSED 2026-07-15 (`97c4e30`, region filter):** re-ran the **pinned** no_fence@2CL
+  with the OBS-002 address region-filter ON. Result: **20 LOAD mismatches, 0 skipped —
+  every survivor is IN-REGION** (`[RAM_BASE,DATA_LIMIT)`), so they are NOT the
+  uninitialised/stack class. The per-warp first-divergence now points at the LOAD, not
+  the compute op: cluster-1 (cid 2,3) first@`seq=231 PC=0x80000414 LOAD @0x80020618
+  DUT=0x7aea0e77 vs SimX=0x7a000e77` (feeds the `mulhu @0x800004f4` at seq 278, 47
+  retires later); cluster-0 (cid 0,1) first@`seq=294 PC=0x8000054c LOAD @0x80013e27
+  DUT=0xc4 vs SimX=0`. The **non-zero-vs-non-zero** survivor (`0x7aea0e77` vs `0x7a000e77`)
+  rules out a pure init/staging artifact → **genuine in-region cross-core shared-memory
+  ordering divergence in the fenceless program, NOT a DUT bug**. OBS-009 fully root-caused
+  to the load level. Evidence: `scratchpad/obs002_nofence_2CL.log`.
 
-### OBS-010 (OPEN) — `full_interrupt`@2CL: few localized divergences at div/divu fed by loads/CSR
-- **Class:** likely interrupt-timing model divergence (TBD, same blocker as OBS-009) · **Disposition:** open · **Found:** Phase A1(d) (2026-07-15)
+### OBS-010 (RESOLVED — not a DUT bug) — `full_interrupt`@2CL: single-hart-test-in-multihart, load-fed div divergences
+- **Class:** REF-MODEL/methodology (same class as OBS-009; interrupt-timing amplifies it) · **Disposition:** resolved — real-fix options pending · **Found:** Phase A1(d) (2026-07-15)
 - **What:** with the OBS-008 fetch-align fix, the pinned `full_interrupt`@2CL no longer
   aborts — runs to EBREAK. Lockstep: compared 19084, matched 19050, **only 34 data
   mismatches** (NOT a cascade), PC/rd=0, 0 orphans. **cid=0 byte-exact**; divergences
@@ -202,10 +227,18 @@ not scattered across per-fix docs.
   probe because load data isn't visible.
 - **Evidence:** `scratchpad/full_interrupt_REPLAY.log`; disasm `0x80001330..1348`,
   `0x800020f0..210c`.
-- **Blocker/next:** same as OBS-009 — an **LSU-writeback / regfile-write probe** to make
-  load data visible would let lockstep (a) verify loads per-instruction and (b) pinpoint
-  whether the diverging operand is a load (→ interrupt/ordering class) or a genuine
-  ALU/CSR bug. This is the single lever that closes OBS-009 + OBS-010 + OBS-002.
+- **RESOLVED 2026-07-15 (`97c4e30`, region-filtered load-compare) — LOAD-fed, not a div bug.**
+  Re-ran the pinned `full_interrupt`@2CL with OBS-002 load-compare ON. **82 in-region LOAD
+  mismatches, 0 skipped**, feeding the 34 downstream div/divu data mismatches. Per-warp
+  first divergence is now the LOAD, upstream of every div: cid=2/3 first@`seq=151
+  PC=0x800002d4 LOAD @0x800190a8 DUT=0 vs SimX=0xbdee` (58/53 divergences); cid=1
+  first@`seq=992 PC=0x800012b0 LOAD @0x80022ea0 DUT=0xff01 vs SimX=0` (5); **cid=0
+  byte-exact** (0 divergences). Mixed polarities across cores (DUT-0/SimX-data on cid2/3,
+  DUT-data/SimX-0 on cid1) are consistent with the DUT (timing-accurate) and SimX
+  (functional) taking interrupts at different instruction boundaries → different in-flight
+  memory content at the load → different loaded byte → different div result. **Interrupt-
+  timing reference divergence, NOT a DUT bug** — now proven at the load level (the diverging
+  operand is a load, per-instruction). Evidence: `scratchpad/obs002_fullint_2CL.log`.
 
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)

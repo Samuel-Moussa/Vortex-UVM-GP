@@ -78,6 +78,42 @@ regenerated no_fence program). Disposition stays UNVERIFIABLE at multi-cluster.
 pinpointed to the `mulhu` @0x800004f4 consuming a shared-load-derived input; only the exact upstream
 load remains unnamed (needs an LSU-data probe, OBS-002).
 
+## DECISIVE root cause (2026-07-15, OBS-002 load-compare + ELF-init check)
+With per-instruction load-data now visible (OBS-002, `97c4e30`), the first divergence on
+cluster-1 is a **LOAD**, upstream of the `mulhu`:
+```
+cid=2,3  seq=231  PC=0x80000414  lw s3,0(s1)   s1=0x80020618   DUT=0x7aea0e77  SimX=0x7a000e77
+```
+`s1` is a **fixed absolute** address (`auipc s1,0x20; addi s1,s1,560` @0x800003e8 → 0x80020618,
+identical on every core), in **`.region_1` (PROGBITS = initialized data)**. The **ELF init bytes
+at 0x80020618 are `77 0e ea 7a` = 0x7aea0e77 — exactly the DUT value**. So:
+- **DUT reads the pristine ELF value** (nothing overwrote byte 0x80020619 before the read).
+- **SimX reads 0x7a000e77** — byte 0x80020619 zeroed (0xea→0x00) — and only on **cluster-1**
+  (SimX cluster-0 reads it correctly). Same shared `g_ram` address, two values across clusters
+  ⇒ a store zeroed that byte **between** SimX's cluster-0 and cluster-1 core-stepping, whereas the
+  DUT's cycle-accurate timing does both reads first.
+- The program reads **no `mhartid`** and uses **fixed absolute** region addresses ⇒ it is a
+  **single-hart** riscv-dv program. Running it on 4 shared-memory cores makes all 4 write the same
+  `.region_0`/`.region_1`/`.user_stack` with no fences ⇒ genuine cross-core write-ordering races.
+
+**Verdict (proven): the divergence is a single-hart random test executed in a multi-hart
+shared-memory config; its result is architecturally undefined (RVWMO, no fences). SimX's fixed
+core-stepping order and the DUT's cycle-accurate timing are BOTH valid executions.** Not a DUT bug;
+not a fixable SimX staging bug. Evidence: `scratchpad/obs002_nofence_2CL.log`, ELF `.region_1`@0x80020618.
+
+## REAL fixes (make it verifiable, not suppressed) — decision pending
+1. **True lockstep cosim (RVVI-standard, industrial):** drive SimX from the DUT's memory-operation
+   order — on a shared-region load, SimX consumes the DUT's loaded value (RVVI load bus) instead of
+   its own `g_ram`. Races resolve identically by construction ⇒ these tests become verifiable. Aligns
+   with Phase-A RVVI migration. Cost: SimX becomes a step-driven follower for loads (can't independently
+   verify a shared-region load's data — inherent to racy regions).
+2. **Config-scope single-hart random tests to single-core (methodologically correct, low effort):**
+   riscv-dv `no_fence`/`full_interrupt` are single-hart; run them at 1C (deterministic, they PASS) and
+   get multi-core coverage from multi-hart-AWARE directed kernels instead of replicating a single-hart
+   binary across N shared-memory cores. This is the honest methodology fix.
+3. **Per-hart disjoint data regions:** regenerate riscv-dv with per-hart `.region_*`/stack offsets so
+   the 4 cores don't stomp each other. More work; riscv-dv/linker-specific.
+
 ## Disposition (recommended)
 Classify `no_fence` / `full_interrupt` at **multi-cluster** as **UNVERIFIABLE** (matches the documented
 "SimX diverges on some random sequences" class in `run_suite.sh`) — now backed by this evidence, not a
