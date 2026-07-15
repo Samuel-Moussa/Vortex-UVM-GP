@@ -106,6 +106,14 @@ fi
 if [[ -n "${NO_LOCKSTEP_LOADS:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +NO_LOCKSTEP_LOADS"
 fi
+# RVVI load-bus two-pass feed (Phase A1(e)) — when pass-1 lockstep finds provably
+# -racy in-region load divergences, re-run SimX driven by the DUT's loaded values
+# on exactly those loads and re-compare; residual mismatches are REAL divergences,
+# not unsynchronizable races. OFF by default (single pass). For multi-cluster
+# single-hart random tests (no_fence/full_interrupt) this makes them verifiable.
+if [[ -n "${LOCKSTEP_LOADFEED:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADFEED"
+fi
 
 
 print_info "Test:      $TEST_NAME"

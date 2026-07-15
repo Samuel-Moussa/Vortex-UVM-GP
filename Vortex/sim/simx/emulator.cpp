@@ -664,3 +664,65 @@ void Emulator::trigger_ecall() {
 void Emulator::trigger_ebreak() {
   active_warps_.reset();
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// RVVI-style DUT load-bus feed (Phase A1(e)). Defined here (a translation unit
+// already in the SimX SRCS list) so the DPI bridge (simx_dpi.cpp, linked against
+// obj/*.o) and execute.cpp share one store without a Makefile change. See
+// cosim_loadfeed.h for the rationale. Keyed by (cid,wid,uuid); a std::map is fine
+// — lookups happen only at LOAD retirements.
+///////////////////////////////////////////////////////////////////////////////
+#include "cosim_loadfeed.h"
+#include <map>
+#include <tuple>
+
+namespace vortex {
+namespace {
+  // key = (cid, wid, per-warp LOAD ordinal) -> override record
+  std::map<std::tuple<uint32_t,uint32_t,uint32_t>, LoadFeedRec> g_loadfeed;
+  // per-(cid,wid) LOAD cursor (next ordinal SimX will execute)
+  std::map<std::tuple<uint32_t,uint32_t>, uint32_t> g_loadfeed_cursor;
+  bool     g_loadfeed_en = false;
+  uint32_t g_loadfeed_pushed = 0;
+  uint32_t g_loadfeed_consumed = 0;
+}
+
+void loadfeed_reset() {
+  g_loadfeed.clear();
+  g_loadfeed_cursor.clear();
+  g_loadfeed_pushed = 0;
+  g_loadfeed_consumed = 0;
+}
+
+void loadfeed_rewind() {
+  g_loadfeed_cursor.clear();
+  g_loadfeed_consumed = 0;
+}
+
+void loadfeed_enable(bool en) { g_loadfeed_en = en; }
+bool loadfeed_enabled() { return g_loadfeed_en; }
+
+void loadfeed_push(uint32_t cid, uint32_t wid, uint32_t ordinal,
+                   uint32_t feed_mask, const uint64_t* data, uint32_t n) {
+  LoadFeedRec r{};
+  r.feed_mask = feed_mask;
+  for (uint32_t i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i)
+    r.data[i] = data[i];
+  g_loadfeed[std::make_tuple(cid, wid, ordinal)] = r;
+  ++g_loadfeed_pushed;
+}
+
+const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid) {
+  if (!g_loadfeed_en) return nullptr;
+  // advance this warp's LOAD cursor, then look up the just-consumed ordinal
+  uint32_t ord = g_loadfeed_cursor[std::make_tuple(cid, wid)]++;
+  auto it = g_loadfeed.find(std::make_tuple(cid, wid, ord));
+  if (it == g_loadfeed.end()) return nullptr;
+  ++g_loadfeed_consumed;
+  return &it->second;
+}
+
+uint32_t loadfeed_pushed()   { return g_loadfeed_pushed; }
+uint32_t loadfeed_consumed() { return g_loadfeed_consumed; }
+
+} // namespace vortex

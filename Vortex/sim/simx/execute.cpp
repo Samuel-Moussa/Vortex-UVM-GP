@@ -26,6 +26,7 @@
 #include "instr.h"
 #include "core.h"
 #include "types.h"
+#include "cosim_loadfeed.h"
 #ifdef EXT_V_ENABLE
 #include "processor_impl.h"
 #endif
@@ -672,6 +673,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
         uint32_t data_width = 8 * data_bytes;
         Word offset = sext<Word>(lsuArgs.offset, 32);
+        // RVVI load-bus (Phase A1(e)): consume this warp's next LOAD slot (by
+        // per-warp program-order ordinal, the scoreboard's alignment key — DUT
+        // and SimX uuids differ). If the scoreboard flagged this ordinal as a
+        // provably-racy shared load, adopt the DUT-observed per-lane writeback
+        // value instead of SimX's own memory read. Default OFF ⇒ feed==nullptr ⇒
+        // no change; cursor advances once per LOAD to stay aligned. See
+        // cosim_loadfeed.h.
+        const vortex::LoadFeedRec* feed =
+            vortex::loadfeed_next(core_->id(), wid);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
@@ -702,6 +712,14 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             break;
           default:
             std::abort();
+          }
+          // Load-bus override: replace the aligned register value with the DUT's
+          // observed writeback for this lane (integer loads only; FP-dest loads
+          // are not on the feed — their data routes to the FP regfile, which the
+          // DUT LSU probe does not tap). Applied post-alignment so no double
+          // sign-extension.
+          if (feed && ((feed->feed_mask >> t) & 1)) {
+            rd_data[t].u64 = feed->data[t];
           }
         }
         rd_write = true;

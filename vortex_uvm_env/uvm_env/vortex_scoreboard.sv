@@ -96,6 +96,17 @@ class vortex_scoreboard extends uvm_scoreboard;
   bit simx_ran;     // Set after simx_run() completes
   bit simx_crashed; // Set when simx_run() returns the crash sentinel (-3)
   bit ebreak_seen;  // Set when status monitor reports EBREAK
+
+  // RVVI load-bus (Phase A1(e)): when the lockstep two-pass feed is armed, the
+  // AUTHORITATIVE end-state memory compare must run against POST-FEED SimX (which
+  // the lockstep_scoreboard produces in its check_phase pass 2). So we DEFER the
+  // end-state mem compare from run_phase to report_phase — a UVM phase barrier
+  // guarantees all check_phases (incl. lockstep pass 2) complete first. Then the
+  // racy final word matches (fed SimX mirrors the DUT), turning the run into a
+  // real end-state PASS rather than a race-induced mismatch. Console compare is
+  // unaffected (deterministic). Off unless +LOCKSTEP_LOADFEED + lockstep enabled.
+  bit endstate_feed_mode; // defer end-state mem compare to post-feed report_phase
+  bit endstate_compared;  // guard: the end-state mem compare has run exactly once
   
   // --- Negative-test fault injection (one-sided, plusarg- or test-gated) ---
   // When enabled, corrupt exactly ONE DUT word INSIDE the comparison so the
@@ -184,6 +195,12 @@ class vortex_scoreboard extends uvm_scoreboard;
     num_skipped_got    = 0;    num_fp_tol_passed  = 0;
     fp_tolerant        = 0;
     simx_ran           = 0;    ebreak_seen        = 0;
+
+    // Defer end-state MEM compare to post-feed report_phase only when the RVVI
+    // load-bus two-pass is actually in play (lockstep on + feed requested + SimX).
+    endstate_feed_mode = cfg.simx_enable && cfg.enable_lockstep
+                       && $test$plusargs("LOCKSTEP_LOADFEED");
+    endstate_compared  = 0;
   endfunction : build_phase
 
   //==========================================================================
@@ -418,7 +435,16 @@ class vortex_scoreboard extends uvm_scoreboard;
     if (simx_is_done() != 1)
       `uvm_warning("SCOREBOARD", "simx_is_done() != 1 after simx_run()")
 
-    compare_all_written();   // memory output — every program
+    // End-state MEM compare: run now UNLESS the RVVI load-bus is armed, in which
+    // case defer to report_phase so it reads POST-FEED SimX (produced by the
+    // lockstep pass-2). Console compare is deterministic and always runs now.
+    if (!endstate_feed_mode) begin
+      compare_all_written();   // memory output — every program
+      endstate_compared = 1;
+    end else begin
+      `uvm_info("SCOREBOARD",
+        "End-state MEM compare DEFERRED to post-feed report_phase (RVVI load-bus active).", UVM_MEDIUM)
+    end
     compare_console();       // console output — every program
   endfunction
 
@@ -890,6 +916,19 @@ class vortex_scoreboard extends uvm_scoreboard;
   //==========================================================================
   virtual function void report_phase(uvm_phase phase);
     super.report_phase(phase);
+    // Deferred end-state MEM compare (RVVI load-bus): a UVM phase barrier
+    // guarantees every check_phase — including the lockstep pass-2 that re-runs
+    // SimX with the DUT load-bus — has completed, so SimX memory now mirrors the
+    // DUT. Run the authoritative end-state compare here against that post-feed
+    // state (SimX not released until final_phase). If pass 2 never ran (no racy
+    // loads found), SimX is still the valid independent reference — a real
+    // mismatch is caught exactly as before.
+    if (endstate_feed_mode && !endstate_compared && simx_ran && !simx_crashed) begin
+      `uvm_info("SCOREBOARD",
+        "Running DEFERRED end-state MEM compare against POST-FEED SimX (RVVI load-bus).", UVM_MEDIUM)
+      compare_all_written();
+      endstate_compared = 1;
+    end
     report_results();
   endfunction : report_phase
 
