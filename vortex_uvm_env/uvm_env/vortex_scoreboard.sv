@@ -681,7 +681,15 @@ class vortex_scoreboard extends uvm_scoreboard;
         continue;
       end
 
-      dut_word  = shadow_memory[addr];
+      // DUT VALUE source = the real backing store (mem_model / dut_mem), which is
+      // ground truth for the DUT's final memory. shadow_memory is a reconstruction
+      // from snooped write transactions and can drift (missed/mis-parsed write);
+      // shadow_valid still supplies the WRITE-SET (which addrs/bytes to compare)
+      // below. This makes the end-state compare real-DUT-mem vs real-SimX-mem. The
+      // reverse (dropped-store) pass already trusts dut_mem the same way. Fall back
+      // to shadow only if mem_model was not provided to this scoreboard.
+      dut_word  = (dut_mem != null) ? dut_mem.read_dword(64'(addr))
+                                    : shadow_memory[addr];
       simx_base = 64'(addr);
       simx_read_mem(simx_base, 8, simx_bytes);
       simx_word = '0;
