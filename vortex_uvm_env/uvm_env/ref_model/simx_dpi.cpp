@@ -879,7 +879,8 @@ int simx_cosim_pop(
     unsigned char* eop,
     unsigned char* fu_type,
     unsigned char* is_volatile,
-    const svOpenArrayHandle result
+    const svOpenArrayHandle result,
+    const svOpenArrayHandle mem_addr
 ) {
     if (!g_processor) {
         std::cerr << "[SimX-DPI] simx_cosim_pop: processor not initialized" << std::endl;
@@ -907,6 +908,14 @@ int simx_cosim_pop(
     for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
         uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(result, lo + i));
         if (slot) *slot = rec.result[i];
+    }
+    // Per-thread effective LOAD address (OBS-002), same open-array convention.
+    const int alo = svLow(mem_addr, 1);
+    const int ahi = svHigh(mem_addr, 1);
+    const int an  = ahi - alo + 1;
+    for (int i = 0; i < an && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(mem_addr, alo + i));
+        if (slot) *slot = rec.mem_addr[i];
     }
     return 1;
 }
