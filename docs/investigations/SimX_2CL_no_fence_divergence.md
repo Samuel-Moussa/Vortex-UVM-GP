@@ -44,11 +44,39 @@ bug.** Signature confirms it: only the two ordering/timing-unsafe tests (`no_fen
 fail at multi-cluster; every fence-respecting test passes. A real multi-cluster coherence bug would
 corrupt the fenced tests too.
 
-## Honest boundary (not fully pinpointed)
-The exact upstream instruction where SimX cluster-1 first diverges was **not** isolated — `s2`/`a5` are
-set well before the store, and pinpointing the first divergence needs a per-instruction **lockstep
-DUT-vs-SimX register trace** (scoreboard `vortex_scoreboard.sv:83` marks lockstep as Future Work).
-Stopped after ~10 rebuilds; the practical conclusion holds without it.
+## First divergence — PINPOINTED via lockstep (2026-07-15, Phase A1(d))
+The per-instruction lockstep comparator (`lockstep_scoreboard.sv`, `+LOCKSTEP`) was run on **this exact
+pinned hex** (`results/20260710/run_125857_.../programs/riscv_no_fence_test_0.hex`, replayed with regen
+OFF) at 2CL/2C/4W/4T. It **reproduced the end-state mismatch** (`0x80013dd8 DUT=0x28af8c40
+SimX=0x2fff8c40`) and pinpointed the first diverging retirement:
+
+```
+first divergence:  cid=2 & cid=3 (cluster 1)  seq=278  PC=0x800004f4  uuid=…144
+    800004f4:  02d9b433   mulhu s0,s3,a3      DUT s0=0x3d75a09d  vs  SimX s0=0x3d009f79
+```
+
+- **cid=0 and cid=1 (cluster 0) show ZERO divergences** — byte-exact vs SimX for all retirements.
+  Only cluster-1 cores diverge. This confirms the "per-cluster" finding at instruction granularity.
+- Tallies: compared 5432, matched 5314, **field_mismatch data = 118** (59 per cluster-1 core), PC/rd
+  mismatch = 0, **0 orphans** (both models completed, same instruction counts), 936 loads data-skipped.
+- `mulhu` is a pure deterministic ALU op ⇒ its **inputs (`s3`/`a3`) already differed** on cluster-1.
+  The block around it uses `a3` as the base for interleaved shared loads AND stores
+  (`sw s10,-14(a3)` @0x800004f0; `lb/lw/lbu … (a3)`). The diverging input therefore originates in
+  **shared-memory read ordering**, not computation — corroborated by the fact that a real compute/RTL
+  bug would corrupt *both* clusters identically, whereas here cluster-0 is exact.
+- **True root is one instruction upstream** (a shared-memory load feeding `s3`/`a3`): lockstep skips
+  load *data* at the commit-arb probe (OBS-002), so the `mulhu` is the first *observable* writeback
+  carrying the already-diverged value. Naming the exact load needs an LSU-writeback / regfile-write
+  probe (OBS-002 follow-up) — but the class (fenceless shared-load ordering) is now proven, not inferred.
+
+**Verdict unchanged and now instruction-level: fenceless memory-ordering reference-faithfulness
+difference, NOT a Vortex DUT bug** (see RTL_OBSERVATIONS OBS-007 for the companion *abort* case on a
+regenerated no_fence program). Disposition stays UNVERIFIABLE at multi-cluster.
+
+## Honest boundary (superseded above)
+~~The exact upstream instruction where SimX cluster-1 first diverges was **not** isolated~~ — now
+pinpointed to the `mulhu` @0x800004f4 consuming a shared-load-derived input; only the exact upstream
+load remains unnamed (needs an LSU-data probe, OBS-002).
 
 ## Disposition (recommended)
 Classify `no_fence` / `full_interrupt` at **multi-cluster** as **UNVERIFIABLE** (matches the documented
