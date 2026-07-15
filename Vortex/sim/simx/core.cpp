@@ -251,6 +251,17 @@ void Core::schedule() {
     for (uint32_t t = 0, n = vals.size(); t < n && t < SIMX_COSIM_MAX_THREADS; ++t) {
       rec.result[t] = vals[t];
     }
+    // Per-thread effective LOAD address (OBS-002): lets the lockstep SB apply the
+    // same region filter as the end-state check before comparing load data. Only
+    // LSU traces carry LsuTraceData::mem_addrs; non-loads leave mem_addr[]=0.
+    if (trace->fu_type == FUType::LSU) {
+      auto lsu_data = std::dynamic_pointer_cast<LsuTraceData>(trace->data);
+      if (lsu_data) {
+        for (uint32_t t = 0, n = lsu_data->mem_addrs.size(); t < n && t < SIMX_COSIM_MAX_THREADS; ++t) {
+          rec.mem_addr[t] = lsu_data->mem_addrs[t].addr;
+        }
+      }
+    }
     socket_->cluster()->processor()->cosim_push_retire(rec);
   }
 

@@ -45,17 +45,14 @@ class lockstep_scoreboard extends uvm_scoreboard;
 
     vortex_config cfg;
 
-    // Per-instruction LOAD-DATA comparison gate (+LOCKSTEP_LOADS). OFF by default.
-    // The LSU probe (vx_lsu_probe.sv) captures true DUT load values, but comparing
-    // them raw yields FALSE mismatches on loads of uninitialised/stack memory —
-    // where DUT (reads 0) and SimX (reads its own init pattern) legitimately differ.
-    // That is exactly the class the END-STATE check skips (compare_all_written:
-    // region gate [RAM_BASE, DATA_LIMIT) + POISON). Making load-compare sound needs
-    // the LOAD ADDRESS so the same region filter can be applied per-lane — see the
-    // RESUME block in docs/INDUSTRIAL_TRANSFORMATION_PLAN.md (export SimX
-    // LsuTraceData::mem_addrs through the cosim record, then filter here).
-    // Until then this stays OFF: loads keep PC/rd/ordering checks and their DATA is
-    // covered by the end-state memory compare (OBS-002 behaviour, no regression).
+    // Per-instruction LOAD-DATA comparison gate. ON by default (+NO_LOCKSTEP_LOADS
+    // disables). The LSU probe (vx_lsu_probe.sv) captures true DUT load values; the
+    // raw compare would FALSE-mismatch on loads of uninitialised/stack memory (DUT
+    // reads 0, SimX reads its own init pattern) — exactly the class the END-STATE
+    // check skips (region gate [RAM_BASE, DATA_LIMIT) + POISON). OBS-002 closes that
+    // by exporting the SimX effective address per lane (simx_cosim_record.mem_addr),
+    // so compare_pair applies the SAME region filter per-lane before comparing. Load
+    // lanes outside the region / poison-valued fall back to the end-state check.
     bit load_cmp_en;
 
     // One aggregated logical retirement (either side).
@@ -71,7 +68,18 @@ class lockstep_scoreboard extends uvm_scoreboard;
                                           // from the LSU probe (OBS-002 overlay).
                                           // Only these lanes are DATA-comparable.
         longint  unsigned data[];         // size = num_threads
+        longint  unsigned addr[];         // gold side: per-lane effective LOAD address
+                                          // (OBS-002 region filter); 0 for non-loads
     } retire_t;
+
+    // Region filter for LOAD-data compare — mirrors the end-state check
+    // (vortex_scoreboard.sv:64-66). A load lane is only DATA-comparable when its
+    // SimX effective address is in the verifiable program/data region AND the gold
+    // value isn't SimX's uninitialised-memory poison. Everything else (stack,
+    // MMIO, local-mem, never-written) legitimately differs between DUT and SimX.
+    localparam bit [31:0] RAM_BASE   = 32'h8000_0000;
+    localparam bit [31:0] DATA_LIMIT = 32'h8800_0000;
+    localparam bit [31:0] POISON     = 32'hBAAD_F00D;
 
     // SimX FUType enum: 0=ALU 1=LSU 2=FPU 3=SFU ...
     localparam byte unsigned FU_LSU = 8'd1;
@@ -121,7 +129,10 @@ class lockstep_scoreboard extends uvm_scoreboard;
         super.build_phase(phase);
         if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg))
             `uvm_fatal("LOCKSTEP", "vortex_config not found")
-        load_cmp_en = $test$plusargs("LOCKSTEP_LOADS");
+        // Per-instruction LOAD-data compare is now SOUND (region-filtered by the
+        // SimX effective address, OBS-002) → ON by default. +NO_LOCKSTEP_LOADS is
+        // the escape hatch to fall back to PC/rd/ordering-only for loads.
+        load_cmp_en = !$test$plusargs("NO_LOCKSTEP_LOADS");
     endfunction
 
     // key helper
@@ -158,11 +169,13 @@ class lockstep_scoreboard extends uvm_scoreboard;
         int      unsigned cid, wid, tmask;
         byte     unsigned wb, is_fp, rd, sop, eop, fu_type, is_volatile;
         longint  unsigned res[];
+        longint  unsigned adr[];
         int      k;
         retire_t g;
         forever begin
             res = new[cfg.num_threads];
-            rc = simx_cosim_pop(uuid, cid, wid, pc, tmask, wb, is_fp, rd, sop, eop, fu_type, is_volatile, res);
+            adr = new[cfg.num_threads];
+            rc = simx_cosim_pop(uuid, cid, wid, pc, tmask, wb, is_fp, rd, sop, eop, fu_type, is_volatile, res, adr);
             if (rc <= 0) break;             // 0 = empty, -1 = error
             if (wb == 0) continue;          // writeback domain only
             g.uuid        = uuid;
@@ -174,7 +187,11 @@ class lockstep_scoreboard extends uvm_scoreboard;
                                             // NOT the integer result_if tap the LSU probe reads
             g.is_volatile = (is_volatile != 0);
             g.data        = new[cfg.num_threads];
-            for (k = 0; k < cfg.num_threads; k++) g.data[k] = res[k];
+            g.addr        = new[cfg.num_threads];
+            for (k = 0; k < cfg.num_threads; k++) begin
+                g.data[k] = res[k];
+                g.addr[k] = adr[k];
+            end
             gold_fifo[key_of(cid, wid)].push_back(g);
         end
     endfunction
@@ -317,25 +334,37 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // vortex_scoreboard. So for loads we verify PC + rd + ordering here and
         // skip the per-lane data compare. Non-load writebacks are data-checked.
         if (g.is_load) begin
-            // Load DATA is observable via the LSU probe (OBS-002 overlay), but the
-            // raw compare is NOT yet sound (uninitialised/stack loads legitimately
-            // differ) — gated OFF by default until the address region-filter lands.
+            // Load DATA is observable via the LSU probe (OBS-002 overlay). It is
+            // compared per-lane only where it is SOUND to do so: the lane must be
+            // active on both sides (tmask + LSU-probe fill) AND the SimX effective
+            // address must fall in the verifiable region AND the gold value must not
+            // be SimX's uninitialised poison. Out-of-region / uninit loads (stack,
+            // MMIO, local-mem, never-written) legitimately differ and are covered by
+            // the end-state memory check — same filter as vortex_scoreboard.
             if (!load_cmp_en || d.load_filled_mask == 0) begin
                 n_load_dataskip++;
             end else begin
-                n_load_datacmp++;
+                bit any_cmp = 1'b0;
                 for (int l = 0; l < cfg.num_threads; l++) begin
                     if (((g.tmask >> l) & 1) && ((d.load_filled_mask >> l) & 1)) begin
+                        bit in_region = (g.addr[l][31:0] >= RAM_BASE)
+                                     && (g.addr[l][31:0] <  DATA_LIMIT);
+                        bit is_poison = (g.data[l][31:0] == POISON)
+                                     || (g.data[l][63:32] == POISON);
+                        if (!in_region || is_poison) continue;  // end-state covers it
+                        any_cmp = 1'b1;
                         if (d.data[l] !== g.data[l]) begin
                             n_mm_loaddata++; clean = 1'b0;
                             if (desc == "") desc = $sformatf(
-                                "LOAD data lane%0d DUT=%0h vs SimX=%0h", l, d.data[l], g.data[l]);
+                                "LOAD data lane%0d @%0h DUT=%0h vs SimX=%0h", l, g.addr[l], d.data[l], g.data[l]);
                             note_div(key, seq, d.pc, d.uuid, desc, $sformatf(
-                                "LOAD-DATA mismatch key=%0h seq=%0d PC=%0h uuid=%0h lane=%0d: DUT=%0h vs SimX=%0h",
-                                key, seq, d.pc, d.uuid, l, d.data[l], g.data[l]));
+                                "LOAD-DATA mismatch key=%0h seq=%0d PC=%0h uuid=%0h lane=%0d addr=%0h: DUT=%0h vs SimX=%0h",
+                                key, seq, d.pc, d.uuid, l, g.addr[l], d.data[l], g.data[l]));
                         end
                     end
                 end
+                if (any_cmp) n_load_datacmp++;   // at least one lane was region-valid
+                else         n_load_dataskip++;  // all lanes out-of-region/uninit
             end
         end else if (g.is_volatile) begin
             n_volatile_skip++;          // mcycle/minstret/... model-divergent by definition

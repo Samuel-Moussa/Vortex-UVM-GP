@@ -75,7 +75,8 @@ package simx_pkg;
         output byte     unsigned eop,
         output byte     unsigned fu_type,
         output byte     unsigned is_volatile,
-        output longint unsigned result[]
+        output longint unsigned result[],
+        output longint unsigned mem_addr[]
     );
     import "DPI-C" context function int  simx_cosim_pending();
     import "DPI-C" context function void simx_cosim_clear();
@@ -96,6 +97,7 @@ package simx_pkg;
         byte     unsigned fu_type;
         byte     unsigned is_volatile;
         longint unsigned result[];
+        longint unsigned mem_addr[];
     } simx_retire_s;
 
     //---------------------------------------------------------

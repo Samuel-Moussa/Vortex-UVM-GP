@@ -29,6 +29,10 @@ struct simx_retire_t {
     uint8_t  is_volatile;// 1 = read a perf-counter CSR (mcycle/minstret/...) → exclude from lockstep compare
     uint8_t  _pad[5];    // align result[] to 8 bytes after the 35 preceding bytes
     uint64_t result[SIMX_COSIM_MAX_THREADS];
+    uint64_t mem_addr[SIMX_COSIM_MAX_THREADS]; // LSU only: per-thread effective load
+                          // address (0 for non-loads). Lets the lockstep SB apply the
+                          // same region filter as the end-state check to load lanes
+                          // (skip out-of-[RAM_BASE,DATA_LIMIT)/uninitialised loads).
 };
 
 #ifdef __cplusplus

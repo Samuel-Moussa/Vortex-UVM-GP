@@ -96,11 +96,15 @@ fi
 if [[ -n "${LSU_DEBUG:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +LSU_DEBUG"
 fi
-# LOCKSTEP_LOADS=1 enables per-instruction LOAD-DATA comparison (LSU probe overlay).
-# OFF by default: not yet sound — see the RESUME block (needs the load-address
-# region filter). With it off, loads keep PC/rd/ordering + end-state data coverage.
+# Per-instruction LOAD-DATA comparison (LSU probe overlay) is now ON by default —
+# sound via the SimX effective-address region filter (OBS-002). LOCKSTEP_LOADS=1 is
+# retained as a harmless no-op; NO_LOCKSTEP_LOADS=1 falls back to PC/rd/ordering-only
+# for loads (their data then covered by the end-state memory check).
 if [[ -n "${LOCKSTEP_LOADS:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADS"
+fi
+if [[ -n "${NO_LOCKSTEP_LOADS:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +NO_LOCKSTEP_LOADS"
 fi
 
 
