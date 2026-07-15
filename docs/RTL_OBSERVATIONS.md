@@ -154,6 +154,27 @@ not scattered across per-fix docs.
   the mulhsu operands DUT-side vs SimX-side at seq 4632. Do NOT assume a DUT bug — the
   deterministic all-core signature could equally be a SimX M-ext or CSR modeling gap.
 
+### OBS-010 (OPEN) — `full_interrupt`@2CL: few localized divergences at div/divu fed by loads/CSR
+- **Class:** likely interrupt-timing model divergence (TBD, same blocker as OBS-009) · **Disposition:** open · **Found:** Phase A1(d) (2026-07-15)
+- **What:** with the OBS-008 fetch-align fix, the pinned `full_interrupt`@2CL no longer
+  aborts — runs to EBREAK. Lockstep: compared 19084, matched 19050, **only 34 data
+  mismatches** (NOT a cascade), PC/rd=0, 0 orphans. **cid=0 byte-exact**; divergences
+  are per-core: cid=1 has 1 (`seq=2309 PC=0x80002104 div a0,s4,a0` DUT=4 vs SimX=0),
+  cid=2/3 have ~16 (`seq=1023 PC=0x80001344 divu t2,a0,a1` DUT=0 vs SimX=1).
+- **Pattern = OBS-009:** both sites are DIVISIONS whose operand traces to an unobservable
+  source — `a0 = lbu -41(sp)` (a **stack load**, data skipped per OBS-002) and nearby
+  `csrrw/csrrs mscratch`. For an interrupt test, the DUT (timing-accurate) and SimX
+  (functional) take interrupts at different instruction boundaries → different saved
+  stack/CSR context → a loaded byte differs → the div result differs. Consistent with
+  **interrupt-timing reference divergence, NOT a DUT bug** — but UNPROVABLE at the commit
+  probe because load data isn't visible.
+- **Evidence:** `scratchpad/full_interrupt_REPLAY.log`; disasm `0x80001330..1348`,
+  `0x800020f0..210c`.
+- **Blocker/next:** same as OBS-009 — an **LSU-writeback / regfile-write probe** to make
+  load data visible would let lockstep (a) verify loads per-instruction and (b) pinpoint
+  whether the diverging operand is a load (→ interrupt/ordering class) or a genuine
+  ALU/CSR bug. This is the single lever that closes OBS-009 + OBS-010 + OBS-002.
+
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)
 - **What:** The SimX golden's cosim retire record carries `uuid == 0` for every
