@@ -81,6 +81,20 @@ package simx_pkg;
     import "DPI-C" context function int  simx_cosim_pending();
     import "DPI-C" context function void simx_cosim_clear();
 
+    // RVVI load-bus feed (Phase A1(e)) — push DUT-observed load values into SimX
+    // for provably-racy shared loads (two-pass selective; default disabled).
+    import "DPI-C" context function void simx_cosim_load_feed_reset();
+    import "DPI-C" context function void simx_cosim_load_feed_enable(input int en);
+    import "DPI-C" context function void simx_cosim_load_feed_push(
+        input int      unsigned cid,
+        input int      unsigned wid,
+        input int      unsigned ordinal,
+        input int      unsigned feed_mask,
+        input longint  unsigned data[]
+    );
+    import "DPI-C" context function int  simx_cosim_load_feed_pushed();
+    import "DPI-C" context function int  simx_cosim_load_feed_consumed();
+
     // SV mirror of the C simx_retire_t struct. Used by scoreboard to pass
     // one popped record around as a single object.
     typedef struct {

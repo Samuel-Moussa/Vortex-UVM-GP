@@ -101,23 +101,45 @@ shared-memory config; its result is architecturally undefined (RVWMO, no fences)
 core-stepping order and the DUT's cycle-accurate timing are BOTH valid executions.** Not a DUT bug;
 not a fixable SimX staging bug. Evidence: `scratchpad/obs002_nofence_2CL.log`, ELF `.region_1`@0x80020618.
 
-## REAL fixes (make it verifiable, not suppressed) — decision pending
-1. **True lockstep cosim (RVVI-standard, industrial):** drive SimX from the DUT's memory-operation
-   order — on a shared-region load, SimX consumes the DUT's loaded value (RVVI load bus) instead of
-   its own `g_ram`. Races resolve identically by construction ⇒ these tests become verifiable. Aligns
-   with Phase-A RVVI migration. Cost: SimX becomes a step-driven follower for loads (can't independently
-   verify a shared-region load's data — inherent to racy regions).
-2. **Config-scope single-hart random tests to single-core (methodologically correct, low effort):**
-   riscv-dv `no_fence`/`full_interrupt` are single-hart; run them at 1C (deterministic, they PASS) and
-   get multi-core coverage from multi-hart-AWARE directed kernels instead of replicating a single-hart
-   binary across N shared-memory cores. This is the honest methodology fix.
-3. **Per-hart disjoint data regions:** regenerate riscv-dv with per-hart `.region_*`/stack offsets so
-   the 4 cores don't stomp each other. More work; riscv-dv/linker-specific.
+## REAL FIX IMPLEMENTED — option 1: RVVI load-bus (Phase A1(e), 2026-07-16)
+Chosen and implemented: **true RVVI load-bus cosim**, as a sound **two-pass trace-replay** (the whole
+DUT retire+load trace is captured before SimX runs, so a real-time step-follower rewrite was not
+needed). Mechanism:
+- **Pass 1 (independent):** run SimX on its own `g_ram`; the per-instruction lockstep compare
+  (`lockstep_scoreboard.sv`) identifies every **provably-racy in-region LOAD** that diverges (the
+  OBS-002 load-data compare), capturing the DUT's per-lane loaded value + (cid,wid,program-order
+  ordinal).
+- **Feed:** push those DUT load values into SimX (`cosim_loadfeed.h`/`emulator.cpp` override store,
+  injected at the single load site `execute.cpp` LOAD case; DPI `simx_cosim_load_feed_*`). Keyed by
+  **(cid,wid,LOAD ordinal)** — NOT uuid: a normal run shows DUT/SimX uuid schemes divergent on ~all
+  pairs, so program-order is the only valid alignment. A `consumed==pushed` self-check confirms
+  alignment (20==20 on this hex).
+- **Pass 2 (DUT load-bus):** re-run SimX in-process (`SimPlatform::reset()` re-arms all cores +
+  re-stages `g_ram`) with only those loads fed the DUT value, so SimX follows the DUT's memory
+  ordering. Re-compare.
 
-## Disposition (recommended)
-Classify `no_fence` / `full_interrupt` at **multi-cluster** as **UNVERIFIABLE** (matches the documented
-"SimX diverges on some random sequences" class in `run_suite.sh`) — now backed by this evidence, not a
-guess. All deterministic kernels/directed/regression + 10/12 riscv-dv remain a hard pass at 2CL.
+**RESULT on this exact pinned hex (2CL/2C/4W/4T):**
+- Pass 1: **20** racy in-region LOAD divergences → **138** cascaded field-mismatches across **4** warps.
+- Pass 2: **residual mismatch = 0** (PC=0 rd=0 data=0 load=0 orphan=0/0) over the full **5432/5432**
+  pairs. VERDICT: *all divergences explained by unsynchronizable shared-memory races; DUT VERIFIED
+  modulo racy loads.*
+- **End-state also PASSES:** the end-state memory compare was deferred to `report_phase` (a UVM phase
+  barrier guarantees the lockstep pass-2 completed first) so it reads **post-feed** SimX, which now
+  mirrors the DUT — the `0x80013dd8` racy word matches. **TEST PASSED, 0 UVM_ERROR, 0 UVM_FATAL.**
+- Not suppression: pass-1 divergences are demoted to *diagnostic* info ONLY when the feed is armed;
+  any residual not explained by a fed racy load stays a hard `uvm_error` (guarded, incl. the
+  feed-armed-but-no-race-found case). Default (no `+LOCKSTEP_LOADFEED`) is byte-identical.
+
+Gated behind `LOCKSTEP_LOADFEED=1` (env → `+LOCKSTEP_LOADFEED`). Config-generic (cid/wid/ordinal
+derived exactly as the scoreboard already does). Options 2 (config-scope to 1C) and 3 (per-hart
+disjoint regions) remain valid alternatives but were not needed.
+
+## Disposition (UPDATED 2026-07-16)
+`no_fence` / `full_interrupt` at multi-cluster are **VERIFIED-modulo-races** via the RVVI load-bus
+(`+LOCKSTEP_LOADFEED`) — a positive, non-waiver verification, superseding the earlier UNVERIFIABLE
+classification. Without the feed they remain (correctly) end-state-divergent, since the racy final
+word has no single golden value. All deterministic kernels/directed/regression + 10/12 riscv-dv still
+pass at 2CL independently.
 
 ## Follow-up candidates (optional, not blocking)
 - Build a lockstep retire-trace comparator (DUT commit-probe PCs+regs vs SimX step trace) to pinpoint

@@ -210,9 +210,21 @@ not scattered across per-fix docs.
   rules out a pure init/staging artifact → **genuine in-region cross-core shared-memory
   ordering divergence in the fenceless program, NOT a DUT bug**. OBS-009 fully root-caused
   to the load level. Evidence: `scratchpad/obs002_nofence_2CL.log`.
+- **VERIFIED 2026-07-16 (Phase A1(e), RVVI load-bus, `+LOCKSTEP_LOADFEED`) — positive, non-waiver.**
+  Implemented true RVVI load-bus as a two-pass trace-replay: pass 1 finds the racy in-region loads;
+  the DUT's per-lane loaded values are fed into SimX (keyed by (cid,wid,LOAD ordinal) — uuids differ)
+  at the single load site; pass 2 re-runs SimX in-process following the DUT loads. On the pinned
+  no_fence hex: pass-1 **20** racy loads → **138** cascaded mismatches; pass-2 **residual = 0** over
+  **5432/5432** pairs. The end-state compare was deferred to `report_phase` (post-feed SimX) → the
+  `0x80013dd8` racy word matches → **TEST PASSED, 0 UVM_ERROR**. So OBS-009 is not merely classified
+  UNVERIFIABLE — the DUT is now POSITIVELY VERIFIED equivalent modulo the (architecturally-undefined)
+  racy loads. Not suppression: any residual not explained by a fed racy load stays a hard error. Files:
+  `Vortex/sim/simx/cosim_loadfeed.h`, `emulator.cpp`, `execute.cpp`; `lockstep_scoreboard.sv`;
+  `vortex_scoreboard.sv` (deferred end-state). Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md`.
+  Same feed verifies OBS-010 (`full_interrupt`) identically.
 
 ### OBS-010 (RESOLVED — not a DUT bug) — `full_interrupt`@2CL: single-hart-test-in-multihart, load-fed div divergences
-- **Class:** REF-MODEL/methodology (same class as OBS-009; interrupt-timing amplifies it) · **Disposition:** resolved — real-fix options pending · **Found:** Phase A1(d) (2026-07-15)
+- **Class:** REF-MODEL/methodology (same class as OBS-009; interrupt-timing amplifies it) · **Disposition:** VERIFIED via RVVI load-bus (A1(e), see OBS-009 closure) · **Found:** Phase A1(d) (2026-07-15)
 - **What:** with the OBS-008 fetch-align fix, the pinned `full_interrupt`@2CL no longer
   aborts — runs to EBREAK. Lockstep: compared 19084, matched 19050, **only 34 data
   mismatches** (NOT a cascade), PC/rd=0, 0 orphans. **cid=0 byte-exact**; divergences

@@ -17,6 +17,7 @@
 #include <VX_config.h>
 #include <VX_types.h>
 #include "simx_cosim_record.h"
+#include "cosim_loadfeed.h"
 
 using namespace vortex;
 
@@ -692,6 +693,11 @@ int simx_run() {
         std::cout << "[SimX-DPI] Re-staged " << g_staged_mem.size()
                   << " memory regions after reset" << std::endl;
 
+        // RVVI load-bus (Phase A1(e)): reset per-warp LOAD cursors so ordinal
+        // counting restarts for this run. Overrides pushed by the scoreboard
+        // (pass 2) persist; a no-op when the feed is disabled/empty.
+        vortex::loadfeed_rewind();
+
         // (3) Verify the arg struct is now real (not poison).
         {
             uint8_t dbg[24];
@@ -930,5 +936,48 @@ unsigned simx_cosim_pending() {
 void simx_cosim_clear() {
     if (g_processor) g_processor->cosim_clear();
 }
+
+// ============================================================================
+// RVVI LOAD-BUS FEED (Phase A1(e)) — DUT-observed load values into SimX
+// ============================================================================
+// The SV lockstep scoreboard identifies provably-racy shared loads in pass 1,
+// then (pass 2) pushes the DUT's captured per-lane writeback values here and
+// re-runs SimX with the feed armed so SimX follows the DUT's memory ordering on
+// exactly those loads. Keyed by (cid,wid,uuid); default OFF ⇒ no substitution.
+
+void simx_cosim_load_feed_reset() {
+    vortex::loadfeed_reset();
+}
+
+void simx_cosim_load_feed_enable(int en) {
+    vortex::loadfeed_enable(en != 0);
+}
+
+// Push one DUT load override for the `ordinal`-th LOAD (0-based, program order)
+// on warp (cid,wid). data[] is an SV open array sized to num_threads; feed_mask
+// bit l set => override lane l with data[l].
+void simx_cosim_load_feed_push(
+    unsigned cid,
+    unsigned wid,
+    unsigned ordinal,
+    unsigned feed_mask,
+    const svOpenArrayHandle data
+) {
+    const int lo = svLow(data, 1);
+    const int hi = svHigh(data, 1);
+    const int n  = hi - lo + 1;
+    uint64_t buf[SIMX_COSIM_MAX_THREADS] = {0};
+    for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(data, lo + i));
+        if (slot) buf[i] = *slot;
+    }
+    vortex::loadfeed_push(cid, wid, ordinal, feed_mask, buf,
+                          (n < SIMX_COSIM_MAX_THREADS) ? (unsigned)n : SIMX_COSIM_MAX_THREADS);
+}
+
+// Diagnostics: pushed = records handed to SimX; consumed = records SimX actually
+// matched at a load retirement. consumed==pushed ⇒ DUT and SimX uuids aligned.
+unsigned simx_cosim_load_feed_pushed()   { return vortex::loadfeed_pushed(); }
+unsigned simx_cosim_load_feed_consumed() { return vortex::loadfeed_consumed(); }
 
 } // extern "C"

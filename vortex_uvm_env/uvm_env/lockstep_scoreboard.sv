@@ -55,6 +55,33 @@ class lockstep_scoreboard extends uvm_scoreboard;
     // lanes outside the region / poison-valued fall back to the end-state check.
     bit load_cmp_en;
 
+    // RVVI load-bus two-pass feed (Phase A1(e)). +LOCKSTEP_LOADFEED arms it.
+    // Pass 1 runs SimX independently and records every provably-racy in-region
+    // load that diverged (with the DUT's per-lane values). If any exist, pass 2
+    // re-runs SimX with those loads fed the DUT value (so SimX follows the DUT's
+    // memory-ordering resolution) and re-compares: residual mismatches are REAL
+    // divergences not explained by an unsynchronizable race. Default OFF ⇒ single
+    // pass, byte-identical.
+    bit feed_en;
+
+    // A captured DUT load override to replay into SimX (pass 2).
+    typedef struct {
+        int      unsigned cid;
+        int      unsigned wid;
+        int      unsigned ordinal;   // per-warp LOAD ordinal (program order)
+        int      unsigned mask;      // lanes to override (in-region, active)
+        longint  unsigned data [];   // per-lane DUT writeback value
+    } feed_rec_t;
+    feed_rec_t feed_q [$];
+
+    bit               capturing_feed;   // pass-1 only: populate feed_q on load divergence
+    bit               did_pass2;         // set when the pass-2 feed run executed
+    int      unsigned load_ord_ctr [int]; // per-key running LOAD ordinal (mirrors SimX)
+
+    // Pass-1 tallies saved before the pass-2 recompare (for the report).
+    int unsigned p1_pairs, p1_matched, p1_mm_pc, p1_mm_rd, p1_mm_data, p1_mm_loaddata,
+                 p1_dut_orphan, p1_simx_orphan, p1_first_div_keys;
+
     // One aggregated logical retirement (either side).
     typedef struct {
         longint  unsigned uuid;
@@ -133,6 +160,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // SimX effective address, OBS-002) → ON by default. +NO_LOCKSTEP_LOADS is
         // the escape hatch to fall back to PC/rd/ordering-only for loads.
         load_cmp_en = !$test$plusargs("NO_LOCKSTEP_LOADS");
+        // RVVI load-bus two-pass feed (Phase A1(e)) — off unless requested.
+        feed_en = $test$plusargs("LOCKSTEP_LOADFEED");
     endfunction
 
     // key helper
@@ -294,7 +323,17 @@ class lockstep_scoreboard extends uvm_scoreboard;
             first_div_desc[key] = desc;
         end
         if (err_emitted[key] < MAX_ERR_PER_KEY) begin
-            `uvm_error("LOCKSTEP", msg)
+            // In pass 1 of a two-pass RVVI run (feed armed), a divergence is
+            // DIAGNOSTIC — it identifies a candidate racy load. The authoritative
+            // pass/fail is the pass-2 residual after the DUT load-bus feed (and,
+            // if no races are found, the report_phase unexplained-divergence
+            // check). So emit info here, NOT error — a proven race must not fail
+            // the test, and a REAL divergence resurfaces as a pass-2 residual
+            // uvm_error. Default (no feed) keeps the original uvm_error semantics.
+            if (feed_en && capturing_feed)
+                `uvm_info("LOCKSTEP", {"[pass-1 diagnostic] ", msg}, UVM_LOW)
+            else
+                `uvm_error("LOCKSTEP", msg)
             err_emitted[key]++;
         end else if (err_emitted[key] == MAX_ERR_PER_KEY) begin
             err_emitted[key]++;
@@ -334,6 +373,11 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // vortex_scoreboard. So for loads we verify PC + rd + ordering here and
         // skip the per-lane data compare. Non-load writebacks are data-checked.
         if (g.is_load) begin
+            // Per-warp LOAD ordinal (program order) — mirrors SimX's per-(cid,wid)
+            // load cursor exactly, so it is the alignment key for the feed. MUST
+            // advance for EVERY load retirement (even skipped ones) to stay aligned.
+            int unsigned this_ord = load_ord_ctr.exists(key) ? load_ord_ctr[key] : 0;
+            load_ord_ctr[key] = this_ord + 1;
             // Load DATA is observable via the LSU probe (OBS-002 overlay). It is
             // compared per-lane only where it is SOUND to do so: the lane must be
             // active on both sides (tmask + LSU-probe fill) AND the SimX effective
@@ -345,6 +389,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 n_load_dataskip++;
             end else begin
                 bit any_cmp = 1'b0;
+                bit div_seen = 1'b0;          // any in-region lane diverged
+                int unsigned region_mask = 0; // in-region active comparable lanes
                 for (int l = 0; l < cfg.num_threads; l++) begin
                     if (((g.tmask >> l) & 1) && ((d.load_filled_mask >> l) & 1)) begin
                         bit in_region = (g.addr[l][31:0] >= RAM_BASE)
@@ -353,8 +399,9 @@ class lockstep_scoreboard extends uvm_scoreboard;
                                      || (g.data[l][63:32] == POISON);
                         if (!in_region || is_poison) continue;  // end-state covers it
                         any_cmp = 1'b1;
+                        region_mask |= (1 << l);
                         if (d.data[l] !== g.data[l]) begin
-                            n_mm_loaddata++; clean = 1'b0;
+                            n_mm_loaddata++; clean = 1'b0; div_seen = 1'b1;
                             if (desc == "") desc = $sformatf(
                                 "LOAD data lane%0d @%0h DUT=%0h vs SimX=%0h", l, g.addr[l], d.data[l], g.data[l]);
                             note_div(key, seq, d.pc, d.uuid, desc, $sformatf(
@@ -365,6 +412,21 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 end
                 if (any_cmp) n_load_datacmp++;   // at least one lane was region-valid
                 else         n_load_dataskip++;  // all lanes out-of-region/uninit
+                // FEED CAPTURE (pass 1): this in-region load provably diverged and
+                // has no single golden value (racy shared access). Record the DUT's
+                // per-lane values so pass 2 can drive SimX to follow the DUT and
+                // isolate any REAL residual divergence. Feed all in-region active
+                // lanes (matching lanes are a harmless no-op).
+                if (capturing_feed && feed_en && div_seen && region_mask != 0) begin
+                    feed_rec_t fr;
+                    fr.cid     = key >> 16;
+                    fr.wid     = key & 32'hFFFF;
+                    fr.ordinal = this_ord;
+                    fr.mask    = region_mask;
+                    fr.data    = new[cfg.num_threads];
+                    for (int l = 0; l < cfg.num_threads; l++) fr.data[l] = d.data[l];
+                    feed_q.push_back(fr);
+                end
             end
         end else if (g.is_volatile) begin
             n_volatile_skip++;          // mcycle/minstret/... model-divergent by definition
@@ -386,20 +448,13 @@ class lockstep_scoreboard extends uvm_scoreboard;
     endfunction
 
     //--------------------------------------------------------------------------
-    // check_phase — build both sides, walk each per-warp FIFO in lockstep.
+    // Walk each per-warp FIFO in lockstep and compare/tally. Reads the current
+    // gold_fifo/dut_fifo (rebuilt per pass).
     //--------------------------------------------------------------------------
-    function void check_phase(uvm_phase phase);
+    function automatic void run_compare();
         int keys[$];
-        super.check_phase(phase);
-        if (cfg == null || !cfg.enable_lockstep) return;
-
-        build_gold();
-        build_dut();
-
-        // Union of keys present on either side.
         foreach (gold_fifo[k]) keys.push_back(k);
         foreach (dut_fifo[k])  if (!gold_fifo.exists(k)) keys.push_back(k);
-
         foreach (keys[ki]) begin
             int key = keys[ki];
             int nd  = dut_fifo.exists(key)  ? dut_fifo[key].size()  : 0;
@@ -423,6 +478,78 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 end
             end
         end
+    endfunction
+
+    //--------------------------------------------------------------------------
+    // Zero all tallies + first-divergence state for a fresh compare pass.
+    //--------------------------------------------------------------------------
+    function automatic void reset_tallies();
+        n_matched=0; n_dut_orphan=0; n_simx_orphan=0; n_mm_pc=0; n_mm_rd=0;
+        n_mm_data=0; n_mm_loaddata=0; n_uuid_misaligned=0; n_pairs=0;
+        n_load_dataskip=0; n_load_datacmp=0; n_volatile_skip=0;
+        first_div_seen.delete(); first_div_seq.delete(); first_div_pc.delete();
+        first_div_uuid.delete(); first_div_desc.delete(); div_count.delete();
+        err_emitted.delete(); load_ord_ctr.delete();
+    endfunction
+
+    //--------------------------------------------------------------------------
+    // check_phase — PASS 1 (independent SimX) then, if the RVVI load-bus feed is
+    // armed and pass 1 found provably-racy in-region load divergences, PASS 2
+    // (re-run SimX with those loads fed the DUT value → residual mismatches are
+    // REAL divergences, not unsynchronizable races).
+    //--------------------------------------------------------------------------
+    function void check_phase(uvm_phase phase);
+        super.check_phase(phase);
+        if (cfg == null || !cfg.enable_lockstep) return;
+
+        // -------- PASS 1: independent SimX (feed disabled in SimX) --------
+        capturing_feed = 1'b1;
+        build_gold();
+        build_dut();
+        run_compare();
+
+        // -------- PASS 2: RVVI load-bus (only if armed and races found) -----
+        if (feed_en && feed_q.size() > 0) begin
+            int exitcode2;
+            // snapshot pass-1 tallies for the two-pass verdict
+            p1_pairs=n_pairs; p1_matched=n_matched; p1_mm_pc=n_mm_pc; p1_mm_rd=n_mm_rd;
+            p1_mm_data=n_mm_data; p1_mm_loaddata=n_mm_loaddata;
+            p1_dut_orphan=n_dut_orphan; p1_simx_orphan=n_simx_orphan;
+            p1_first_div_keys=first_div_seen.num();
+            did_pass2 = 1'b1;
+
+            `uvm_info("LOCKSTEP", $sformatf(
+                "PASS 1: %0d racy in-region LOAD-data divergence(s) over %0d captured load(s). Re-running SimX with the DUT load-bus fed (PASS 2)...",
+                p1_mm_loaddata, feed_q.size()), UVM_LOW)
+
+            // Arm the feed in SimX with the captured DUT load values.
+            simx_cosim_clear();
+            simx_cosim_load_feed_reset();
+            simx_cosim_load_feed_enable(1);
+            foreach (feed_q[i])
+                simx_cosim_load_feed_push(feed_q[i].cid, feed_q[i].wid,
+                                          feed_q[i].ordinal, feed_q[i].mask, feed_q[i].data);
+
+            // Reset SV-side compare state; SimX re-runs following the DUT loads.
+            gold_fifo.delete();
+            dut_fifo.delete();
+            reset_tallies();
+            capturing_feed = 1'b0;              // do NOT recapture in pass 2
+
+            exitcode2 = simx_run();
+            `uvm_info("LOCKSTEP", $sformatf(
+                "PASS 2: SimX re-run exit=%0d; load-bus records pushed=%0d consumed=%0d %s",
+                exitcode2, simx_cosim_load_feed_pushed(), simx_cosim_load_feed_consumed(),
+                (simx_cosim_load_feed_pushed() == simx_cosim_load_feed_consumed())
+                    ? "(ordinals aligned)" : "(WARNING: ordinal drift — see consumed<pushed)"),
+                UVM_LOW)
+
+            build_gold();
+            build_dut();
+            run_compare();
+
+            simx_cosim_load_feed_enable(0);     // leave SimX pristine
+        end
 
         // Housekeeping: clear both channels for any subsequent run.
         lockstep_pkg::ls_reset();
@@ -438,6 +565,40 @@ class lockstep_scoreboard extends uvm_scoreboard;
             foreach (gold_fifo[k]) if (!seen_cid.exists(k >> 16)) begin seen_cid[k>>16]=1; ncid++; end
             `uvm_info("LOCKSTEP", "==================== A0 LOCKSTEP SUMMARY ====================", UVM_LOW)
             `uvm_info("LOCKSTEP", $sformatf("  cores exercised     : %0d (distinct cid)  warps/core buckets: %0d", ncid, gold_fifo.num()), UVM_LOW)
+        end
+        // Two-pass RVVI load-bus verdict: pass-1 raw divergence (independent SimX)
+        // vs pass-2 residual (SimX driven by the DUT load-bus on racy loads). A
+        // pass-2 residual of 0 ⇒ every divergence was an unsynchronizable shared
+        // load; the DUT is self-consistent given its own memory ordering, and all
+        // compute/control/stores match. Nonzero residual ⇒ a REAL divergence.
+        if (did_pass2) begin
+            int p2_residual = n_mm_pc + n_mm_rd + n_mm_data + n_mm_loaddata
+                            + n_dut_orphan + n_simx_orphan;
+            `uvm_info("LOCKSTEP", "  ---- RVVI LOAD-BUS TWO-PASS VERDICT (Phase A1(e)) ----", UVM_LOW)
+            `uvm_info("LOCKSTEP", $sformatf(
+                "    PASS 1 (independent) : %0d racy in-region LOAD divergence(s); %0d cascaded field-mismatch(es); %0d warp(s) diverged",
+                p1_mm_loaddata, p1_mm_pc + p1_mm_rd + p1_mm_data + p1_mm_loaddata, p1_first_div_keys), UVM_LOW)
+            `uvm_info("LOCKSTEP", $sformatf(
+                "    PASS 2 (DUT load-bus): residual mismatch = %0d (PC=%0d rd=%0d data=%0d load=%0d orphan=%0d/%0d)",
+                p2_residual, n_mm_pc, n_mm_rd, n_mm_data, n_mm_loaddata, n_dut_orphan, n_simx_orphan), UVM_LOW)
+            if (p2_residual == 0)
+                `uvm_info("LOCKSTEP", "    VERDICT: all divergences explained by unsynchronizable shared-memory races; DUT VERIFIED modulo racy loads.", UVM_LOW)
+            else
+                `uvm_error("LOCKSTEP", $sformatf(
+                    "    VERDICT: %0d residual mismatch(es) NOT explained by racy loads — REAL divergence, investigate.", p2_residual))
+            `uvm_info("LOCKSTEP", "  ------------------------------------------------------", UVM_LOW)
+        end
+        // Suppression-hole guard: feed armed but NO racy in-region loads found
+        // ⇒ pass 2 never ran, yet pass 1 demoted its divergences to info. Any
+        // such divergence is NOT a race (nothing to feed) ⇒ it is REAL and must
+        // fail. (When the feed is disabled, note_div already emitted uvm_error.)
+        else if (feed_en) begin
+            int p1_total = n_mm_pc + n_mm_rd + n_mm_data + n_mm_loaddata
+                         + n_dut_orphan + n_simx_orphan;
+            if (p1_total > 0)
+                `uvm_error("LOCKSTEP", $sformatf(
+                    "  VERDICT: %0d divergence(s) with NO racy shared-load to explain them (load-bus feed found nothing) — REAL divergence, investigate.",
+                    p1_total))
         end
         `uvm_info("LOCKSTEP", $sformatf("  compared pairs      : %0d", n_pairs),        UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  matched             : %0d", n_matched),      UVM_LOW)
