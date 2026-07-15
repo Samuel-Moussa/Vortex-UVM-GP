@@ -75,6 +75,25 @@ class lockstep_scoreboard extends uvm_scoreboard;
     int unsigned n_load_dataskip;     // load retires: PC/rd checked, data not observable at commit probe
     int unsigned n_volatile_skip;     // perf-counter CSR reads: PC/rd checked, data model-divergent
 
+    // First-divergence capture per (cid,wid), in per-warp program order. This is
+    // the A1(d) deliverable: the EARLIEST instruction on each warp where DUT and
+    // SimX disagree — the pinpoint that end-state equivalence cannot give. Keyed
+    // by the same (cid<<16)|wid, so it localises a multi-cluster divergence to the
+    // exact core+warp+PC. Config-generic (cid,wid derived from uuid).
+    bit               first_div_seen [int];
+    int               first_div_seq  [int];
+    longint  unsigned first_div_pc   [int];
+    longint  unsigned first_div_uuid [int];
+    string            first_div_desc [int];
+    int      unsigned div_count      [int];   // total divergences on this warp
+    int      unsigned err_emitted    [int];   // per-key emitted uvm_error count (spew cap)
+
+    // A real cross-core divergence cascades: once a warp diverges, every later
+    // retire on it mismatches too. Emit at most this many uvm_error lines per warp
+    // (the FIRST few are what matter); the true n_mm_* tallies are counted in full
+    // regardless, and report_phase prints the first-divergence pinpoint per warp.
+    localparam int MAX_ERR_PER_KEY = 4;
+
     function new(string name, uvm_component parent);
         super.new(name, parent);
     endfunction
@@ -193,23 +212,55 @@ class lockstep_scoreboard extends uvm_scoreboard;
     endfunction
 
     //--------------------------------------------------------------------------
-    // Compare one aligned (DUT, SimX) pair. Counts each differing field.
+    // Record the FIRST divergence on a warp (program order) and emit a capped
+    // number of uvm_error lines. A cascading multi-core divergence would other-
+    // wise flood the log with thousands of downstream errors; the first few are
+    // what pinpoint the fault. True n_mm_* tallies are counted at the call site
+    // regardless of this cap.
+    //--------------------------------------------------------------------------
+    function automatic void note_div(int key, int seq, longint unsigned pc,
+                                     longint unsigned uuid, string desc, string msg);
+        div_count[key]++;
+        if (!first_div_seen.exists(key)) begin
+            first_div_seen[key] = 1;
+            first_div_seq[key]  = seq;
+            first_div_pc[key]   = pc;
+            first_div_uuid[key] = uuid;
+            first_div_desc[key] = desc;
+        end
+        if (err_emitted[key] < MAX_ERR_PER_KEY) begin
+            `uvm_error("LOCKSTEP", msg)
+            err_emitted[key]++;
+        end else if (err_emitted[key] == MAX_ERR_PER_KEY) begin
+            err_emitted[key]++;
+            `uvm_info("LOCKSTEP", $sformatf(
+                "  (further LOCKSTEP errors on key=%0h suppressed after %0d; see tallies + first-divergence block)",
+                key, MAX_ERR_PER_KEY), UVM_LOW)
+        end
+    endfunction
+
+    //--------------------------------------------------------------------------
+    // Compare one aligned (DUT, SimX) pair. Counts each differing field, and
+    // records/ caps-emits the divergence via note_div.
     //--------------------------------------------------------------------------
     function automatic void compare_pair(int key, int seq, retire_t d, retire_t g);
-        bit clean = 1'b1;
+        bit    clean = 1'b1;
+        string desc  = "";
         n_pairs++;
         if (d.uuid != g.uuid) n_uuid_misaligned++;   // cross-check, not a failure
         if (d.pc != g.pc) begin
             n_mm_pc++; clean = 1'b0;
-            `uvm_error("LOCKSTEP", $sformatf(
+            if (desc == "") desc = $sformatf("PC DUT=%0h vs SimX=%0h", d.pc, g.pc);
+            note_div(key, seq, d.pc, d.uuid, desc, $sformatf(
                 "PC mismatch key=%0h seq=%0d: DUT PC=%0h (uuid=%0h) vs SimX PC=%0h (uuid=%0h)",
-                key, seq, d.pc, d.uuid, g.pc, g.uuid))
+                key, seq, d.pc, d.uuid, g.pc, g.uuid));
         end
         if (d.rd != g.rd) begin
             n_mm_rd++; clean = 1'b0;
-            `uvm_error("LOCKSTEP", $sformatf(
+            if (desc == "") desc = $sformatf("rd DUT=%0d vs SimX=%0d", d.rd, g.rd);
+            note_div(key, seq, d.pc, d.uuid, desc, $sformatf(
                 "rd mismatch key=%0h seq=%0d PC=%0h: DUT rd=%0d vs SimX rd=%0d",
-                key, seq, d.pc, d.rd, g.rd))
+                key, seq, d.pc, d.rd, g.rd));
         end
         // Load-writeback DATA is not observable at the DUT commit-arb probe
         // (loads complete via the async LSU response path; empirically the
@@ -226,9 +277,11 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 if ((g.tmask >> l) & 1) begin
                     if (d.data[l] !== g.data[l]) begin
                         n_mm_data++; clean = 1'b0;
-                        `uvm_error("LOCKSTEP", $sformatf(
+                        if (desc == "") desc = $sformatf(
+                            "data lane%0d DUT=%0h vs SimX=%0h", l, d.data[l], g.data[l]);
+                        note_div(key, seq, d.pc, d.uuid, desc, $sformatf(
                             "DATA mismatch key=%0h seq=%0d PC=%0h uuid=%0h lane=%0d: DUT=%0h vs SimX=%0h",
-                            key, seq, d.pc, d.uuid, l, d.data[l], g.data[l]))
+                            key, seq, d.pc, d.uuid, l, d.data[l], g.data[l]));
                     end
                 end
             end
@@ -261,14 +314,16 @@ class lockstep_scoreboard extends uvm_scoreboard;
                     compare_pair(key, s, dut_fifo[key][s], gold_fifo[key][s]);
                 end else if (s < nd) begin
                     n_dut_orphan++;
-                    `uvm_error("LOCKSTEP", $sformatf(
+                    note_div(key, s, dut_fifo[key][s].pc, dut_fifo[key][s].uuid,
+                        "DUT-ORPHAN (no SimX retire)", $sformatf(
                         "DUT-ORPHAN key=%0h seq=%0d PC=%0h uuid=%0h (no SimX retire)",
-                        key, s, dut_fifo[key][s].pc, dut_fifo[key][s].uuid))
+                        key, s, dut_fifo[key][s].pc, dut_fifo[key][s].uuid));
                 end else begin
                     n_simx_orphan++;
-                    `uvm_error("LOCKSTEP", $sformatf(
+                    note_div(key, s, gold_fifo[key][s].pc, gold_fifo[key][s].uuid,
+                        "SIMX-ORPHAN (no DUT retire)", $sformatf(
                         "SIMX-ORPHAN key=%0h seq=%0d PC=%0h uuid=%0h (no DUT retire)",
-                        key, s, gold_fifo[key][s].pc, gold_fifo[key][s].uuid))
+                        key, s, gold_fifo[key][s].pc, gold_fifo[key][s].uuid));
                 end
             end
         end
@@ -297,6 +352,18 @@ class lockstep_scoreboard extends uvm_scoreboard;
         `uvm_info("LOCKSTEP", $sformatf("  field_mismatch data : %0d", n_mm_data),      UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  load data-skipped   : %0d (PC/rd checked; data via end-state)", n_load_dataskip), UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  volatile-CSR skipped: %0d (perf counters; model-divergent)", n_volatile_skip), UVM_LOW)
+        // A1(d) deliverable: the earliest diverging instruction per warp. For a
+        // clean run this block is empty; for a cross-core divergence it pinpoints
+        // the exact core/warp/PC where DUT and SimX first disagree.
+        if (first_div_seen.num() > 0) begin
+            `uvm_info("LOCKSTEP", "  ---- FIRST DIVERGENCE per (cid,wid) [per-warp program order] ----", UVM_LOW)
+            foreach (first_div_seen[k]) begin
+                `uvm_info("LOCKSTEP", $sformatf(
+                    "    cid=%0d wid=%0d : first@seq=%0d PC=%0h uuid=%0h | %s | (%0d total divergences on this warp)",
+                    k >> 16, k & 32'hFFFF, first_div_seq[k], first_div_pc[k],
+                    first_div_uuid[k], first_div_desc[k], div_count[k]), UVM_LOW)
+            end
+        end
         // uuid cross-check verdict (does NOT affect pass/fail).
         if (n_pairs == 0)
             `uvm_info("LOCKSTEP", "  uuid alignment      : N/A (no pairs)", UVM_LOW)
