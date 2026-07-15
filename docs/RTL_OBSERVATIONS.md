@@ -51,8 +51,31 @@ not scattered across per-fix docs.
   `lw s0,0x28(sp)`); DUT uniform `8000770c` vs SimX per-lane `800076b8+28*lane`.
 - **Impact / handling:** Load *data* is verified by the end-state memory-equivalence
   check (passes). Lockstep scopes loads out of the per-lane DATA compare (still
-  checks PC/rd/ordering), identified by SimX `fu_type==LSU`. A1 could add an
-  LSU-writeback / regfile-write-port probe to observe load data directly.
+  checks PC/rd/ordering), identified by SimX `fu_type==LSU`.
+- **UPDATE 2026-07-15 (A1(d)) — LSU probe BUILT; load data IS observable, but a raw
+  compare is NOT sound.** `vortex_uvm_env/tb/vx_lsu_probe.sv` binds `VX_lsu_slice` and
+  taps `result_if` (post sign/zero-extension, `VX_lsu_slice.sv` rsp_buf→rsp_arb). It
+  captures TRUE per-lane DUT load values — verified: uuid 0x56 shows real distinct
+  per-lane values. Two RTL facts learned:
+  1. A load commits **one lane per beat** (tmask 1,2,4,8 — consistent with OBS-003), and
+  2. `result_if.data.data` **broadcasts the active lane's value across ALL lane
+     positions** in each beat (it is not a per-lane vector). Reading `data[active_lane]`
+     per beat reconstructs the correct vector.
+  **Why a raw compare is unsound:** loads of **uninitialised / stack / lmem** memory
+  legitimately differ (DUT reads 0, SimX reads its own init pattern) — e.g. vecadd_lite
+  uuid 0x57 `DUT=0 vs SimX=0x64355e8a` while the END-STATE **passes** (252/252). That is
+  exactly the class `compare_all_written` skips (`vortex_scoreboard.sv:647-656`: region
+  gate `[RAM_BASE, DATA_LIMIT=0x8800_0000)` excluding stack `0xffff_xxxx`/MMIO/lmem, plus
+  a POISON `0xbaadf00d` check). A naive load-compare therefore FALSE-POSITIVES on clean
+  programs (vecadd: 429 false LOAD mismatches).
+  **Status:** probe + scoreboard overlay committed, but load-compare is **gated OFF**
+  behind `+LOCKSTEP_LOADS` (default = prior OBS-002 behaviour, no regression).
+  **To close OBS-002 (next step):** export SimX `LsuTraceData::mem_addrs` (per-thread
+  load address) through the cosim record — same additive pattern already used for
+  `fu_type`/`is_volatile` (`simx_cosim_record.h` + `core.cpp` + `simx_dpi.cpp` +
+  `simx_pkg.sv`) — then in `compare_pair` skip a load lane whose address is outside
+  `[RAM_BASE, DATA_LIMIT)` or whose SimX value is POISON. Then enable by default.
+  No RTL request-tap needed (avoids the `full_addr` port-width/macro-visibility risk).
 
 ### OBS-003 — One load emits MULTIPLE commit records with the same uuid (partial masks)
 - **Class:** QUIRK/EXPECTED · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)
@@ -150,9 +173,18 @@ not scattered across per-fix docs.
   with a diverged negative input.
 - **Evidence:** `scratchpad/no_fence_FETCHFIX.log` (LOCKSTEP FIRST-DIVERGENCE block);
   disasm `0x8000c8b0..c8cc`.
-- **Next:** trace a3/a5 origin (is either from a skipped load?); dump `mscratch` +
-  the mulhsu operands DUT-side vs SimX-side at seq 4632. Do NOT assume a DUT bug — the
-  deterministic all-core signature could equally be a SimX M-ext or CSR modeling gap.
+- **RESOLVED (root cause, 2026-07-15) — the divergence is LOAD-FED, not a compute bug.**
+  With the LSU probe enabling load-data visibility, the first divergence **moves much
+  earlier and becomes a LOAD**: cid=2/3 `seq=742 PC=0x80004c10... LOAD lane0 DUT=0x5e vs
+  SimX=0x0`; cid=0/1 `seq=4441 PC=0x8000c535 LOAD DUT=0x495d vs SimX=0x4549`. The
+  `mulhsu`@seq4632 was a **downstream symptom** of an already-diverged operand. So the
+  root is a **memory-content difference** (DUT and SimX read different values), i.e. the
+  fenceless shared-load ordering class — **NOT** a DUT ALU/CSR bug. `mulhsu`/`mscratch`
+  hypotheses are retired.
+- **Caveat:** some of those load mismatches may themselves be the uninitialised/stack
+  class (see OBS-002 update) — distinguishing "real fenceless-ordering divergence" from
+  "uninitialised read" needs the load-address region filter (OBS-002 next step). The
+  structural conclusion (load-fed, not compute) already holds regardless.
 
 ### OBS-010 (OPEN) — `full_interrupt`@2CL: few localized divergences at div/divu fed by loads/CSR
 - **Class:** likely interrupt-timing model divergence (TBD, same blocker as OBS-009) · **Disposition:** open · **Found:** Phase A1(d) (2026-07-15)

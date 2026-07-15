@@ -11,7 +11,24 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) divergence ✅ · A1(b) multi-core ✅ · A1(d) 2CL no_fence first-divergence PINPOINTED ✅. NEXT: A1(c) rvvi_if migration; optionally full_interrupt pinpoint + LSU-data probe (OBS-002).**
+**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · LSU load probe BUILT (gated off) ⏳. NEXT ACTION: export SimX `LsuTraceData::mem_addrs` → region-filter load compare → enable `+LOCKSTEP_LOADS` by default (closes OBS-002).**
+
+### ▶▶ NEXT ACTION (exact, resumable — 2026-07-15)
+**Goal: make per-instruction LOAD-DATA compare SOUND, then enable it (closes OBS-002, and lets OBS-009/010 be classified definitively).**
+The LSU probe (`vortex_uvm_env/tb/vx_lsu_probe.sv`, bound to `VX_lsu_slice`, taps `result_if`) is **built, committed, and verified to capture true DUT load values**. But comparing loads raw FALSE-POSITIVES on **uninitialised/stack/lmem** loads (DUT reads 0, SimX reads its own init pattern) — vecadd_lite showed **429 false LOAD mismatches while its END-STATE PASSES (252/252)**. So load-compare is **gated OFF** behind `+LOCKSTEP_LOADS` (default = prior behaviour, zero regression).
+**Steps to finish (no RTL change needed):**
+1. **Export the load address from SimX** — additive, same proven pattern as `fu_type`/`is_volatile`: `LsuTraceData::mem_addrs` (per-thread, `Vortex/sim/simx/instr_trace.h:33-36`) → add `uint64_t mem_addr[SIMX_COSIM_MAX_THREADS]` to `simx_cosim_record.h` → populate in `core.cpp` (where `fu_type`/`is_volatile` are set, ~line 245) → widen `simx_cosim_pop` in `ref_model/simx_dpi.cpp` + `ref_model/simx_pkg.sv`.
+2. **Filter in `lockstep_scoreboard.sv` `compare_pair`** — skip a load lane if its address is outside `[RAM_BASE, DATA_LIMIT=0x8800_0000)` **or** SimX's value is POISON `0xbaadf00d`. Mirror `vortex_scoreboard.sv:647-656` (`compare_all_written` region gate) exactly.
+3. **Validate:** vecadd_lite must give **0 LOAD mismatches** (the correctness gate — it FAILS today with 429); then re-run pinned `no_fence` + `full_interrupt` and see which load divergences SURVIVE the filter → those are real fenceless/interrupt-ordering divergences (classifies OBS-009/010 definitively).
+4. Then flip the gate ON by default and re-audit config-genericity (NT ≤ 32 caveat: `tmask`/`load_filled_mask` are 32-bit `int`).
+**Useful:** `LSU_DEBUG=1` dumps raw probe captures. Replay hexes (no regen): pinned no_fence `results/20260710/run_125857_.../riscv_no_fence_test_0.hex`, full_interrupt `results/20260710/run_130835_.../riscv_full_interrupt_test_0.hex`; run with `LOCKSTEP=1 make sim-only TEST=random_instruction_stress_test PROGRAM=<abs hex> CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 TIMEOUT=200000`.
+
+### Session 2026-07-15 results (all committed)
+- **SimX BUG FOUND + FIXED (`6dfe665`, OBS-008):** SimX fetched at the exact byte `warp.PC`. The DUT debug build keeps the **full odd PC** after a jalr-to-odd-target (`PC_BITS=XLEN`, identity `to/from_fullPC`, `VX_gpu_pkg.sv:75-82`) but its icache request is **word-aligned** (`VX_fetch.sv:101`). SimX mirrored the odd PC (correct) but read misaligned bytes → undecodable `0xb3018cd0` → `decode.cpp default: std::abort()` → run wrongly UNVERIFIABLE. Fix: `emulator.cpp` fetch `warp.PC & ~Word(3)`. **A `& ~1` on JALR was tried and REVERTED** — it de-syncs SimX from the DUT's odd PC (21968 phantom PC mismatches).
+- **Decode-abort observability KEPT:** `decode.cpp` `DECODE_ABORT()` prints faulting PC + instr word before aborting → every UNVERIFIABLE-by-abort now self-documents.
+- **Both 2CL UNVERIFIABLE cases now RUN (no abort):** regen `no_fence` and pinned `full_interrupt` reach EBREAK and do real compares. **No DUT bug found anywhere** — every divergence is fenceless/interrupt ordering or an unobservable-operand artifact.
+- **A1(d) pinpoint (`28c84ab`):** pinned `no_fence` first divergence = `mulhu s0,s3,a3 @0x800004f4`, cluster-1 cores only, cluster-0 byte-exact.
+- **OBS-009 root-caused:** the `mulhsu` divergence is **LOAD-FED** (first divergence moves to a load at seq 742), not a compute/CSR bug.
 
 **A1(d) DONE (2026-07-15, commits `b029fe7` + this) — the original motivation, closed:**
 - Enhanced `lockstep_scoreboard.sv`: **first-divergence-per-(cid,wid) capture** + dedicated report block + per-key uvm_error spew cap (config-generic; true n_mm_* tallies unaffected). Committed `b029fe7`.

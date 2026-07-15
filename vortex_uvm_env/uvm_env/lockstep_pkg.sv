@@ -47,6 +47,15 @@ package lockstep_pkg;
     // Global hand-off queue: probe (module domain) → scoreboard (class domain).
     dut_retire_s dut_retire_q[$];
 
+    // Parallel LOAD-writeback channel (vx_lsu_probe.sv). Load *data* is not
+    // observable at the commit-arb tap (OBS-002: commit `data` is stale for
+    // loads — they finish via the async LSU response path). The LSU slice's
+    // result_if DOES carry the final aligned per-lane load value, so a second
+    // passive probe captures it here (same dut_retire_s shape, `sid`=LSU pid).
+    // The scoreboard overlays this real data onto the matching commit retirement
+    // (by uuid) so loads get per-instruction DATA-compared instead of skipped.
+    dut_retire_s dut_load_q[$];
+
     // Set from +LOCKSTEP by the probe at time 0. Default 0 = channel inert.
     bit lockstep_en = 1'b0;
 
@@ -61,9 +70,15 @@ package lockstep_pkg;
         dut_retire_q.push_back(r);
     endfunction
 
-    // Drain helper for the scoreboard (returns and clears the queue).
+    // Push helper for the LSU load-writeback channel.
+    function automatic void ls_push_load(dut_retire_s r);
+        dut_load_q.push_back(r);
+    endfunction
+
+    // Drain helper for the scoreboard (returns and clears both queues).
     function automatic void ls_reset();
         dut_retire_q.delete();
+        dut_load_q.delete();
     endfunction
 
 endpackage : lockstep_pkg

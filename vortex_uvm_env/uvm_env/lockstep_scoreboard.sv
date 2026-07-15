@@ -45,6 +45,19 @@ class lockstep_scoreboard extends uvm_scoreboard;
 
     vortex_config cfg;
 
+    // Per-instruction LOAD-DATA comparison gate (+LOCKSTEP_LOADS). OFF by default.
+    // The LSU probe (vx_lsu_probe.sv) captures true DUT load values, but comparing
+    // them raw yields FALSE mismatches on loads of uninitialised/stack memory —
+    // where DUT (reads 0) and SimX (reads its own init pattern) legitimately differ.
+    // That is exactly the class the END-STATE check skips (compare_all_written:
+    // region gate [RAM_BASE, DATA_LIMIT) + POISON). Making load-compare sound needs
+    // the LOAD ADDRESS so the same region filter can be applied per-lane — see the
+    // RESUME block in docs/INDUSTRIAL_TRANSFORMATION_PLAN.md (export SimX
+    // LsuTraceData::mem_addrs through the cosim record, then filter here).
+    // Until then this stays OFF: loads keep PC/rd/ordering checks and their DATA is
+    // covered by the end-state memory compare (OBS-002 behaviour, no regression).
+    bit load_cmp_en;
+
     // One aggregated logical retirement (either side).
     typedef struct {
         longint  unsigned uuid;
@@ -52,7 +65,11 @@ class lockstep_scoreboard extends uvm_scoreboard;
         int      unsigned rd;
         int      unsigned tmask;          // full-width active-lane mask
         bit               is_load;        // SimX FUType==LSU (gold side only)
+        bit               is_fp;          // SimX FP-destination writeback (gold side only)
         bit               is_volatile;    // SimX read a perf-counter CSR (gold side only)
+        int      unsigned load_filled_mask; // DUT side: lanes whose load data came
+                                          // from the LSU probe (OBS-002 overlay).
+                                          // Only these lanes are DATA-comparable.
         longint  unsigned data[];         // size = num_threads
     } retire_t;
 
@@ -70,9 +87,11 @@ class lockstep_scoreboard extends uvm_scoreboard;
     int unsigned n_mm_pc;
     int unsigned n_mm_rd;
     int unsigned n_mm_data;
+    int unsigned n_mm_loaddata;        // load-writeback data mismatches (LSU-probe overlay)
     int unsigned n_uuid_misaligned;   // cross-check only (not an error)
     int unsigned n_pairs;             // total compared positions
-    int unsigned n_load_dataskip;     // load retires: PC/rd checked, data not observable at commit probe
+    int unsigned n_load_dataskip;     // load retires with NO LSU-probe data → data skipped (end-state covers)
+    int unsigned n_load_datacmp;      // load retires whose data WAS compared (LSU-probe overlay)
     int unsigned n_volatile_skip;     // perf-counter CSR reads: PC/rd checked, data model-divergent
 
     // First-divergence capture per (cid,wid), in per-warp program order. This is
@@ -102,6 +121,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         super.build_phase(phase);
         if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg))
             `uvm_fatal("LOCKSTEP", "vortex_config not found")
+        load_cmp_en = $test$plusargs("LOCKSTEP_LOADS");
     endfunction
 
     // key helper
@@ -150,6 +170,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
             g.rd          = rd;
             g.tmask       = tmask;
             g.is_load     = (fu_type == FU_LSU);
+            g.is_fp       = (is_fp != 0);   // FP-dest load data routes to the FP regfile,
+                                            // NOT the integer result_if tap the LSU probe reads
             g.is_volatile = (is_volatile != 0);
             g.data        = new[cfg.num_threads];
             for (k = 0; k < cfg.num_threads; k++) g.data[k] = res[k];
@@ -190,6 +212,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 merged[key][b.uuid].pc    = b.pc;
                 merged[key][b.uuid].rd    = b.rd;
                 merged[key][b.uuid].tmask = 0;
+                merged[key][b.uuid].load_filled_mask = 0;
                 merged[key][b.uuid].data  = new[cfg.num_threads];
             end
             // Place only the lanes this record actually wrote (tmask-gated), and
@@ -202,6 +225,31 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 end
             end
         end
+        // OVERLAY real LOAD data from the LSU probe (dut_load_q) onto the matching
+        // commit retirement, keyed by uuid. The commit `data` field is stale for
+        // loads (OBS-002); VX_lsu_slice.result_if carries the true aligned per-lane
+        // value. Place active lanes exactly like the commit path (sid*simd_w + l)
+        // and record which lanes were filled (load_filled_mask) so compare_pair
+        // only trusts those. A load with no captured beat stays unfilled → still
+        // skipped (falls back to the end-state memory check).
+        for (i = 0; i < lockstep_pkg::dut_load_q.size(); i++) begin
+            lockstep_pkg::dut_retire_s lb;
+            int lkey, lbase, lsimd, ll, lgi;
+            lb    = lockstep_pkg::dut_load_q[i];
+            lkey  = key_of(cid_of_uuid(lb.uuid), wid_of_uuid(lb.uuid));
+            if (!merged.exists(lkey)) continue;
+            if (!merged[lkey].exists(lb.uuid)) continue;   // load with no commit retire
+            lsimd = lb.data.size();
+            lbase = lb.sid * lsimd;
+            for (ll = 0; ll < lsimd; ll++) begin
+                lgi = lbase + ll;
+                if (lgi < cfg.num_threads && ((lb.tmask >> ll) & 1)) begin
+                    merged[lkey][lb.uuid].data[lgi]           = lb.data[ll];
+                    merged[lkey][lb.uuid].load_filled_mask   |= (1 << lgi);
+                end
+            end
+        end
+
         // Flatten each key's uuid-map into a uuid-sorted queue.
         foreach (merged[key]) begin
             longint unsigned uus[$];
@@ -269,7 +317,26 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // vortex_scoreboard. So for loads we verify PC + rd + ordering here and
         // skip the per-lane data compare. Non-load writebacks are data-checked.
         if (g.is_load) begin
-            n_load_dataskip++;
+            // Load DATA is observable via the LSU probe (OBS-002 overlay), but the
+            // raw compare is NOT yet sound (uninitialised/stack loads legitimately
+            // differ) — gated OFF by default until the address region-filter lands.
+            if (!load_cmp_en || d.load_filled_mask == 0) begin
+                n_load_dataskip++;
+            end else begin
+                n_load_datacmp++;
+                for (int l = 0; l < cfg.num_threads; l++) begin
+                    if (((g.tmask >> l) & 1) && ((d.load_filled_mask >> l) & 1)) begin
+                        if (d.data[l] !== g.data[l]) begin
+                            n_mm_loaddata++; clean = 1'b0;
+                            if (desc == "") desc = $sformatf(
+                                "LOAD data lane%0d DUT=%0h vs SimX=%0h", l, d.data[l], g.data[l]);
+                            note_div(key, seq, d.pc, d.uuid, desc, $sformatf(
+                                "LOAD-DATA mismatch key=%0h seq=%0d PC=%0h uuid=%0h lane=%0d: DUT=%0h vs SimX=%0h",
+                                key, seq, d.pc, d.uuid, l, d.data[l], g.data[l]));
+                        end
+                    end
+                end
+            end
         end else if (g.is_volatile) begin
             n_volatile_skip++;          // mcycle/minstret/... model-divergent by definition
         end else begin
@@ -350,7 +417,9 @@ class lockstep_scoreboard extends uvm_scoreboard;
         `uvm_info("LOCKSTEP", $sformatf("  field_mismatch PC   : %0d", n_mm_pc),        UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  field_mismatch rd   : %0d", n_mm_rd),        UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  field_mismatch data : %0d", n_mm_data),      UVM_LOW)
-        `uvm_info("LOCKSTEP", $sformatf("  load data-skipped   : %0d (PC/rd checked; data via end-state)", n_load_dataskip), UVM_LOW)
+        `uvm_info("LOCKSTEP", $sformatf("  field_mismatch LOAD : %0d (load-writeback data, via LSU probe)", n_mm_loaddata), UVM_LOW)
+        `uvm_info("LOCKSTEP", $sformatf("  load data-compared  : %0d (LSU-probe overlay; needs +LOCKSTEP_LOADS)", n_load_datacmp), UVM_LOW)
+        `uvm_info("LOCKSTEP", $sformatf("  load data-skipped   : %0d (gated off / no LSU beat; end-state covers)", n_load_dataskip), UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  volatile-CSR skipped: %0d (perf counters; model-divergent)", n_volatile_skip), UVM_LOW)
         // A1(d) deliverable: the earliest diverging instruction per warp. For a
         // clean run this block is empty; for a cross-core divergence it pinpoints

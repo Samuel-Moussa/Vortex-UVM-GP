@@ -945,7 +945,18 @@ module vortex_tb_top;
         .reset        (reset),
         .commit_arb_if(commit_arb_if)
     );
-    
+
+    // A1(d)-bind: passive LOAD-writeback probe into every VX_lsu_slice. Captures
+    // the final aligned per-lane load DATA (result_if) — invisible at the commit
+    // tap (OBS-002) — so lockstep can DATA-compare loads. +LOCKSTEP-gated, passive.
+    bind VX_lsu_slice vx_lsu_probe u_lsu_probe (
+        .clk  (clk),
+        .reset(reset),
+        .valid(result_if.valid),
+        .ready(result_if.ready),
+        .data (result_if.data)
+    );
+
 
     //==========================================================================
     // SIMULATION COMPLETION

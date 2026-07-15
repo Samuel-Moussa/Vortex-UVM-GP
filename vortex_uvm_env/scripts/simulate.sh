@@ -93,6 +93,15 @@ fi
 if [[ -n "${LOCKSTEP_INJECT:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +LOCKSTEP_INJECT"
 fi
+if [[ -n "${LSU_DEBUG:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LSU_DEBUG"
+fi
+# LOCKSTEP_LOADS=1 enables per-instruction LOAD-DATA comparison (LSU probe overlay).
+# OFF by default: not yet sound — see the RESUME block (needs the load-address
+# region filter). With it off, loads keep PC/rd/ordering + end-state data coverage.
+if [[ -n "${LOCKSTEP_LOADS:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADS"
+fi
 
 
 print_info "Test:      $TEST_NAME"
