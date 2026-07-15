@@ -11,7 +11,13 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 DONE ✅ · A1(a) divergence DONE ✅ · A1(b) multi-core DONE ✅. NEXT: A1(c) rvvi_if migration + A1(d) 2CL/suite/no_fence first-divergence.**
+**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) divergence ✅ · A1(b) multi-core ✅ · A1(d) 2CL no_fence first-divergence PINPOINTED ✅. NEXT: A1(c) rvvi_if migration; optionally full_interrupt pinpoint + LSU-data probe (OBS-002).**
+
+**A1(d) DONE (2026-07-15, commits `b029fe7` + this) — the original motivation, closed:**
+- Enhanced `lockstep_scoreboard.sv`: **first-divergence-per-(cid,wid) capture** + dedicated report block + per-key uvm_error spew cap (config-generic; true n_mm_* tallies unaffected). Committed `b029fe7`.
+- **Pinned no_fence hex REPLAYED under lockstep** (`results/20260710/run_125857_.../riscv_no_fence_test_0.hex`, regen OFF, 2CL/2C/4W/4T): reproduced the documented end-state mismatch (`0x80013dd8 DUT=0x28af8c40 SimX=0x2fff8c40`) AND **pinpointed first divergence = `mulhu s0,s3,a3` @ PC 0x800004f4, seq 278, cluster-1 cores (cid 2,3) only; DUT s0=0x3d75a09d vs SimX 0x3d009f79.** cluster-0 (cid 0,1) = 0 divergences (byte-exact). 0 orphans, 118 data-mismatches, PC/rd exact. Confirms per-cluster fenceless-ordering verdict at instruction granularity (mulhu inputs already diverged ⇒ upstream shared-load; NOT a DUT/compute bug). Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "First divergence — PINPOINTED".
+- **REGENERATED no_fence@2CL is a DIFFERENT case:** SimX *aborts* (SIGABRT→exit −3, UNVERIFIABLE), lockstep proves DUT≡SimX byte-exact for all 17664 retires up to the crash. Non-vacuity proven by `+LOCKSTEP_INJECT` (17664→17663 matched, 1 caught DATA mismatch). See RTL_OBSERVATIONS OBS-007.
+- **Not yet done in A1(d):** `full_interrupt` pinpoint (same method, one replay) and naming the exact upstream shared-load (needs LSU-writeback/regfile probe per OBS-002).
 
 **A1 progress (branch `industrial_transformations`):**
 - **A1(a) divergence — DONE:** `diverge_uni3` (nested asymmetric 3v1→2v1→1v1, heavy partial masks) `+LOCKSTEP` → **2668/2668 matched, 0 mismatches, PASSED.** uuid-group aggregation + tmask-union handle divergence with no code change.
