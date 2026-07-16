@@ -33,6 +33,26 @@ fail it — isolates the gate; keep OUT of run_suite, re-run after any verdict-l
 PC=0x8000009c, addr=g_src+1) with UVM `TEST PASSED, 0 UVM_ERROR` ⇒ RED came ONLY through the RTL
 branch, make rc≠0 ✓ · vecadd_lite → PASSED (0 UVM, 0 RTL), make rc=0 ✓ · `make compile` → rc=0 ✓ ·
 bonus: config-mismatch run proved I2-fatal → crash verdict → make rc≠0 (previously silent 0) ✓.
+**INV-4 RESOLVED (2026-07-16, same session — see below for the original finding):**
+① TWO riscv-dv generator idioms deliberately set the jalr target LSB (spec-legal, expects `& ~1`):
+`riscv_directed_instr_lib.sv:164` (jump-stream `offset=$urandom_range(0,1)`) AND
+`riscv_instr_sequence.sv:295` (sub-program return routine `rand_lsb`). Both patched LOCALLY in
+`~/riscv-dv` (`offset/rand_lsb → 0`, marked "VORTEX LOCAL PATCH (INV-4)"; revert when RTL
+implements `& ~1`). First validation missed the second idiom (30→120 errors) — the derail is
+multi-source; sweep generated `.S` for imbalanced `addi rd,ra,{1}`+`jalr` pairs when in doubt.
+② `riscv_jump_stress_test` post-patch: **0 RTL error lines, TEST PASSED, rc=0** (was 30 asserts).
+③ `riscv_unaligned_load_store_test` EXCLUDED from run_suite: its base_testlist gen_opts force
+`+enable_unaligned_load_store=1` (7020 genuine misaligned asserts even post-patch) — the
+2026-07-03 "becomes a normal aligned test" claim was WRONG; unaligned-data verification is
+unimplementable on Vortex (OBS-013). ④ `riscv_illegal_instr_test` EXCLUDED: `.4byte
+kIllegalSystemInstr` encodings decode as bogus-CSR ops on the trap-less DUT (OBS-013 CSR flavor).
+⑤ `riscv_rand_jump_test`@2CL post-patch: 0 RTL errors but 7 end-state MEM MISMATCHes — load-feed
+classified it as the **OBS-009 race class** (cid0 exact, byte-granular racy `lb`s, post-feed
+end-state 0 mismatches) with a NEW method boundary: residual 15 (load=13) = racy loads STEER
+CONTROL FLOW in a jump test → two-pass replay has no fixed point (ENH-2 iterated feed is the
+closer). Left honestly RED at multi-core; expect it (like no_fence/full_interrupt) in the 2CL
+lane. Suite now retains 10 riscv-dv profiles. Full evidence: RTL_OBSERVATIONS OBS-009 (extended).
+
 **⚠️ INV-4 OPENED (riscv-dv jalr derail):** 12/12 riscv-dv suite profiles fire misaligned RUNTIME_ASSERTs
 (30–7616/run) and now classify FAILED under the toothed gate. Root cause = OBS-012 (JALR LSB non-clear,
 spec deviation) + riscv-dv's deliberate `label+1` jalr idiom (`riscv_directed_instr_lib.sv:162-165`,

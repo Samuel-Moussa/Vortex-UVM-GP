@@ -171,6 +171,18 @@ not scattered across per-fix docs.
 
 ### OBS-009 (RESOLVED — not a DUT bug) — no_fence@2CL divergence is single-hart-test-in-multihart race
 - **Class:** REF-MODEL/methodology (single-hart random test on N shared-memory cores) · **Disposition:** resolved — real-fix options pending (see investigation doc) · **Found:** Phase A1(d) (2026-07-15)
+- **EXTENDED (2026-07-16, INV-4): `riscv_rand_jump_test`@2CL is the same class, with a NEW
+  method-boundary flavor.** Post-jalr-patch regen, plain 2CL run → 7 end-state MEM MISMATCHes.
+  Load-feed classification: pass-1 = 45 racy in-region loads / 95 cascade / 3 warps; pass-2
+  pushed=consumed=45 but **residual 15 (load=13)** — the residual loads are NEW racy loads at
+  UNFED keys: in a *jump* test the racy loaded bytes steer control flow, so pass-2 SimX walks a
+  different path and meets fresh racy loads the pass-1 trace never keyed. Two-pass replay has no
+  fixed point when races feed branches (ENH-2 iterated-feed territory; same boundary class as
+  OBS-010's interrupt drift). **Race evidence triangle:** (1) cid=0 matches SimX exactly, only
+  cores 1–3 diverge (this entry's clincher signature); (2) every divergent value is a
+  byte-granular `lb` of `.data` (racy sibling-core byte stores); (3) the post-feed DEFERRED
+  end-state compare = **0 MEM MISMATCH** (plain run had 7) — memory converges once SimX sees the
+  DUT's racy inputs. NOT a DUT bug; verdict left honestly RED at multi-core (do not force green).
 - **CLINCHER (2026-07-15):** the first-divergence load `lw s3,0(s1)` reads fixed absolute
   `s1=0x80020618` in `.region_1` (PROGBITS). **ELF init there = 0x7aea0e77 = the DUT value**;
   SimX reads 0x7a000e77 (one byte zeroed) on cluster-1 only. Program reads no `mhartid` ⇒ single-hart;
