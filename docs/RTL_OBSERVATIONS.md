@@ -224,7 +224,7 @@ not scattered across per-fix docs.
   Same feed verifies OBS-010 (`full_interrupt`) identically.
 
 ### OBS-010 (RESOLVED — not a DUT bug) — `full_interrupt`@2CL: single-hart-test-in-multihart, load-fed div divergences
-- **Class:** REF-MODEL/methodology (same class as OBS-009; interrupt-timing amplifies it) · **Disposition:** VERIFIED via RVVI load-bus (A1(e), see OBS-009 closure) · **Found:** Phase A1(d) (2026-07-15)
+- **Class:** REF-MODEL/methodology (same class as OBS-009; interrupt-timing amplifies it) · **Disposition:** PARTIALLY collapsed by RVVI load-bus (A1(e)); residual is interrupt-timing, NOT a DUT bug (end-state PASSES) — see closure below · **Found:** Phase A1(d) (2026-07-15)
 - **What:** with the OBS-008 fetch-align fix, the pinned `full_interrupt`@2CL no longer
   aborts — runs to EBREAK. Lockstep: compared 19084, matched 19050, **only 34 data
   mismatches** (NOT a cascade), PC/rd=0, 0 orphans. **cid=0 byte-exact**; divergences
@@ -251,6 +251,23 @@ not scattered across per-fix docs.
   memory content at the load → different loaded byte → different div result. **Interrupt-
   timing reference divergence, NOT a DUT bug** — now proven at the load level (the diverging
   operand is a load, per-instruction). Evidence: `scratchpad/obs002_fullint_2CL.log`.
+- **RVVI LOAD-BUS RESULT 2026-07-16 (A1(e), `+LOCKSTEP_LOADFEED`) — PARTIALLY collapsed, residual is
+  interrupt-timing (NOT a DUT bug).** Unlike no_fence (OBS-009, residual 0 → fully verified), the
+  two-pass load-bus on `full_interrupt`@2CL collapses **116 cascaded mismatches → 7 residual**
+  (data=1, load=6; consumed==pushed=82 so no gross misalignment) but does NOT reach 0. Root cause:
+  the residual loads (`0x80022ea0` seq 992/995, `0x800122df` seq 2267/2268) **were fed in pass 1 yet
+  still diverge in pass 2 on cid=2/3** — i.e. **ordinal drift**: feeding the shared loads perturbs
+  interrupt timing, which shifts each warp's LOAD sequence between passes, so the ordinal-keyed feed
+  can no longer align those loads. This is inherent to **asynchronous interrupts** (the DUT and SimX
+  take the interrupt at different instruction boundaries → different saved/restored context → the
+  load sequence itself differs), and is the documented boundary of the trace-replay two-pass (sound
+  for data-only divergence like no_fence; imperfect for interrupt-timing). **Corroboration it is NOT
+  a DUT bug: the end-state MEM compare (real `dut_mem` vs post-feed SimX) PASSES** — final memory is
+  equivalent; only the per-instruction interrupt-boundary ordering differs. Disposition: `full_interrupt`
+  @multi-cluster stays UNVERIFIABLE-at-instruction-granularity (interrupt-timing class), end-state
+  VERIFIED. A true fix would need single-pass step-follower lockstep with interrupt-delivery alignment
+  (Future Work), or a fixed-point iterated feed (feed pass-2 residuals, re-run — risk of non-
+  convergence). Evidence: `scratchpad/fullint_2CL.log`. Do NOT force it green.
 
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)

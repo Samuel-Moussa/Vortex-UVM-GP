@@ -16,10 +16,24 @@
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-07-16)
 **A1(e) RVVI LOAD-BUS + mem_model end-state = DONE, both COMMITTED.** Real fix (option 1) as a sound **two-pass trace-replay**. Result on pinned no_fence@2CL: pass-1 **20** racy loads → **138** cascade; pass-2 **residual 0** over **5432/5432**; deferred end-state compare (real `dut_mem` vs post-feed SimX) → racy word matches → **TEST PASSED, 0 UVM_ERROR**. Commit `2dd48ea` (RVVI load-bus) + follow-on (end-state value source `shadow_memory`→`dut_mem`, keep `shadow_valid` for the write-set). Validated: vecadd_lite 1035/1035 (no-feed byte-identical) · negative fault-injection PASS (caught, non-vacuous) · negative dropped-store PASS (caught via reverse) · 2CL no_fence feed PASS. Files: `Vortex/sim/simx/{cosim_loadfeed.h,emulator.cpp,execute.cpp}`, `ref_model/{simx_dpi.cpp,simx_pkg.sv}`, `lockstep_scoreboard.sv`, `vortex_scoreboard.sv`, `scripts/simulate.sh`. Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "REAL FIX IMPLEMENTED".
 
+**`full_interrupt`@2CL feed = DONE, honest result (2026-07-16):** load-bus collapses **116 → 7
+residual** (data=1, load=6; consumed==pushed=82), does NOT reach 0. Residual = **ordinal drift from
+interrupt timing**: fed loads (`0x80022ea0`, `0x800122df`) still diverge in pass 2 on cid=2/3 because
+feeding perturbs when the interrupt fires → shifts each warp's LOAD sequence → ordinal-keyed feed can't
+realign. **NOT a DUT bug — end-state MEM compare (dut_mem vs post-feed SimX) PASSES.** This is the
+method boundary: sound for data-only divergence (no_fence, residual 0), imperfect for async interrupt-
+timing. Documented: RTL_OBSERVATIONS OBS-010 closure. Do NOT force it green.
+
 **NEXT:**
-1. **Verify `full_interrupt`@2CL with the feed** (OBS-010) — same mechanism, one replay: pinned hex `results/20260710/run_130835_.../riscv_full_interrupt_test_0.hex`, `LOCKSTEP=1 LOCKSTEP_LOADFEED=1 make -C vortex_uvm_env sim TEST=random_instruction_stress_test PROGRAM=<ABS hex> CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 TIMEOUT=200000`. Expect pass-2 residual→0 (82 in-region load mismatches feed the 34 div divergences). If residual >0, that residual is a REAL divergence to investigate (interrupt-timing may not be fully load-explained — honest check).
-2. **Optionally run the feed across the 2CL directed suite** to confirm no other test regresses (feed default-OFF, so only explicit `+LOCKSTEP_LOADFEED` runs use it).
-3. **Resume A1(c):** migrate the package-queue hand-off → `rvvi_if` + UVM monitor (core-v-verif `uvma_rvvi` style).
+1. **Resume A1(c):** migrate the package-queue hand-off → `rvvi_if` + UVM monitor (core-v-verif
+   `uvma_rvvi` style) — an SV interface bound at the probe, a UVM monitor publishing RVVI transactions,
+   scoreboard subscribes via analysis port.
+2. **(Optional, harder) close the full_interrupt residual** — either single-pass step-follower lockstep
+   with interrupt-delivery alignment (big SimX rework), or a fixed-point iterated feed (feed pass-2
+   residuals, re-run until stable — risk of non-convergence; bound the iterations). Only if instruction-
+   granularity verification of interrupt tests is required; end-state is already VERIFIED.
+3. **(Optional) run the feed across the 2CL directed suite** to confirm no other test regresses (feed
+   default-OFF, so only explicit `+LOCKSTEP_LOADFEED` runs use it).
 
 **Two-pass RVVI recap (how it works):** `cosim_loadfeed.h` holds a per-(cid,wid,LOAD-ordinal) override map (uuids differ DUT↔SimX so ordinal is the key; `consumed==pushed` self-checks alignment). `execute.cpp` LOAD case calls `loadfeed_next()` and, if a lane is flagged, overrides the aligned `rd_data`. `lockstep_scoreboard.check_phase` runs pass 1 (capture racy loads), pushes them via `simx_cosim_load_feed_push`, re-runs `simx_run()` (pass 2), re-compares; pass-1 divergences demoted to diagnostic ONLY when feed armed (residual is the verdict; unexplained divergences stay hard errors). `vortex_scoreboard` defers the end-state mem compare to `report_phase` (post-feed) when `+LOCKSTEP_LOADFEED`.
 
