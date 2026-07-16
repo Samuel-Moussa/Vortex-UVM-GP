@@ -15,6 +15,10 @@
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
 \usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{url}
@@ -189,6 +193,92 @@ for a SIMT GPGPU.
 % =========================================================================
 \section{Verification Environment}
 \label{sec:env}
+
+Fig.~\ref{fig:arch} shows the environment: active agents drive the
+launch protocol and serve memory on the left, the functional reference
+runs in lockstep on the right, and a passive probe layer feeds the two
+checkers and coverage at the bottom.
+
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=1pt, align=center, inner sep=3pt,
+              minimum height=6mm},
+  agent/.style={box, fill=gray!14},
+  passive/.style={box, fill=gray!4, densely dashed},
+  chk/.style={box, fill=gray!24},
+  arr/.style={-{Stealth[length=2mm]}, semithick},
+  tap/.style={-{Stealth[length=2mm]}, semithick, densely dashed}
+]
+% DUT (center)
+\node[box, minimum width=46mm, minimum height=17mm] (dut)
+  {\textbf{Vortex GPGPU (DUT)}\\
+   clusters $\to$ sockets $\to$ cores\\
+   warps $\times$ threads --- AXI \emph{master}};
+% left: active agents + memory model
+\node[agent, left=13mm of dut.west, anchor=east, yshift=8mm] (host)
+  {host agent (active)};
+\node[agent, below=2.5mm of host] (dcr) {DCR agent (active)};
+\node[agent, below=2.5mm of dcr] (axi) {AXI agent\\(reactive slave)};
+\node[box, below=2.5mm of axi] (mem) {memory model};
+% right: SimX
+\node[box, right=13mm of dut.east, anchor=west, minimum height=17mm] (simx)
+  {\textbf{SimX} functional\\ reference (DPI-C)\\ per-config co-build};
+% probes row: status left, commit mid, LSU right
+\node[passive] (status) at ($(dut.south)+(-19mm,-10mm)$) {status agent};
+\node[passive] (cprobe) at ($(dut.south)+(0mm,-10mm)$)  {commit probe};
+\node[passive] (lprobe) at ($(dut.south)+(17mm,-10mm)$) {LSU probe};
+% RVVI monitor
+\node[box] (rvvi) at ($(dut.south)+(9mm,-20mm)$)
+  {RVVI monitor (analysis port)};
+% checkers row: coverage left, lockstep mid, end-state right
+\node[chk] (cov) at ($(dut.south)+(-27mm,-32mm)$)
+  {functional\\ coverage};
+\node[chk] (lss) at ($(dut.south)+(3mm,-32mm)$)
+  {lockstep scoreboard\\ per-instruction, per-lane};
+\node[chk] (ess) at ($(dut.south)+(38mm,-32mm)$)
+  {end-state scoreboard\\ bidirectional, byte-exact};
+% arrows: launch
+\draw[arr] (host.east) -- ++(4mm,0) |- ([yshift=5mm]dut.west);
+\draw[arr] (dcr.east)  -- ++(2.5mm,0) |- ([yshift=1mm]dut.west);
+\draw[arr, {Stealth[length=2mm]}-{Stealth[length=2mm]}]
+  (axi.east) -- ++(2.5mm,0) |- ([yshift=-4mm]dut.west);
+\draw[arr] (axi) -- (mem);
+% DPI
+\draw[arr] ([yshift=4mm]dut.east) -- ([yshift=4mm]simx.west)
+  node[midway, above, font=\tiny] {load/DCR/run};
+\draw[arr] ([yshift=-2mm]simx.west) -- ([yshift=-2mm]dut.east)
+  node[midway, below, font=\tiny] {\shortstack{retirement\\records}};
+% taps
+\draw[tap] ([xshift=-19mm]dut.south) -- (status.north);
+\draw[tap] (dut.south) -- (cprobe.north);
+\draw[tap] ([xshift=17mm]dut.south) -- (lprobe.north);
+% probe fan-in
+\draw[arr] (cprobe.south) -- ([xshift=-9mm]rvvi.north);
+\draw[arr] (lprobe.south) -- ([xshift=8mm]rvvi.north);
+% to checkers
+\draw[arr] (rvvi.south) -- ++(0,-2.5mm) -| (lss.north);
+\draw[arr] (rvvi.south) -- ++(0,-2.5mm) -| ([xshift=5mm]cov.north);
+\draw[arr] (status.south) -- ([xshift=-5mm]cov.north);
+% golden stream: SimX straight down into end-state + lockstep
+\draw[arr] (simx.south) -- ++(0,-27mm) -| ([xshift=8mm]ess.north);
+\draw[arr] (simx.south) -- ++(0,-24.5mm) -| ([xshift=8mm]lss.north);
+% memory model to end-state (bottom rail, below all checkers)
+\draw[arr] (mem.south) |- ($(ess.south)+(-4mm,-5mm)$)
+  -- ($(ess.south)+(-4mm,0)$);
+% load-value feed back to SimX (lower rail, far-right lane)
+\draw[arr, dotted] ([xshift=8mm]lss.south) -- ++(0,-8mm)
+  -| ($(simx.east)+(5mm,0)$) -- (simx.east);
+\node[below] at ($(lss.south)+(28mm,-8mm)$)
+  {load-value feed (pass 2, \S\ref{sec:loadfeed})};
+\end{tikzpicture}
+\caption{Environment architecture. Solid gray boxes are active UVM
+agents; dashed boxes are passive probes (never checkers); dark boxes
+are the two verdict-rendering scoreboards and coverage. The DUT is the
+bus master; stimulus is a compiled program in the memory model.}
+\label{fig:arch}
+\end{figure*}
 
 \subsection{Role-inverted agent architecture}
 A GPGPU DUT executes programs; it is not driven by them. The
@@ -416,8 +506,38 @@ runs unverifiable. Industrial RVVI flows solve the analogous CPU
 problem by feeding DUT-observed load data to the reference model over a
 ``load bus''; no such mechanism existed for a SIMT multi-core.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[font=\scriptsize, node distance=3mm,
+  stp/.style={draw, rounded corners=1pt, align=center, inner sep=3pt,
+               minimum width=62mm},
+  arr/.style={-{Stealth[length=2mm]}, semithick}]
+\node[stp] (p1) {\textbf{Pass 1} --- lockstep run\\
+  DUT vs.\ reference; in-region loads compared per lane};
+\node[stp, below=of p1] (cap) {capture divergent racy loads\\
+  key $(\mathit{cid},\mathit{wid},\mathit{PC},\mathit{occurrence})$
+  $\to$ per-lane DUT values};
+\node[stp, below=of cap] (feed) {DPI load-value feed armed\\
+  reference consumes DUT values at exactly those keys};
+\node[stp, below=of feed] (p2) {\textbf{Pass 2} --- reference re-run,
+  full re-compare\\ self-check: $\mathit{consumed}=\mathit{pushed}$};
+\node[stp, below=of p2, fill=gray!14] (v) {\textbf{residual = verdict}\\
+  $0 \Rightarrow$ verified; unexplained $>0 \Rightarrow$ hard error\\
+  + deferred end-state compare vs.\ post-feed reference};
+\draw[arr] (p1) -- (cap);
+\draw[arr] (cap) -- (feed);
+\draw[arr] (feed) -- (p2);
+\draw[arr] (p2) -- (v);
+\end{tikzpicture}
+\caption{The two-pass load-value feed. Only captured racy loads are
+fed; every other divergence in pass 2 remains an error, so the
+mechanism cannot mask a DUT bug.}
+\label{fig:feed}
+\end{figure}
+
 \subsection{The mechanism}
-We implement the load bus as a \emph{sound two-pass trace replay}:
+We implement the load bus as a \emph{sound two-pass trace replay}
+(Fig.~\ref{fig:feed}):
 \begin{enumerate}
 \item \textbf{Pass 1} runs lockstep normally and captures every
 divergent in-region load, keyed by
@@ -437,10 +557,46 @@ only when the feed is armed. The end-state comparison is deferred and
 re-run against the post-feed reference, so final-memory equivalence is
 still independently checked.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=9pt,
+  width=\columnwidth, height=4.8cm,
+  ymin=0, ymax=175,
+  ylabel={\scriptsize per-instruction mismatches},
+  symbolic x coords={fenceless, interrupt, random jump},
+  xtick=data,
+  enlarge x limits=0.28,
+  legend style={font=\scriptsize, at={(0.5,1.02)}, anchor=south,
+                legend columns=-1, draw=none},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize},
+  tick label style={font=\scriptsize},
+  ylabel style={font=\scriptsize},
+]
+\addplot[ybar, fill=gray!35, draw=black]
+  coordinates {(fenceless,138) (interrupt,116) (random jump,95)};
+\addplot[ybar, fill=black, draw=black,
+  nodes near coords style={/pgf/number format/fixed}]
+  coordinates {(fenceless,0) (interrupt,7) (random jump,15)};
+\legend{pass-1 cascade\, , residual after pass 2}
+\end{axis}
+\end{tikzpicture}
+\caption{Divergence collapse under the load feed at 2CL/2C/4W/4T. The
+fenceless case reaches residual 0 (fully verified). The nonzero
+residuals are the two soundness boundaries of
+Section~\ref{sec:limits}: interrupt-delivery timing (7,
+keying-independent) and control-flow-steering races (15, no
+fixed point); both end-state compares pass.}
+\label{fig:residual}
+\end{figure}
+
 \subsection{Flagship result}
 On the pinned fenceless test at 2CL/2C/4W/4T---previously undecidable---%
 pass~1 identified 20 racy loads causing 138 cascaded mismatches; pass~2
-reached \textbf{residual 0 over 5{,}432/5{,}432 retirements}, and the
+reached \textbf{residual 0 over 5{,}432/5{,}432 retirements}
+(Fig.~\ref{fig:residual}), and the
 deferred end-state compare passed. The run is thereby \emph{positively
 verified} equivalent modulo the architecturally-undefined racy loads,
 not merely excused. Injection guards remained red, and the default
