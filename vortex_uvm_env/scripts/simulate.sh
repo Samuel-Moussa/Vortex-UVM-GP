@@ -361,3 +361,10 @@ else
     print_error "Test failed with code $EXIT_CODE"
     echo "Check logs: $LOG_FILE"
 fi
+
+# A5: propagate the verdict. This file is sourced as run.sh's last line, so this
+# exit IS run.sh's exit code — `make sim`/`sim-only` now return the real verdict
+# (0=PASSED, 1=UVM fail, 2=RTL assertion fail, 3=unknown) instead of always 0.
+# Without this, the RTL-assert gate above was print-only (verdict never left the
+# script) and DUT RUNTIME_ASSERT firings could not fail a run at suite level.
+exit $EXIT_CODE

@@ -123,8 +123,12 @@ sim: _need-test
 	@bash $(RUNNER) $(_FLAGS)
 
 ## Compile RTL + UVM only (no simulation)
+# The 1-cycle smoke sim has no meaningful test verdict: it exits 3 (UNKNOWN) or 2
+# (the TB's own "TIMEOUT after 1 cycles!" $error counts as an RTL error line).
+# Tolerate exactly those two. Real compile/prepare failures exit earlier with
+# other codes (run.sh exit 1 paths / crash codes) and still fail this target.
 compile: _need-test
-	@bash $(RUNNER) $(_FLAGS) --no-waves --timeout=1
+	@bash $(RUNNER) $(_FLAGS) --no-waves --timeout=1 || { rc=$$?; [ $$rc -eq 2 ] || [ $$rc -eq 3 ]; }
 
 ## Simulate only — skips recompilation
 sim-only: _need-test

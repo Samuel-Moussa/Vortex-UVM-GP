@@ -27,22 +27,36 @@ RUNS=()
 echo "### run_suite.sh @ ${CLUSTERS}CL/${CORES}C/${WARPS}W/${THREADS}T"
 
 relrun() { local p; p=$(readlink -f results/latest); echo "$(basename "$(dirname "$p")")/$(basename "$p")"; }
+FAILED=0
+# stage <make-rc>: A5 — the make exit code IS the run verdict now (simulate.sh
+# propagates it: 0=PASSED, 1=UVM fail, 2=RTL assertion fail, 3=unknown). Only
+# passing runs get their UCDB staged for the coverage merge; a failing run's
+# coverage must not enter a sign-off bank.
 stage()  {
-  if [ -f results/latest/reports/coverage.ucdb ]; then
+  local rc="${1:-0}"
+  if [ "$rc" -ne 0 ]; then
+    # make normalizes any recipe failure to rc=2, so classify from the transcript:
+    # RTL-assert failures leave "# ** Error:" lines; anything else is UVM/verdict.
+    local why="UVM/verdict"
+    grep -q "^# \*\* Error" results/latest/logs/simulation.log 2>/dev/null && why="RTL assertion"
+    echo "  -> FAILED ($why) — UCDB NOT staged"
+    grep -m1 "^# \*\* Error" results/latest/logs/simulation.log 2>/dev/null | sed 's/^/     /'
+    FAILED=$((FAILED+1))
+  elif [ -f results/latest/reports/coverage.ucdb ]; then
     echo "  -> $(grep -m1 -E 'Test Result|TEST PASSED|TEST FAILED' results/latest/logs/simulation.log 2>/dev/null) [UCDB ok]"
     RUNS+=( "$(relrun)" )
   else
     echo "  -> NO UCDB (failed/aborted, skipped)"
   fi
 }
-runk() { echo "=== $1 kernel $2 ==="; make "$1" TEST=kernel_launch_test PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/k_$2.log" 2>&1; stage; }
+runk() { echo "=== $1 kernel $2 ==="; make "$1" TEST=kernel_launch_test PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/k_$2.log" 2>&1; stage $?; }
 # runthr: same as runk but with the AXI slave ready-throttle enabled (+AXI_THROTTLE) to
 # exercise the AXI backpressure stability assertions + downstream stall branches.
-runthr() { echo "=== throttled kernel $1 ==="; AXI_THROTTLE=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_thr_$1.log" 2>&1; stage; }
+runthr() { echo "=== throttled kernel $1 ==="; AXI_THROTTLE=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_thr_$1.log" 2>&1; stage $?; }
 # runflood: AXI slave streams read responses back-to-back (+AXI_FLOOD) -> forces DUT
 # rready backpressure to exercise assert_r_valid_stable / assert_r_data_stable.
-runflood() { echo "=== flood kernel $1 ==="; AXI_FLOOD=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_flood_$1.log" 2>&1; stage; }
-rund() { echo "=== sim-only $1 ($2) ==="; make sim-only TEST="$1" PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/d_$1.log" 2>&1; stage; }
+runflood() { echo "=== flood kernel $1 ==="; AXI_FLOOD=1 make sim-only TEST=kernel_launch_test PROGRAM_NAME="$1" $CFG TIMEOUT="$2" >"$LOGDIR/k_flood_$1.log" 2>&1; stage $?; }
+rund() { echo "=== sim-only $1 ($2) ==="; make sim-only TEST="$1" PROGRAM_NAME="$2" $CFG TIMEOUT="$3" >"$LOGDIR/d_$1.log" 2>&1; stage $?; }
 # riscv-dv regenerates the generator into a shared work dir guarded by a Questa
 # _lock. A killed/crashed prior gen can leave a STALE lock (dead owner pid) that
 # makes the next gen wait ~16 min then fail. Clear it if its owner is dead.
@@ -54,10 +68,10 @@ clear_stale_dv_lock(){
     echo "  (clearing stale riscv-dv vlog lock, dead owner pid=$p)"; rm -f "$L"
   fi
 }
-runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=200000 >"$LOGDIR/rv_$1.log" 2>&1; stage; }
+runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=200000 >"$LOGDIR/rv_$1.log" 2>&1; stage $?; }
 # regression (Ahmad's MSCRATCH kernel-launch harness): basic verifies DUT-vs-SimX;
 # diverge/sgemm/dogfood run-to-completion co-sim but classify UNVERIFIABLE (spawn).
-runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST=regression_test PROGRAM_KIND="$1" ${2:-} $CFG TIMEOUT=10000000 >"$LOGDIR/r_$1.log" 2>&1; stage; }
+runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST=regression_test PROGRAM_KIND="$1" ${2:-} $CFG TIMEOUT=10000000 >"$LOGDIR/r_$1.log" 2>&1; stage $?; }
 
 # ---- kernels (first does full compile) ----
 runk sim      hello           100000
@@ -167,6 +181,7 @@ for P in riscv_arithmetic_basic_test riscv_jump_stress_test riscv_unaligned_load
   runrv "$P"
 done
 
+echo "=== SUITE VERDICT: ${#RUNS[@]} staged, $FAILED FAILED ==="
 echo "=== MERGING ${#RUNS[@]} runs ==="; printf '  %s\n' "${RUNS[@]}"
 bash scripts/merge_coverage.sh --fresh   >"$LOGDIR/merge.log" 2>&1
 bash scripts/merge_coverage.sh --collect "${RUNS[@]}" >>"$LOGDIR/merge.log" 2>&1
