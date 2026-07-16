@@ -251,23 +251,30 @@ not scattered across per-fix docs.
   memory content at the load → different loaded byte → different div result. **Interrupt-
   timing reference divergence, NOT a DUT bug** — now proven at the load level (the diverging
   operand is a load, per-instruction). Evidence: `scratchpad/obs002_fullint_2CL.log`.
-- **RVVI LOAD-BUS RESULT 2026-07-16 (A1(e), `+LOCKSTEP_LOADFEED`) — PARTIALLY collapsed, residual is
-  interrupt-timing (NOT a DUT bug).** Unlike no_fence (OBS-009, residual 0 → fully verified), the
-  two-pass load-bus on `full_interrupt`@2CL collapses **116 cascaded mismatches → 7 residual**
-  (data=1, load=6; consumed==pushed=82 so no gross misalignment) but does NOT reach 0. Root cause:
-  the residual loads (`0x80022ea0` seq 992/995, `0x800122df` seq 2267/2268) **were fed in pass 1 yet
-  still diverge in pass 2 on cid=2/3** — i.e. **ordinal drift**: feeding the shared loads perturbs
-  interrupt timing, which shifts each warp's LOAD sequence between passes, so the ordinal-keyed feed
-  can no longer align those loads. This is inherent to **asynchronous interrupts** (the DUT and SimX
-  take the interrupt at different instruction boundaries → different saved/restored context → the
-  load sequence itself differs), and is the documented boundary of the trace-replay two-pass (sound
-  for data-only divergence like no_fence; imperfect for interrupt-timing). **Corroboration it is NOT
-  a DUT bug: the end-state MEM compare (real `dut_mem` vs post-feed SimX) PASSES** — final memory is
-  equivalent; only the per-instruction interrupt-boundary ordering differs. Disposition: `full_interrupt`
-  @multi-cluster stays UNVERIFIABLE-at-instruction-granularity (interrupt-timing class), end-state
-  VERIFIED. A true fix would need single-pass step-follower lockstep with interrupt-delivery alignment
-  (Future Work), or a fixed-point iterated feed (feed pass-2 residuals, re-run — risk of non-
-  convergence). Evidence: `scratchpad/fullint_2CL.log`. Do NOT force it green.
+- **RVVI LOAD-BUS RESULT 2026-07-16 (A1(e), `+LOCKSTEP_LOADFEED`) — PARTIALLY collapsed; residual is
+  interrupt-timing, NOT a DUT bug and NOT a keying artifact.** Unlike no_fence (OBS-009, residual 0 →
+  fully verified), the two-pass load-bus on `full_interrupt`@2CL collapses **116 cascaded mismatches
+  → 7 residual** (data=1, load=6; consumed==pushed=82) but does NOT reach 0. Residual loads:
+  `0x80022ea0` (PC 0x800012b0/…c4) on cid2/3, `0x800122df` (PC 0x80002044/…48) on cid3; in pass 2
+  they read SimX's own value (e.g. `SimX=0`) — i.e. the feed **did not apply** at that execution.
+- **DISPROVEN hypothesis (was "ordinal drift"):** re-keyed the feed from a raw per-warp LOAD ordinal
+  to **(cid,wid,PC,occurrence)** — robust to interrupt-inserted (different-PC) instructions — and the
+  residual is **IDENTICAL (7, same data=1/load=6)**. A keying/alignment artifact would have changed
+  under a drift-robust key; it did not. So the residual is **keying-independent** = a genuine
+  interrupt-timing divergence, not a mis-aligned feed. Mechanism (by elimination): **same-PC
+  occurrence-count divergence and/or feed-exposed new divergence** — the DUT (timing-accurate) and
+  SimX (functional) take the interrupt at different boundaries, so an interrupt-affected PC executes a
+  different number of times (or feeding the pass-1 loads shifts SimX state enough to expose a load
+  that agreed in pass 1). Neither is fixable by better *load* keying; both need interrupt-*delivery*
+  alignment. The load-feed is therefore **not a fixed point** for interrupt tests.
+- **NOT a DUT bug:** the end-state MEM compare (real `dut_mem` vs post-feed SimX) **PASSES** — final
+  memory equivalent; only transient per-instruction interrupt-boundary ordering differs.
+- **Disposition:** `full_interrupt`@multi-cluster = end-state VERIFIED, instruction-granularity
+  UNVERIFIABLE (interrupt-timing class). A true fix needs single-pass step-follower lockstep with
+  interrupt-delivery alignment (Future Work), or a bounded fixed-point iterated feed (feed each pass's
+  residual, re-run until stable — may not converge for interrupts). **Not forced green.** The
+  PC-occurrence key was kept (strictly more robust; no_fence stays residual 0). Evidence:
+  `scratchpad/fullint_2CL.log` (ordinal) + `scratchpad/pcocc_fullint.log` (PC-occ, identical residual).
 
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)

@@ -953,13 +953,14 @@ void simx_cosim_load_feed_enable(int en) {
     vortex::loadfeed_enable(en != 0);
 }
 
-// Push one DUT load override for the `ordinal`-th LOAD (0-based, program order)
-// on warp (cid,wid). data[] is an SV open array sized to num_threads; feed_mask
-// bit l set => override lane l with data[l].
+// Push one DUT load override for the `occurrence`-th (0-based) execution of the
+// LOAD at `pc` on warp (cid,wid). data[] is an SV open array sized to num_threads;
+// feed_mask bit l set => override lane l with data[l].
 void simx_cosim_load_feed_push(
     unsigned cid,
     unsigned wid,
-    unsigned ordinal,
+    uint64_t pc,
+    unsigned occurrence,
     unsigned feed_mask,
     const svOpenArrayHandle data
 ) {
@@ -971,7 +972,7 @@ void simx_cosim_load_feed_push(
         uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(data, lo + i));
         if (slot) buf[i] = *slot;
     }
-    vortex::loadfeed_push(cid, wid, ordinal, feed_mask, buf,
+    vortex::loadfeed_push(cid, wid, pc, occurrence, feed_mask, buf,
                           (n < SIMX_COSIM_MAX_THREADS) ? (unsigned)n : SIMX_COSIM_MAX_THREADS);
 }
 
