@@ -40,7 +40,7 @@ not scattered across per-fix docs.
   SimX (which retires in strict program order). Not a bug.
 
 ### OBS-002 — Load writeback data not observable at the commit-arb probe
-- **Class:** OBSERVABILITY · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)
+- **Class:** OBSERVABILITY · **Disposition:** CLOSED (`97c4e30`, region-filtered load-compare, default-on) · **Found:** Phase A0 (2026-07-14)
 - **What:** For `lw`, the `commit_arb_if.data` field carries a stale/address-like
   or uniform-across-lanes value, not the loaded data. 100% of lockstep DATA
   mismatches on a known-good program were loads. Loads complete asynchronously via
@@ -212,16 +212,18 @@ not scattered across per-fix docs.
   to the load level. Evidence: `scratchpad/obs002_nofence_2CL.log`.
 - **VERIFIED 2026-07-16 (Phase A1(e), RVVI load-bus, `+LOCKSTEP_LOADFEED`) — positive, non-waiver.**
   Implemented true RVVI load-bus as a two-pass trace-replay: pass 1 finds the racy in-region loads;
-  the DUT's per-lane loaded values are fed into SimX (keyed by (cid,wid,LOAD ordinal) — uuids differ)
-  at the single load site; pass 2 re-runs SimX in-process following the DUT loads. On the pinned
-  no_fence hex: pass-1 **20** racy loads → **138** cascaded mismatches; pass-2 **residual = 0** over
-  **5432/5432** pairs. The end-state compare was deferred to `report_phase` (post-feed SimX) → the
-  `0x80013dd8` racy word matches → **TEST PASSED, 0 UVM_ERROR**. So OBS-009 is not merely classified
-  UNVERIFIABLE — the DUT is now POSITIVELY VERIFIED equivalent modulo the (architecturally-undefined)
-  racy loads. Not suppression: any residual not explained by a fed racy load stays a hard error. Files:
+  the DUT's per-lane loaded values are fed into SimX (keyed by **(cid,wid,PC,occurrence)** — uuids
+  differ, and PC-occurrence is robust to interrupt-inserted instructions) at the single load site;
+  pass 2 re-runs SimX in-process following the DUT loads. On the pinned no_fence hex: pass-1 **20**
+  racy loads → **138** cascaded mismatches; pass-2 **residual = 0** over **5432/5432** pairs. The
+  end-state compare was deferred to `report_phase` (post-feed SimX) → the `0x80013dd8` racy word
+  matches → **TEST PASSED, 0 UVM_ERROR**. So OBS-009 is not merely classified UNVERIFIABLE — the DUT
+  is now POSITIVELY VERIFIED equivalent modulo the (architecturally-undefined) racy loads. Not
+  suppression: any residual not explained by a fed racy load stays a hard error. Files:
   `Vortex/sim/simx/cosim_loadfeed.h`, `emulator.cpp`, `execute.cpp`; `lockstep_scoreboard.sv`;
   `vortex_scoreboard.sv` (deferred end-state). Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md`.
-  Same feed verifies OBS-010 (`full_interrupt`) identically.
+  NOTE: the same feed only PARTIALLY collapses OBS-010 (`full_interrupt`) — 116→7 residual, a genuine
+  interrupt-timing divergence (NOT fully verifiable this way); see OBS-010 closure below.
 
 ### OBS-010 (RESOLVED — not a DUT bug) — `full_interrupt`@2CL: single-hart-test-in-multihart, load-fed div divergences
 - **Class:** REF-MODEL/methodology (same class as OBS-009; interrupt-timing amplifies it) · **Disposition:** PARTIALLY collapsed by RVVI load-bus (A1(e)); residual is interrupt-timing, NOT a DUT bug (end-state PASSES) — see closure below · **Found:** Phase A1(d) (2026-07-15)

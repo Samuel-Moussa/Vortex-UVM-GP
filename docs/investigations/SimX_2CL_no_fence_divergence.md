@@ -135,11 +135,18 @@ derived exactly as the scoreboard already does). Options 2 (config-scope to 1C) 
 disjoint regions) remain valid alternatives but were not needed.
 
 ## Disposition (UPDATED 2026-07-16)
-`no_fence` / `full_interrupt` at multi-cluster are **VERIFIED-modulo-races** via the RVVI load-bus
-(`+LOCKSTEP_LOADFEED`) — a positive, non-waiver verification, superseding the earlier UNVERIFIABLE
-classification. Without the feed they remain (correctly) end-state-divergent, since the racy final
-word has no single golden value. All deterministic kernels/directed/regression + 10/12 riscv-dv still
-pass at 2CL independently.
+- **`no_fence`@multi-cluster = VERIFIED-modulo-races** via the RVVI load-bus (`+LOCKSTEP_LOADFEED`) —
+  a positive, non-waiver verification (pass-2 residual 0 over 5432/5432 + end-state PASS), superseding
+  the earlier UNVERIFIABLE classification. Without the feed it remains (correctly) end-state-divergent,
+  since the racy final word has no single golden value.
+- **`full_interrupt`@multi-cluster = end-state VERIFIED, instruction-granularity NOT** (see
+  RTL_OBSERVATIONS OBS-010). The same feed only PARTIALLY collapses it (116→7 residual). Re-keying the
+  feed to (cid,wid,PC,occurrence) left the residual IDENTICAL (7) — proving it is a genuine
+  interrupt-timing divergence, NOT a feed/keying artifact; the interrupt-affected PC executes a
+  different count in the timing-accurate DUT vs functional SimX. End-state MEM (real dut_mem vs
+  post-feed SimX) PASSES → not a DUT bug. A full instruction-granularity fix needs interrupt-delivery
+  alignment (step-follower lockstep — Future Work), not the load-feed. Do NOT force it green.
+- All deterministic kernels/directed/regression + 10/12 riscv-dv still pass at 2CL independently.
 
 ## Follow-up candidates (optional, not blocking)
 - Build a lockstep retire-trace comparator (DUT commit-probe PCs+regs vs SimX step trace) to pinpoint

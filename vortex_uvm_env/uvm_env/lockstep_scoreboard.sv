@@ -546,7 +546,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 "PASS 2: SimX re-run exit=%0d; load-bus records pushed=%0d consumed=%0d %s",
                 exitcode2, simx_cosim_load_feed_pushed(), simx_cosim_load_feed_consumed(),
                 (simx_cosim_load_feed_pushed() == simx_cosim_load_feed_consumed())
-                    ? "(ordinals aligned)" : "(WARNING: ordinal drift — see consumed<pushed)"),
+                    ? "(PC-occurrences aligned)" : "(WARNING: PC-occurrence mismatch — see consumed<pushed)"),
                 UVM_LOW)
 
             build_gold();
