@@ -17,12 +17,15 @@
 **A1(e) RVVI LOAD-BUS + mem_model end-state = DONE, both COMMITTED.** Real fix (option 1) as a sound **two-pass trace-replay**. Result on pinned no_fence@2CL: pass-1 **20** racy loads → **138** cascade; pass-2 **residual 0** over **5432/5432**; deferred end-state compare (real `dut_mem` vs post-feed SimX) → racy word matches → **TEST PASSED, 0 UVM_ERROR**. Commit `2dd48ea` (RVVI load-bus) + follow-on (end-state value source `shadow_memory`→`dut_mem`, keep `shadow_valid` for the write-set). Validated: vecadd_lite 1035/1035 (no-feed byte-identical) · negative fault-injection PASS (caught, non-vacuous) · negative dropped-store PASS (caught via reverse) · 2CL no_fence feed PASS. Files: `Vortex/sim/simx/{cosim_loadfeed.h,emulator.cpp,execute.cpp}`, `ref_model/{simx_dpi.cpp,simx_pkg.sv}`, `lockstep_scoreboard.sv`, `vortex_scoreboard.sv`, `scripts/simulate.sh`. Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "REAL FIX IMPLEMENTED".
 
 **`full_interrupt`@2CL feed = DONE, honest result (2026-07-16):** load-bus collapses **116 → 7
-residual** (data=1, load=6; consumed==pushed=82), does NOT reach 0. Residual = **ordinal drift from
-interrupt timing**: fed loads (`0x80022ea0`, `0x800122df`) still diverge in pass 2 on cid=2/3 because
-feeding perturbs when the interrupt fires → shifts each warp's LOAD sequence → ordinal-keyed feed can't
-realign. **NOT a DUT bug — end-state MEM compare (dut_mem vs post-feed SimX) PASSES.** This is the
-method boundary: sound for data-only divergence (no_fence, residual 0), imperfect for async interrupt-
-timing. Documented: RTL_OBSERVATIONS OBS-010 closure. Do NOT force it green.
+residual** (data=1, load=6; consumed==pushed=82), does NOT reach 0. **Re-keyed the feed ordinal →
+(cid,wid,PC,occurrence)** (robust to interrupt-inserted instructions) → residual **IDENTICAL (7)**,
+which DISPROVES the ordinal-drift hypothesis: the residual is **keying-independent** = a genuine
+interrupt-timing divergence (same-PC occurrence-count drift and/or feed-exposed new divergence; the
+interrupt-affected PC executes a different count in DUT vs SimX). Not fixable by better *load* keying —
+needs interrupt-*delivery* alignment. **NOT a DUT bug — end-state MEM compare (dut_mem vs post-feed
+SimX) PASSES.** Method boundary: sound for data-only divergence (no_fence, residual 0), the load-feed
+is not a fixed point for interrupt tests. Kept PC-occ key (more robust; no_fence stays 0). Documented:
+RTL_OBSERVATIONS OBS-010. Do NOT force green.
 
 **NEXT:**
 1. **Resume A1(c):** migrate the package-queue hand-off → `rvvi_if` + UVM monitor (core-v-verif

@@ -88,7 +88,8 @@ package simx_pkg;
     import "DPI-C" context function void simx_cosim_load_feed_push(
         input int      unsigned cid,
         input int      unsigned wid,
-        input int      unsigned ordinal,
+        input longint  unsigned pc,
+        input int      unsigned occurrence,
         input int      unsigned feed_mask,
         input longint  unsigned data[]
     );

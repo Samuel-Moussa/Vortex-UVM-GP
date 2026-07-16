@@ -14,13 +14,17 @@
 // SimX's own dcache_read value, so deterministic loads remain independently
 // verified. Default OFF ⇒ no override, byte-identical to a normal run.
 //
-// KEY = (cid, wid, per-warp LOAD ordinal). uuid is NOT usable: the DUT and SimX
-// uuid schemes differ (a normal run shows them divergent on ~all pairs), so the
-// lockstep scoreboard aligns by per-warp PROGRAM ORDER — and so must the feed.
-// SimX retires strictly in program order, so a per-(cid,wid) load counter yields
-// the same ordinal the scoreboard uses when it walks the per-warp gold FIFO. The
-// cursor advances once per LOAD (fed or not) to stay aligned; loadfeed_rewind()
-// resets all cursors before each SimX run.
+// KEY = (cid, wid, PC, occurrence-of-that-PC on this warp). uuid is NOT usable
+// (DUT and SimX uuid schemes differ on ~all pairs). A raw per-warp LOAD ordinal
+// works for data-only divergence but DRIFTS under asynchronous interrupts: the
+// handler inserts instructions, shifting every later load's ordinal so the feed
+// lands on the wrong load. Keying by (PC, n-th execution of that PC) is robust —
+// interrupt-inserted instructions have DIFFERENT PCs, so a given load's occurrence
+// count is unperturbed; it also tolerates x0-dest loads (per-PC counters don't
+// cross-contaminate). SimX retires in program order, so its per-(cid,wid,PC)
+// occurrence counter matches the scoreboard's when it walks the per-warp gold
+// FIFO. The counter advances once per LOAD at that PC (fed or not);
+// loadfeed_rewind() resets all counters before each SimX run.
 
 #pragma once
 
@@ -42,15 +46,16 @@ void loadfeed_rewind();                       // reset per-(cid,wid) cursors (be
 void loadfeed_enable(bool en);                // arm/disarm the load-bus substitution
 bool loadfeed_enabled();
 
-// Register a DUT load override for the `ordinal`-th LOAD (0-based, program order)
-// on warp (cid,wid).
-void loadfeed_push(uint32_t cid, uint32_t wid, uint32_t ordinal,
+// Register a DUT load override for the `occurrence`-th (0-based) execution of the
+// LOAD at `pc` on warp (cid,wid).
+void loadfeed_push(uint32_t cid, uint32_t wid, uint64_t pc, uint32_t occurrence,
                    uint32_t feed_mask, const uint64_t* data, uint32_t n);
 
-// Consume the next LOAD slot on warp (cid,wid): advance that warp's cursor and
-// return the override for the current ordinal, or nullptr if disabled / none.
-// Call EXACTLY once per LOAD instruction (fed or not) to keep ordinals aligned.
-const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid);
+// Consume the next execution of the LOAD at `pc` on warp (cid,wid): advance that
+// (warp,pc) occurrence counter and return the override for the current occurrence,
+// or nullptr if disabled / none. Call EXACTLY once per LOAD instruction (fed or
+// not) to keep occurrence counts aligned.
+const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid, uint64_t pc);
 
 uint32_t loadfeed_pushed();                   // records pushed this pass
 uint32_t loadfeed_consumed();                 // pushed records actually hit by a LOAD

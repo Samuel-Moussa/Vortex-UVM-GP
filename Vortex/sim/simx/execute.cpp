@@ -673,15 +673,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
         uint32_t data_width = 8 * data_bytes;
         Word offset = sext<Word>(lsuArgs.offset, 32);
-        // RVVI load-bus (Phase A1(e)): consume this warp's next LOAD slot (by
-        // per-warp program-order ordinal, the scoreboard's alignment key — DUT
-        // and SimX uuids differ). If the scoreboard flagged this ordinal as a
-        // provably-racy shared load, adopt the DUT-observed per-lane writeback
-        // value instead of SimX's own memory read. Default OFF ⇒ feed==nullptr ⇒
-        // no change; cursor advances once per LOAD to stay aligned. See
-        // cosim_loadfeed.h.
+        // RVVI load-bus (Phase A1(e)): consume this warp's next execution of the
+        // LOAD at this PC (alignment key = (cid,wid,PC,occurrence) — robust to
+        // interrupt-inserted instructions, unlike a raw ordinal; DUT/SimX uuids
+        // differ so program order is the only valid key). If the scoreboard
+        // flagged this occurrence as a provably-racy shared load, adopt the
+        // DUT-observed per-lane writeback value instead of SimX's own memory read.
+        // Default OFF ⇒ feed==nullptr ⇒ no change. See cosim_loadfeed.h.
         const vortex::LoadFeedRec* feed =
-            vortex::loadfeed_next(core_->id(), wid);
+            vortex::loadfeed_next(core_->id(), wid, trace->PC);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;

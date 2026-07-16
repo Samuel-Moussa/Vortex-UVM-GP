@@ -68,7 +68,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
     typedef struct {
         int      unsigned cid;
         int      unsigned wid;
-        int      unsigned ordinal;   // per-warp LOAD ordinal (program order)
+        longint  unsigned pc;        // LOAD PC
+        int      unsigned occurrence; // n-th execution of that PC on this warp
         int      unsigned mask;      // lanes to override (in-region, active)
         longint  unsigned data [];   // per-lane DUT writeback value
     } feed_rec_t;
@@ -76,7 +77,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
 
     bit               capturing_feed;   // pass-1 only: populate feed_q on load divergence
     bit               did_pass2;         // set when the pass-2 feed run executed
-    int      unsigned load_ord_ctr [int]; // per-key running LOAD ordinal (mirrors SimX)
+    // per-key, per-PC running occurrence count (mirrors SimX's (cid,wid,PC) counter)
+    int      unsigned pc_occ_ctr [int][longint unsigned];
 
     // Pass-1 tallies saved before the pass-2 recompare (for the report).
     int unsigned p1_pairs, p1_matched, p1_mm_pc, p1_mm_rd, p1_mm_data, p1_mm_loaddata,
@@ -373,11 +375,13 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // vortex_scoreboard. So for loads we verify PC + rd + ordering here and
         // skip the per-lane data compare. Non-load writebacks are data-checked.
         if (g.is_load) begin
-            // Per-warp LOAD ordinal (program order) — mirrors SimX's per-(cid,wid)
-            // load cursor exactly, so it is the alignment key for the feed. MUST
-            // advance for EVERY load retirement (even skipped ones) to stay aligned.
-            int unsigned this_ord = load_ord_ctr.exists(key) ? load_ord_ctr[key] : 0;
-            load_ord_ctr[key] = this_ord + 1;
+            // Per-(warp,PC) occurrence count — mirrors SimX's (cid,wid,PC) counter
+            // exactly, so it is the alignment key for the feed (robust to interrupt-
+            // inserted instructions, unlike a raw ordinal). MUST advance for EVERY
+            // load retirement at this PC (even skipped ones) to stay aligned.
+            int unsigned this_occ = (pc_occ_ctr.exists(key) && pc_occ_ctr[key].exists(g.pc))
+                                  ? pc_occ_ctr[key][g.pc] : 0;
+            pc_occ_ctr[key][g.pc] = this_occ + 1;
             // Load DATA is observable via the LSU probe (OBS-002 overlay). It is
             // compared per-lane only where it is SOUND to do so: the lane must be
             // active on both sides (tmask + LSU-probe fill) AND the SimX effective
@@ -419,11 +423,12 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 // lanes (matching lanes are a harmless no-op).
                 if (capturing_feed && feed_en && div_seen && region_mask != 0) begin
                     feed_rec_t fr;
-                    fr.cid     = key >> 16;
-                    fr.wid     = key & 32'hFFFF;
-                    fr.ordinal = this_ord;
-                    fr.mask    = region_mask;
-                    fr.data    = new[cfg.num_threads];
+                    fr.cid        = key >> 16;
+                    fr.wid        = key & 32'hFFFF;
+                    fr.pc         = g.pc;
+                    fr.occurrence = this_occ;
+                    fr.mask       = region_mask;
+                    fr.data       = new[cfg.num_threads];
                     for (int l = 0; l < cfg.num_threads; l++) fr.data[l] = d.data[l];
                     feed_q.push_back(fr);
                 end
@@ -489,7 +494,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         n_load_dataskip=0; n_load_datacmp=0; n_volatile_skip=0;
         first_div_seen.delete(); first_div_seq.delete(); first_div_pc.delete();
         first_div_uuid.delete(); first_div_desc.delete(); div_count.delete();
-        err_emitted.delete(); load_ord_ctr.delete();
+        err_emitted.delete(); pc_occ_ctr.delete();
     endfunction
 
     //--------------------------------------------------------------------------
@@ -527,8 +532,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
             simx_cosim_load_feed_reset();
             simx_cosim_load_feed_enable(1);
             foreach (feed_q[i])
-                simx_cosim_load_feed_push(feed_q[i].cid, feed_q[i].wid,
-                                          feed_q[i].ordinal, feed_q[i].mask, feed_q[i].data);
+                simx_cosim_load_feed_push(feed_q[i].cid, feed_q[i].wid, feed_q[i].pc,
+                                          feed_q[i].occurrence, feed_q[i].mask, feed_q[i].data);
 
             // Reset SV-side compare state; SimX re-runs following the DUT loads.
             gold_fifo.delete();

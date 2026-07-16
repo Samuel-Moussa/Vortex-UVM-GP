@@ -678,10 +678,10 @@ void Emulator::trigger_ebreak() {
 
 namespace vortex {
 namespace {
-  // key = (cid, wid, per-warp LOAD ordinal) -> override record
-  std::map<std::tuple<uint32_t,uint32_t,uint32_t>, LoadFeedRec> g_loadfeed;
-  // per-(cid,wid) LOAD cursor (next ordinal SimX will execute)
-  std::map<std::tuple<uint32_t,uint32_t>, uint32_t> g_loadfeed_cursor;
+  // key = (cid, wid, pc, occurrence-of-that-pc) -> override record
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t,uint32_t>, LoadFeedRec> g_loadfeed;
+  // per-(cid,wid,pc) occurrence counter (next occurrence SimX will execute)
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t>, uint32_t> g_loadfeed_cursor;
   bool     g_loadfeed_en = false;
   uint32_t g_loadfeed_pushed = 0;
   uint32_t g_loadfeed_consumed = 0;
@@ -702,21 +702,21 @@ void loadfeed_rewind() {
 void loadfeed_enable(bool en) { g_loadfeed_en = en; }
 bool loadfeed_enabled() { return g_loadfeed_en; }
 
-void loadfeed_push(uint32_t cid, uint32_t wid, uint32_t ordinal,
+void loadfeed_push(uint32_t cid, uint32_t wid, uint64_t pc, uint32_t occurrence,
                    uint32_t feed_mask, const uint64_t* data, uint32_t n) {
   LoadFeedRec r{};
   r.feed_mask = feed_mask;
   for (uint32_t i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i)
     r.data[i] = data[i];
-  g_loadfeed[std::make_tuple(cid, wid, ordinal)] = r;
+  g_loadfeed[std::make_tuple(cid, wid, pc, occurrence)] = r;
   ++g_loadfeed_pushed;
 }
 
-const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid) {
+const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid, uint64_t pc) {
   if (!g_loadfeed_en) return nullptr;
-  // advance this warp's LOAD cursor, then look up the just-consumed ordinal
-  uint32_t ord = g_loadfeed_cursor[std::make_tuple(cid, wid)]++;
-  auto it = g_loadfeed.find(std::make_tuple(cid, wid, ord));
+  // advance this (warp,pc) occurrence counter, then look up the just-consumed one
+  uint32_t occ = g_loadfeed_cursor[std::make_tuple(cid, wid, pc)]++;
+  auto it = g_loadfeed.find(std::make_tuple(cid, wid, pc, occ));
   if (it == g_loadfeed.end()) return nullptr;
   ++g_loadfeed_consumed;
   return &it->second;
