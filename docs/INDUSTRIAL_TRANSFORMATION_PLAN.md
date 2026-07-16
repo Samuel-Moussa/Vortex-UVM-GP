@@ -11,9 +11,31 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. NEXT ACTION: resume A1(c) — `rvvi_if` + UVM monitor migration (package-queue → analysis port).**
+**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. NEXT ACTION: (optional) 2CL directed-suite lockstep sweep, then A5 — harvest DUT native assertions.**
 
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-07-16)
+**A1(c) RVVI MONITOR MIGRATION = DONE, COMMITTED.** The D2a package-queue hand-off is replaced by
+the D2b core-v-verif pattern: each bound probe (`vx_commit_probe`, `vx_lsu_probe`) instantiates its
+own `rvvi_if` and self-registers in `rvvi_registry_pkg` at t=0; a `rvvi_monitor` (created only under
+`cfg.enable_lockstep`) snapshots the registry at #1, drains every vif on `@(posedge vif.clk)` +
+an `extract_phase` final sweep (extract precedes every check_phase ⇒ stream complete), and publishes
+`rvvi_txn` on its analysis port; `lockstep_scoreboard` subscribes via `uvm_analysis_imp_rvvi`,
+routing on `rec.kind` (COMMIT/LOAD) into local queues — `build_dut()`/feed logic byte-for-byte
+unchanged. Transaction-level by design (no interface parameters ⇒ ONE `virtual rvvi_if` type for any
+NCL/NC/NW/NT/SIMD/ISSUE); no clocking block needed (no class-domain signal sampling — signal-level
+RVVI-TRACE + `mon_cb` is the ENH-1-era upgrade path, documented in `rvvi_if.sv`). Tool patterns
+(interface-in-bound-module, package virtual-if registry, vif drain) pre-proven on Questa 2021.2 POC.
+**4-run acceptance, every tally diffed vs pre-migration logs — ALL IDENTICAL, incl. end-of-sim
+timestamps (@102995000 / @191515000):** ① vecadd_lite+LOCKSTEP 1035/1035 (74 load-cmp / 113
+load-skip / 62 volatile / uuid 1034/1035) · ② inject caught at uuid=0/PC=0x80000000/lane0 DUT=5 vs
+SimX=4 · ③ default run clean (no RVVI built) · ④ pinned no_fence@2CL feed: 20 racy → 138 cascade →
+pass-2 residual 0 over 5432/5432, 936 load-cmp, pushed=consumed=20, PASSED. Monitor vif counts match
+bind topology (2 @1CL/1C, 8 @2CL/2C) = config-generic proven. Files: `tb/rvvi_if.sv` (new),
+`uvm_env/{rvvi_txn,rvvi_monitor}.sv` (new), `lockstep_pkg.sv` (queues deleted), both probes,
+`lockstep_scoreboard.sv`, `vortex_env{,_pkg}.sv`, `flists/uvm_env.flist`.
+**This closes the ENH-1 prerequisite** (streaming analysis path exists); ENH-1/2/3 stay PARKED.
+
+#### Prior (A1(e), same day — context)
 **A1(e) RVVI LOAD-BUS + mem_model end-state = DONE, both COMMITTED.** Real fix (option 1) as a sound **two-pass trace-replay**. Result on pinned no_fence@2CL: pass-1 **20** racy loads → **138** cascade; pass-2 **residual 0** over **5432/5432**; deferred end-state compare (real `dut_mem` vs post-feed SimX) → racy word matches → **TEST PASSED, 0 UVM_ERROR**. Commit `2dd48ea` (RVVI load-bus) + follow-on (end-state value source `shadow_memory`→`dut_mem`, keep `shadow_valid` for the write-set). Validated: vecadd_lite 1035/1035 (no-feed byte-identical) · negative fault-injection PASS (caught, non-vacuous) · negative dropped-store PASS (caught via reverse) · 2CL no_fence feed PASS. Files: `Vortex/sim/simx/{cosim_loadfeed.h,emulator.cpp,execute.cpp}`, `ref_model/{simx_dpi.cpp,simx_pkg.sv}`, `lockstep_scoreboard.sv`, `vortex_scoreboard.sv`, `scripts/simulate.sh`. Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "REAL FIX IMPLEMENTED".
 
 **`full_interrupt`@2CL feed = DONE, honest result (2026-07-16):** load-bus collapses **116 → 7
@@ -28,11 +50,11 @@ is not a fixed point for interrupt tests. Kept PC-occ key (more robust; no_fence
 RTL_OBSERVATIONS OBS-010. Do NOT force green.
 
 **NEXT:**
-1. **Resume A1(c):** migrate the package-queue hand-off → `rvvi_if` + UVM monitor (core-v-verif
-   `uvma_rvvi` style) — an SV interface bound at the probe, a UVM monitor publishing RVVI transactions,
-   scoreboard subscribes via analysis port. (This interface is ALSO the enabler for ENH-1 below.)
+1. ~~Resume A1(c)~~ **DONE 2026-07-16** (see block above).
 2. **(Optional) run the feed across the 2CL directed suite** to confirm no other test regresses (feed
    default-OFF, so only explicit `+LOCKSTEP_LOADFEED` runs use it).
+3. **A5 — harvest DUT native assertions** (route RTL `RUNTIME_ASSERT`s into the UVM error gate;
+   see A.4 milestones). A6 (Spike audit) remains the independent secondary.
 
 **DEFERRED ENHANCEMENTS (parked, revisit after priorities):** the full_interrupt instruction-
 granularity residual and the true-RVVI step-follower rework are captured in the **🔮 DEFERRED
@@ -193,7 +215,7 @@ SimX's `Emulator` natively models Vortex's SIMT execution + the 6 custom ops (`w
 
 #### Phase-A locked design decisions (2026-07-14)
 - **D1 = b + c (compose):** repurpose the dead `simx_golden_model` stub → the **golden agent** (drains `simx_cosim_pop()` after the run, publishes golden retire txns on its `ap`); add a **dedicated `lockstep_scoreboard`** comparator. Producer/checker separation. Delete the dead-stub behaviour, keep the shell.
-- **D2 = a → b (staged):** A0 uses a **package-scope retire queue** the bound probe pushes to (simplest, keyed by `cid`); **A1 migrates to the professional `core-v-verif` pattern** — a bound **`rvvi_if`** driven by the probe + a UVM **monitor** obtaining the vif via `config_db` (mirrors `uvma_rvvi`).
+- **D2 = a → b (staged):** A0 uses a **package-scope retire queue** the bound probe pushes to (simplest, keyed by `cid`); **A1 migrates to the professional `core-v-verif` pattern** — a bound **`rvvi_if`** driven by the probe + a UVM **monitor** obtaining the vif via a registry (mirrors `uvma_rvvi`). **[D2b DONE 2026-07-16 — A1(c); registry package instead of config_db (no UVM dependency in the module domain), see RESUME block.]**
 - **D3 = post-run `uuid`-map alignment:** SimX runs to completion in one `simx_run` call and queues ALL retirements; the DUT retires live. Align by **`uuid` (instruction identity), not by cycle** — `dut_map[uuid]` built live, `gold_map[uuid]` drained after `simx_run`, compared per active lane. Both maps must drain empty (dropped/extra retirement check).
 - **SimX-run coordination:** keep `simx_run` in the end-state scoreboard (path untouched); the golden agent drains the retire queue *after* it, sequenced via UVM objections — SimX is never run twice.
 
