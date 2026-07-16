@@ -13,6 +13,8 @@
 
 **CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. NEXT ACTION: (optional) 2CL directed-suite lockstep sweep, then A5 — harvest DUT native assertions.**
 
+**PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
+
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-07-16)
 **A5 RTL-ASSERT GATE = DONE (this session, pending commit).** Investigation found the gate
 HALF-EXISTED since the original import: `simulate.sh` already counted `^# ** Error:` lines and set
