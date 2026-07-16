@@ -14,6 +14,38 @@
 **CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. NEXT ACTION: (optional) 2CL directed-suite lockstep sweep, then A5 — harvest DUT native assertions.**
 
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-07-16)
+**A5 RTL-ASSERT GATE = DONE (this session, pending commit).** Investigation found the gate
+HALF-EXISTED since the original import: `simulate.sh` already counted `^# ** Error:` lines and set
+EXIT_CODE=2 — but the verdict was **print-only** (simulate.sh never `exit`ed with it; run.sh sources
+it last ⇒ `make sim`/`sim-only` always returned 0; `run_suite.sh stage()` grepped UVM's own "TEST
+PASSED" from the transcript ⇒ RTL-assert failures invisible at suite level AND their UCDBs merged).
+Fixes: ① `simulate.sh` final `exit $EXIT_CODE` (make now returns the real verdict 0/1/2/3);
+② `Makefile compile:` tolerates verdict {2,3} from the 1-cycle smoke (TB's own "TIMEOUT after 1
+cycles!" $error lands in the RTL branch); ③ `run_suite.sh` runners pass make's rc to `stage` — a
+failing run prints `FAILED (RTL assertion|UVM/verdict)` + first error line, is NOT staged for the
+coverage merge, and the suite prints a `SUITE VERDICT: N staged, M FAILED` line (make normalizes all
+recipe failures to rc=2, so the label is classified from the transcript, not the rc); ④ legacy
+`run_vortex_uvm_enhanced.sh` pre-T4 "-2" subtraction removed (hygiene; script is no longer the run
+path — the make flow is). **NEW negative guard `Vortex/tests/kernel/misalign_neg/`** (deliberate
+misaligned `lhu`, value discarded, constant store ⇒ scoreboard PASSES, ONLY the RTL-assert branch can
+fail it — isolates the gate; keep OUT of run_suite, re-run after any verdict-logic change).
+**Acceptance (2CL/2C/4W/4T):** misalign_neg → `TEST FAILED — 4 RTL assertion error(s)` (LSU assert at
+PC=0x8000009c, addr=g_src+1) with UVM `TEST PASSED, 0 UVM_ERROR` ⇒ RED came ONLY through the RTL
+branch, make rc≠0 ✓ · vecadd_lite → PASSED (0 UVM, 0 RTL), make rc=0 ✓ · `make compile` → rc=0 ✓ ·
+bonus: config-mismatch run proved I2-fatal → crash verdict → make rc≠0 (previously silent 0) ✓.
+**⚠️ INV-4 OPENED (riscv-dv jalr derail):** 12/12 riscv-dv suite profiles fire misaligned RUNTIME_ASSERTs
+(30–7616/run) and now classify FAILED under the toothed gate. Root cause = OBS-012 (JALR LSB non-clear,
+spec deviation) + riscv-dv's deliberate `label+1` jalr idiom (`riscv_directed_instr_lib.sv:162-165`,
+`offset=$urandom_range(0,1)`) → odd PC → auipc-derived addresses inherit the skew → misaligned data
+(OBS-013 silent corruption; SimX byte-accurate ⇒ divergence). NOT generated misaligned load/stores
+(`support_unaligned_load_store=0` works). `riscv_illegal_instr_test` additionally trips the
+invalid-CSR-write assert (0x6f3). Sign-off honesty note: the 2026-07-10 coverage banks contain those
+13 UCDBs (gate was toothless then). **INV-4 fix (next box, user-confirmed plan):** patch riscv-dv
+jalr `offset → 0` + decide illegal_instr disposition (drop from suite vs prepare.sh sed), regen,
+validate 1–2 previously-flipping profiles → 0 `# ** Error` lines. Full detail: RTL_OBSERVATIONS
+OBS-012/OBS-013 (+ OBS-008 "benign" note corrected).
+
+#### Prior (A1(c), same day — context)
 **A1(c) RVVI MONITOR MIGRATION = DONE, COMMITTED.** The D2a package-queue hand-off is replaced by
 the D2b core-v-verif pattern: each bound probe (`vx_commit_probe`, `vx_lsu_probe`) instantiates its
 own `rvvi_if` and self-registers in `rvvi_registry_pkg` at t=0; a `rvvi_monitor` (created only under
@@ -264,6 +296,38 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 
 ---
 
+## Phase E — HW/SW co-verification & SoC integration (FUTURE WORK — out of current A–D scope)
+
+> Scope note (added 2026-07-16): the current project is deliberately scoped as **GPU-core
+> verification** — the DUT is `Vortex_axi` standalone, checked against a golden ISS. Phase E
+> names the two scope *extensions* beyond that, so the trajectory is on record. Neither is
+> part of the "industrial-grade" acceptance above; do NOT start these before A–D close.
+>
+> What we already have, honestly stated: **kernel-level HW/SW co-verification exists today** —
+> every stimulus is real software (C kernels via the Vortex LLVM toolchain + `crt0`/`vx_spawn`
+> runtime, riscv-dv programs) executing on the RTL with per-instruction lockstep vs SimX, and
+> the host/dcr agents replay the real launch protocol (DCR STARTUP_ADDR/ARGV → start → busy).
+> What Phase E adds is the *host-side software* and the *system around the GPU*.
+
+- **E1 — Driver-in-the-loop co-verification.** Run the real Vortex host runtime
+  (`libvortex` API: `vx_dev_open/vx_mem_alloc/vx_copy_to_dev/vx_start/vx_ready_wait`) as the
+  actual sequence source — compiled to host code and bridged via DPI into the host/dcr agents,
+  so the driver's own register-programming and completion-polling logic is what drives the DUT
+  (today the agents replay a hand-modeled protocol). Payoff: verifies the SW/HW contract
+  (launch, argument passing, completion, MMIO console) end-to-end; catches driver↔RTL protocol
+  drift. Cost: DPI bridge + driver build for co-sim ≈ 1–2 weeks. Trigger: after A–D acceptance,
+  or if the driver protocol changes upstream.
+- **E2 — SoC-level integration & verification.** Minimal SoC top: RISC-V host core (or host
+  BFM) + AXI interconnect + `Vortex_axi` as a peripheral + shared memory controller. Our AXI
+  agent flips from active slave to **passive monitor** on the interconnect; system-level checks:
+  address decode/map, host↔GPU shared-memory consistency (write-through GPU cache vs host view),
+  DMA paths, interrupt/completion signaling at SoC level. Payoff: verifies the GPU *in situ*
+  (role inversion removed); prerequisite for any FPGA/virtual-platform prototyping. Cost: weeks
+  (SoC assembly + new checkers). Trigger: only if the project scope formally grows to SoC, or
+  as the follow-on project after GPU-core sign-off.
+
+---
+
 ## Sequencing & dependencies
 
 ```
@@ -279,6 +343,7 @@ A0 → A1 → A2 → A3 → A4 → A5        (flagship, depth-first — do first
 - **D1/D2 are independent** — land them early for turnaround (cheap, contained, zero coverage risk) even though they're "Phase D."
 - **B2 (scoreboard→mem_model)** is a natural companion to Phase A (a single clean memory model helps the lockstep comparator too).
 - **A3/A4 depend on the Spike harness (A1/A2)** — the UNVERIFIABLE payoff comes after the SIMT model works.
+- **Phase E (driver-in-the-loop, SoC integration) is strictly AFTER A–D acceptance** — future-work scope extension, not part of the industrial-grade definition of done below.
 
 ## Acceptance for "industrial-grade" (definition of done)
 1. Every stimulus renders a per-instruction verdict against a spec-complete golden model (0 UNVERIFIABLE), OR is classified with a formal/RTL-cited reason.
