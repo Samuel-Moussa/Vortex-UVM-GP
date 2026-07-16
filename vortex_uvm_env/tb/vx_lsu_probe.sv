@@ -62,6 +62,12 @@ module vx_lsu_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
     // Per-lane count of the result `data` field, from the signal itself (no macro).
     localparam int LS_LANES = $bits(data.data) / $bits(data.data[0]);
 
+    // A1(c) RVVI hand-off: this probe's own record channel (kind=KIND_LOAD),
+    // discovered by the rvvi_monitor via the registry. Pushes stay gated by
+    // lockstep_en → no-plusarg run byte-identical.
+    rvvi_if u_rvvi (.clk(clk));
+    initial rvvi_registry_pkg::rvvi_register(u_rvvi);
+
     // A load-writeback leaves the slice on a completed handshake with wb==1.
     // Stores go through the no-response path with wb==0 and are ignored.
     wire load_fire = valid && ready && data.wb;
@@ -80,6 +86,7 @@ module vx_lsu_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
                     (LS_LANES>3 ? data.data[3] : '0));
                 dbg_n = dbg_n + 1;
             end
+            rec.kind  = lockstep_pkg::KIND_LOAD;
             rec.uuid  = data.uuid;
             rec.cid   = 0;                        // real cid derived from uuid in the SB
             rec.wid   = data.wid;
@@ -93,7 +100,7 @@ module vx_lsu_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
             rec.data  = new[LS_LANES];
             for (int l = 0; l < LS_LANES; l++)
                 rec.data[l] = data.data[l];
-            lockstep_pkg::ls_push_load(rec);
+            u_rvvi.push(rec);
         end
     end
 

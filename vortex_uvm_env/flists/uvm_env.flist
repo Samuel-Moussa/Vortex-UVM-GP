@@ -12,10 +12,9 @@
 #                          vortex_sanity_test, vortex_smoke_test,
 #                          functional_memory_test
 #
-#   vortex_env_pkg   owns: (imports only — no includes of sv class files)
-#
-#   All env components (virtual_sequencer, scoreboard, coverage, env) are
-#   standalone because vortex_env_pkg does NOT include them.
+#   vortex_env_pkg   owns: vortex_virtual_sequencer, rvvi_txn, rvvi_monitor,
+#                          vortex_scoreboard, lockstep_scoreboard,
+#                          vortex_coverage_collector, vortex_env
 
 # Set UVM environment base directory
 +incdir+$UVM_HOME
@@ -40,10 +39,16 @@ $VORTEX_UVM_HOME/tb/vortex_if.sv
 # 4. Memory model package (standalone package; imported by multiple packages)
 $VORTEX_UVM_HOME/tb/mem_model.sv
 
-# Lockstep hand-off package (Phase A0): probe (module) pushes DUT retires here,
-# lockstep_scoreboard (owned by vortex_env_pkg) drains it. MUST precede the
-# commit probe (imports it) and vortex_env_pkg.
+# Lockstep record type + gating flags (Phase A0; queues removed in A1(c)).
+# MUST precede rvvi_if.sv and the probes (both import it) and vortex_env_pkg.
 $VORTEX_UVM_HOME/uvm_env/lockstep_pkg.sv
+
+# RVVI hand-off interface + registry (Phase A1(c)): each probe instantiates an
+# rvvi_if and registers it; rvvi_monitor (owned by vortex_env_pkg) drains all
+# registered vifs and publishes rvvi_txn on its analysis port to the lockstep
+# scoreboard. MUST follow lockstep_pkg (struct) and precede the probes (they
+# instantiate rvvi_if and call rvvi_registry_pkg::rvvi_register).
+$VORTEX_UVM_HOME/tb/rvvi_if.sv
 
 # White-box architectural instruction coverage (ARCH-COV / instr_class_cg / Warp/scheduler-state functional coverage)
 $VORTEX_UVM_HOME/tb/vx_instr_probe.sv
