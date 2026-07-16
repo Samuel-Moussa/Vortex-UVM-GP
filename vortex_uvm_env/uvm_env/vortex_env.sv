@@ -74,9 +74,10 @@ class vortex_env extends uvm_env;
   vortex_scoreboard m_scoreboard;
 
   //==========================================================================
-  // Lockstep Scoreboard  (Phase A0 — enabled via cfg.enable_lockstep/+LOCKSTEP)
+  // Lockstep Scoreboard + RVVI monitor (Phase A0/A1(c) — cfg.enable_lockstep)
   //==========================================================================
   lockstep_scoreboard m_lockstep_scoreboard;
+  rvvi_monitor        m_rvvi_monitor;
 
   //==========================================================================
   // Coverage Collector  (enabled via cfg.enable_coverage)
@@ -174,14 +175,17 @@ class vortex_env extends uvm_env;
     end
 
     // ------------------------------------------------------------------
-    // Lockstep scoreboard (Phase A0) — per-instruction DUT-vs-SimX checker.
-    // No AP wiring: it reads lockstep_pkg::dut_retire_q (probe-filled) and
-    // SimX's cosim drain queue directly in check_phase.
+    // Lockstep scoreboard + RVVI monitor (Phase A0/A1(c)) — per-instruction
+    // DUT-vs-SimX checker. DUT records arrive via the RVVI path (probe →
+    // rvvi_if → rvvi_monitor → analysis port); SimX's cosim drain queue is
+    // read directly in check_phase.
     // ------------------------------------------------------------------
     if (cfg.enable_lockstep) begin
       m_lockstep_scoreboard =
         lockstep_scoreboard::type_id::create("m_lockstep_scoreboard", this);
-      `uvm_info("VORTEX_ENV", "Lockstep scoreboard created (+LOCKSTEP)", UVM_MEDIUM)
+      m_rvvi_monitor =
+        rvvi_monitor::type_id::create("m_rvvi_monitor", this);
+      `uvm_info("VORTEX_ENV", "Lockstep scoreboard + RVVI monitor created (+LOCKSTEP)", UVM_MEDIUM)
     end
 
     // ------------------------------------------------------------------
@@ -250,6 +254,14 @@ class vortex_env extends uvm_env;
         m_status_agent.ap.connect(m_scoreboard.status_export);
 
       `uvm_info("VORTEX_ENV", "Scoreboard connected to all agents", UVM_MEDIUM)
+    end
+
+    // ------------------------------------------------------------------
+    // Lockstep scoreboard ← RVVI monitor (Phase A1(c))
+    // ------------------------------------------------------------------
+    if (m_rvvi_monitor != null && m_lockstep_scoreboard != null) begin
+      m_rvvi_monitor.ap.connect(m_lockstep_scoreboard.rvvi_export);
+      `uvm_info("VORTEX_ENV", "RVVI monitor connected to lockstep scoreboard", UVM_MEDIUM)
     end
 
     // ------------------------------------------------------------------

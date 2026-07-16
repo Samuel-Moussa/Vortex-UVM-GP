@@ -59,6 +59,14 @@ module vx_commit_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
     initial if ($test$plusargs("LOCKSTEP")) lockstep_pkg::lockstep_en = 1'b1;
     initial if ($test$plusargs("LOCKSTEP_INJECT")) lockstep_pkg::inject_en = 1'b1;
 
+    // A1(c) RVVI hand-off: this probe's own record channel. The rvvi_monitor
+    // discovers it through the registry (snapshot after #1 — all time-0
+    // initials are done) and publishes its records on an analysis port.
+    // Registration is unconditional setup-time state; pushes stay gated by
+    // lockstep_en, so a no-plusarg run remains byte-identical.
+    rvvi_if u_rvvi (.clk(clk));
+    initial rvvi_registry_pkg::rvvi_register(u_rvvi);
+
     // SIMD lane count of the commit `data` field, derived from the signal itself
     // (total bits / one-lane bits) so no `SIMD_WIDTH / `XLEN macro is needed —
     // those are not visible in this compile unit. Correct for any config.
@@ -80,15 +88,17 @@ module vx_commit_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
                 p1_lane_count[i] <= p1_lane_count[i] + 1;
 
         // -------- A0 lockstep capture (passive, +LOCKSTEP only) -------------
-        // Push one dut_retire_s per writeback commit BEAT into the package queue.
-        // Stays read-only (no drive of commit_arb_if). PC is converted to a full
-        // byte address via to_fullPC() so it matches SimX's byte PC. Only wb
-        // beats are captured (non-wb retirements have no architectural result to
-        // compare). cid=0 here — A0 is single-core; A1 adds per-core attribution.
+        // Push one dut_retire_s per writeback commit BEAT into this probe's
+        // rvvi_if (A1(c) — was a global package queue). Stays read-only (no
+        // drive of commit_arb_if). PC is converted to a full byte address via
+        // to_fullPC() so it matches SimX's byte PC. Only wb beats are captured
+        // (non-wb retirements have no architectural result to compare). cid=0
+        // here — the scoreboard derives the real cid from the uuid.
         always @(posedge clk) begin
             if (lockstep_pkg::lockstep_en && !reset && retire_fire
                     && commit_arb_if[i].data.wb) begin
                 lockstep_pkg::dut_retire_s rec;
+                rec.kind  = lockstep_pkg::KIND_COMMIT;
                 rec.uuid  = commit_arb_if[i].data.uuid;
                 rec.cid   = 0;
                 rec.wid   = commit_arb_if[i].data.wid;
@@ -109,7 +119,7 @@ module vx_commit_probe import VX_gpu_pkg::*; import lockstep_pkg::*; (
                     $display("[LOCKSTEP-INJECT %m] flipped bit0 of uuid=%0h wid=%0d lane0",
                              rec.uuid, rec.wid);
                 end
-                lockstep_pkg::ls_push(rec);
+                u_rvvi.push(rec);
             end
         end
     end

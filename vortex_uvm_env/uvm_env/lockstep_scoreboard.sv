@@ -31,8 +31,10 @@
 //
 //   TIMING: runs in check_phase. By then vortex_scoreboard has already invoked
 //   simx_run() (on EBREAK in run_phase, or extract_phase fallback), so SimX's
-//   cosim drain queue is fully populated; and the commit probe has pushed the
-//   whole DUT wb stream into lockstep_pkg::dut_retire_q during run_phase.
+//   cosim drain queue is fully populated; and the rvvi_monitor has published
+//   the whole DUT wb stream (A1(c): probe → rvvi_if → monitor → analysis
+//   port → write_rvvi() → local queues; extract_phase final-drain precedes
+//   every check_phase, so the stream is complete here).
 //
 //   GATING: built only when cfg.enable_lockstep (from +LOCKSTEP). Default off ⇒
 //   this component does not exist and the run is byte-identical.
@@ -44,6 +46,22 @@ class lockstep_scoreboard extends uvm_scoreboard;
     `uvm_component_utils(lockstep_scoreboard)
 
     vortex_config cfg;
+
+    // A1(c): RVVI subscription. The rvvi_monitor publishes one rvvi_txn per
+    // captured DUT beat; write_rvvi routes it by rec.kind into the local
+    // queues below (same shapes the former lockstep_pkg global queues had —
+    // build_dut()'s aggregation logic is unchanged).
+    uvm_analysis_imp_rvvi #(rvvi_txn, lockstep_scoreboard) rvvi_export;
+
+    lockstep_pkg::dut_retire_s dut_retire_q[$];  // commit writeback beats
+    lockstep_pkg::dut_retire_s dut_load_q[$];    // LSU load-writeback beats (OBS-002)
+
+    function void write_rvvi(rvvi_txn t);
+        if (t.rec.kind == lockstep_pkg::KIND_LOAD)
+            dut_load_q.push_back(t.rec);
+        else
+            dut_retire_q.push_back(t.rec);
+    endfunction
 
     // Per-instruction LOAD-DATA comparison gate. ON by default (+NO_LOCKSTEP_LOADS
     // disables). The LSU probe (vx_lsu_probe.sv) captures true DUT load values; the
@@ -156,6 +174,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
 
     function void build_phase(uvm_phase phase);
         super.build_phase(phase);
+        rvvi_export = new("rvvi_export", this);
         if (!uvm_config_db#(vortex_config)::get(this, "", "cfg", cfg))
             `uvm_fatal("LOCKSTEP", "vortex_config not found")
         // Per-instruction LOAD-data compare is now SOUND (region-filtered by the
@@ -248,8 +267,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
         retire_t merged [int][longint];   // [key][uuid] -> merged retirement
         int      key, base, simd_w, l, gi, i;
         lockstep_pkg::dut_retire_s b;
-        for (i = 0; i < lockstep_pkg::dut_retire_q.size(); i++) begin
-            b      = lockstep_pkg::dut_retire_q[i];
+        for (i = 0; i < dut_retire_q.size(); i++) begin
+            b      = dut_retire_q[i];
             // Derive the flat global (cid,wid) from the uuid rather than trusting
             // the probe's pushed cid (hardcoded 0). uuid embeds CORE_ID + wid.
             key    = key_of(cid_of_uuid(b.uuid), wid_of_uuid(b.uuid));
@@ -280,10 +299,10 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // and record which lanes were filled (load_filled_mask) so compare_pair
         // only trusts those. A load with no captured beat stays unfilled → still
         // skipped (falls back to the end-state memory check).
-        for (i = 0; i < lockstep_pkg::dut_load_q.size(); i++) begin
+        for (i = 0; i < dut_load_q.size(); i++) begin
             lockstep_pkg::dut_retire_s lb;
             int lkey, lbase, lsimd, ll, lgi;
-            lb    = lockstep_pkg::dut_load_q[i];
+            lb    = dut_load_q[i];
             lkey  = key_of(cid_of_uuid(lb.uuid), wid_of_uuid(lb.uuid));
             if (!merged.exists(lkey)) continue;
             if (!merged[lkey].exists(lb.uuid)) continue;   // load with no commit retire
@@ -557,7 +576,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
         end
 
         // Housekeeping: clear both channels for any subsequent run.
-        lockstep_pkg::ls_reset();
+        dut_retire_q.delete();
+        dut_load_q.delete();
         simx_cosim_clear();
     endfunction
 
