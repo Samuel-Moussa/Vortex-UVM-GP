@@ -273,10 +273,12 @@ not scattered across per-fix docs.
   memory equivalent; only transient per-instruction interrupt-boundary ordering differs.
 - **Disposition:** `full_interrupt`@multi-cluster = end-state VERIFIED, instruction-granularity
   UNVERIFIABLE (interrupt-timing class). A true fix needs single-pass step-follower lockstep with
-  interrupt-delivery alignment (Future Work), or a bounded fixed-point iterated feed (feed each pass's
-  residual, re-run until stable — may not converge for interrupts). **Not forced green.** The
-  PC-occurrence key was kept (strictly more robust; no_fence stays residual 0). Evidence:
-  `scratchpad/fullint_2CL.log` (ordinal) + `scratchpad/pcocc_fullint.log` (PC-occ, identical residual).
+  interrupt-delivery alignment, or a bounded fixed-point iterated feed (may not converge for
+  interrupts). **Both are logged as deferred backlog items — see
+  `docs/INDUSTRIAL_TRANSFORMATION_PLAN.md` → 🔮 DEFERRED ENHANCEMENTS: ENH-1 (step-follower),
+  ENH-2 (iterated feed), ENH-3 (residual pinpoint).** **Not forced green.** The PC-occurrence key was
+  kept (strictly more robust; no_fence stays residual 0). Evidence: `scratchpad/fullint_2CL.log`
+  (ordinal) + `scratchpad/pcocc_fullint.log` (PC-occ, identical residual).
 
 ### OBS-005 (REF-MODEL) — SimX does not populate the retire `uuid` (always 0)
 - **Class:** REF-MODEL · **Disposition:** worked-around · **Found:** Phase A0 (2026-07-14)

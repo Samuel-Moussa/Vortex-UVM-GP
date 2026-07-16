@@ -30,13 +30,16 @@ RTL_OBSERVATIONS OBS-010. Do NOT force green.
 **NEXT:**
 1. **Resume A1(c):** migrate the package-queue hand-off → `rvvi_if` + UVM monitor (core-v-verif
    `uvma_rvvi` style) — an SV interface bound at the probe, a UVM monitor publishing RVVI transactions,
-   scoreboard subscribes via analysis port.
-2. **(Optional, harder) close the full_interrupt residual** — either single-pass step-follower lockstep
-   with interrupt-delivery alignment (big SimX rework), or a fixed-point iterated feed (feed pass-2
-   residuals, re-run until stable — risk of non-convergence; bound the iterations). Only if instruction-
-   granularity verification of interrupt tests is required; end-state is already VERIFIED.
-3. **(Optional) run the feed across the 2CL directed suite** to confirm no other test regresses (feed
+   scoreboard subscribes via analysis port. (This interface is ALSO the enabler for ENH-1 below.)
+2. **(Optional) run the feed across the 2CL directed suite** to confirm no other test regresses (feed
    default-OFF, so only explicit `+LOCKSTEP_LOADFEED` runs use it).
+
+**DEFERRED ENHANCEMENTS (parked, revisit after priorities):** the full_interrupt instruction-
+granularity residual and the true-RVVI step-follower rework are captured in the **🔮 DEFERRED
+ENHANCEMENTS** section near the end of this doc — **ENH-1** (single-pass step-follower lockstep with
+interrupt-delivery alignment — the real fix; A1(c) is its prerequisite), **ENH-2** (bounded iterated
+feed — cheaper interim, may not converge), **ENH-3** (residual root-cause pinpoint). Do NOT start these
+until the current milestone is done; full_interrupt end-state is already VERIFIED.
 
 **Two-pass RVVI recap (how it works):** `cosim_loadfeed.h` holds a per-(cid,wid,LOAD-ordinal) override map (uuids differ DUT↔SimX so ordinal is the key; `consumed==pushed` self-checks alignment). `execute.cpp` LOAD case calls `loadfeed_next()` and, if a lane is flagged, overrides the aligned `rd_data`. `lockstep_scoreboard.check_phase` runs pass 1 (capture racy loads), pushes them via `simx_cosim_load_feed_push`, re-runs `simx_run()` (pass 2), re-compares; pass-1 divergences demoted to diagnostic ONLY when feed armed (residual is the verdict; unexplained divergences stay hard errors). `vortex_scoreboard` defers the end-state mem compare to `report_phase` (post-feed) when `+LOCKSTEP_LOADFEED`.
 
@@ -264,6 +267,57 @@ A0 → A1 → A2 → A3 → A4 → A5        (flagship, depth-first — do first
 
 ## Non-negotiables carried from CLAUDE.md
 Black-box honesty (no fabricated verdicts); per-config coverage never blended; negative tests stay RED after any scoreboard change; announce/confirm expensive sim runs; no Claude attribution on commits.
+
+---
+
+## 🔮 DEFERRED ENHANCEMENTS (backlog — revisit AFTER current priorities)
+Real, scoped enhancements intentionally parked. Each has a WHY (what it unlocks), a
+COST, and a TRIGGER (when it becomes worth doing). Do NOT start these until the
+current-milestone priorities (RESUME block) are done.
+
+### ENH-1 — True single-pass step-follower lockstep (with interrupt-delivery alignment)
+- **What:** Replace the current **two-pass trace-replay** RVVI load-bus (A1(e)) with a
+  **single-pass step-driven follower**: SimX is stepped ONE instruction at a time as a
+  follower of the DUT's retire stream, instead of run-to-completion + replay. On each DUT
+  retirement, SimX executes that instruction and, for inputs it cannot independently
+  predict, consumes the DUT-observed value **in real time**: (a) shared/racy LOAD data (as
+  today), AND crucially (b) **interrupt delivery** — SimX takes the interrupt at the SAME
+  retired instruction boundary the DUT did (an interrupt-inject hook driven by the DUT
+  trace), plus (c) volatile/CSR reads.
+- **WHY (what it unlocks):** closes the one class the two-pass trace-replay provably CANNOT
+  resolve — **interrupt-timing divergence**. `full_interrupt`@2CL collapses only 116→7 and
+  the residual 7 is proven **keying-independent** (identical under ordinal AND
+  (cid,wid,PC,occurrence) keys → not a feed/alignment artifact; it is genuine interrupt
+  timing: the interrupt-affected PC executes a different count in the timing-accurate DUT
+  vs functional SimX). Feeding LOAD data can't fix WHEN the interrupt fires; only aligning
+  interrupt **delivery** can. Would take `full_interrupt` (and any async-input timing test)
+  from end-state-VERIFIED / instruction-UNVERIFIABLE → fully instruction-granularity
+  VERIFIED. It is also the RVVI-standard architecture (ImperasDV-style), so it generalises.
+- **COST:** major SimX rework — invert `simx_run()` from a bounded run-to-completion loop
+  into a stepper the SV drives per DUT-retirement; add an interrupt-delivery injection point
+  in the SimX interrupt path; wire the DUT retire stream to drive the stepper (naturally
+  built on the **A1(c) `rvvi_if` monitor** — that interface is the enabler/prerequisite).
+- **TRIGGER:** when instruction-granularity verification of interrupt / async-timing tests
+  is required for sign-off. Until then, `full_interrupt`@multi-cluster is dispositioned
+  **end-state VERIFIED** (real `dut_mem` vs post-feed SimX passes) which is sufficient for
+  black-box equivalence. See RTL_OBSERVATIONS **OBS-010** for the full evidence.
+
+### ENH-2 — Bounded fixed-point iterated feed (cheaper interim for ENH-1's goal)
+- **What:** Iterate the two-pass load-bus — feed each pass's residual divergent loads, re-run
+  SimX (in-process, cheap), repeat until residual stabilises or a small iteration bound.
+- **WHY:** MIGHT drive `full_interrupt` residual → 0 without the full step-follower rework.
+- **COST/RISK:** small SV change in `lockstep_scoreboard.check_phase` + 1 sim run to test.
+  **May NOT converge** for interrupts (feeding LOAD data doesn't align interrupt timing, so
+  each iteration can expose new divergences); bound the iterations and report honestly.
+- **TRIGGER:** a quick experiment before committing to ENH-1; if it converges, it's a much
+  cheaper path. If it doesn't, it confirms ENH-1 is the only real fix.
+
+### ENH-3 — full_interrupt residual root-cause pinpoint (diagnostic)
+- **What:** Add a per-(cid,wid,PC) execution-count dump to prove which sub-mechanism drives
+  the residual 7: same-PC occurrence-count drift vs feed-exposed new divergence.
+- **WHY:** removes the "by elimination" hedge in OBS-010; makes the interrupt-timing claim
+  a measured fact. Low value unless ENH-1/2 are pursued.
+- **COST:** small SimX/SV instrumentation + 1 replay.
 
 ---
 
