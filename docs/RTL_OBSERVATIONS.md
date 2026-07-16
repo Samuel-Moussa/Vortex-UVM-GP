@@ -160,11 +160,14 @@ not scattered across per-fix docs.
   on SimX; this recovers real DUT-vs-SimX coverage. Companion to OBS-007 (the decoder's
   `default: std::abort()` is the *mechanism* that surfaced it; the observability print
   is what made the root cause visible).
-- **Minor RTL note (debug-only):** the DUT's debug build (PC_BITS=XLEN, identity
-  fullPC) retains an odd architectural PC after a jalr-to-odd-target; release
-  (PC_BITS=XLEN-2, `>>2`/`<<2`) word-aligns it away. Benign (fetch aligns; low bits
-  never reach an architectural result on this path) — a debug-representation artifact,
-  not a silicon bug. Noted for completeness.
+- **Minor RTL note (debug-only) — CORRECTED 2026-07-16, see OBS-012:** the DUT's debug
+  build (PC_BITS=XLEN, identity fullPC) retains an odd architectural PC after a
+  jalr-to-odd-target; release (PC_BITS=XLEN-2, `>>2`/`<<2`) word-aligns it away.
+  ~~Benign (fetch aligns; low bits never reach an architectural result on this path)~~
+  **DISPROVEN:** the odd PC DOES reach architectural results — `auipc`/`la` compute
+  rd = PC + imm, so every PC-relative address inherits the skew, cascading into
+  misaligned data accesses and silently-corrupted stores (OBS-013). Full root-cause
+  and evidence in OBS-012.
 
 ### OBS-009 (RESOLVED — not a DUT bug) — no_fence@2CL divergence is single-hart-test-in-multihart race
 - **Class:** REF-MODEL/methodology (single-hart random test on N shared-memory cores) · **Disposition:** resolved — real-fix options pending (see investigation doc) · **Found:** Phase A1(d) (2026-07-15)
@@ -352,3 +355,76 @@ not scattered across per-fix docs.
   (1CL/2CL small programs). Fix is `10 ** (...)` per the original intent. Left as an
   upstream-reportable RTL observation; no waiver needed (assertion category unaffected in
   our banks).
+
+### OBS-012 (RTL BUG — ISA spec deviation) — JALR does not clear the target's LSB; no misaligned-fetch exception; odd PC propagates into architectural results via AUIPC
+- **Class:** RTL BUG (RISC-V unpriv spec, JALR: "target address … setting the
+  least-significant bit of the result to zero" — Vortex omits the clear; and a
+  bits[1:0]≠0 target on a non-C core should raise instruction-address-misaligned,
+  which Vortex has no trap for) · **Disposition:** worked-around (stimulus
+  sanitization, INV-4) — needs-RTL-fix upstream · **Found:** A5 gate investigation
+  (2026-07-16); mechanism first surfaced in A1(d)/OBS-008 (2026-07-15).
+- **What:** `VX_alu_int.sv:222` `cbr_dest = from_fullPC(add_result[0])` — the jalr
+  destination is the raw `rs1+imm`, no `& ~1`. In the **debug** build
+  (`PC_BITS=`XLEN``, `to/from_fullPC` identity, `VX_gpu_pkg.sv:75-82`) the odd bit
+  survives as the **architectural PC**. Fetch silently word-aligns
+  (`VX_fetch.sv:101`) so execution continues on the correct instruction words, but
+  the PC stays skewed → every `auipc`/`la` result (`rd = PC + imm`) inherits the
+  skew; through chained jumps/link-register writes (rd = PC+4) the offset
+  accumulates (observed +1 → +3) → downstream loads/stores go misaligned →
+  OBS-013 silent corruption + LSU RUNTIME_ASSERT storms.
+- **Trigger (spec-legal stimulus):** riscv-dv deliberately exercises the spec's
+  LSB-clear: `riscv-dv/src/riscv_directed_instr_lib.sv:162-165` adds
+  `offset = $urandom_range(0,1)` to the jalr base register (comment: "JALR is
+  expected to set lsb to 0") — ~half of generated jumps target `label+1`.
+- **Evidence:** 2026-07-10 suite: **12/12 riscv-dv profiles** fire misaligned
+  asserts (30–7616 per run). `run_104133` (`riscv_jump_stress_test`): assert PCs
+  `0x80001887..0x800018fb` (stride 4, all = instr_addr+3) inside the riscv-dv
+  register-dump routine (`sw rX, off(t6)` block before `_vortex_done`,
+  objdump-verified), store addrs `0x80008083..` = auipc-derived `t6` = base+3.
+  Post-OBS-008 lockstep run 2026-07-14 (`no_fence`): 18 lockstep UVM_ERRORs =
+  the DUT/SimX divergence this causes, now detectable per-instruction.
+- **Release-build note:** release `PC_BITS=XLEN-2` drops PC bits[1:0] in
+  representation, so a `label+1` target lands spec-correct **by accident**; the
+  deviation is architecturally visible in the debug build we verify (and a
+  `label+2` target would silently word-align in release where spec demands a trap).
+- **Impact / handling:** all riscv-dv random-jump programs derail on Vortex;
+  pre-OBS-008 these runs were silently UNVERIFIABLE (SimX fetch-abort), post-fix
+  they diverge detectably. SimX deliberately mirrors the no-clear behaviour
+  (`execute.cpp:469`, OBS-008) — an RTL fix (`& ~1` at the dest adder) must
+  un-mirror SimX in the same change. Chosen handling: sanitize stimulus
+  (riscv-dv jalr offset → 0, INV-4) + report upstream; RTL left untouched at pin
+  `7a52ee5`. Corrects OBS-008's "benign — low bits never reach an architectural
+  result" note.
+
+### OBS-013 (QUIRK/EXPECTED — hazardous failure mode) — misaligned data access: no trap, silently retargeted/torn access; RUNTIME_ASSERT is the only guard
+- **Class:** QUIRK/EXPECTED (misaligned data access is documented-unsupported —
+  the RTL asserts) with an ENHANCEMENT edge (no misaligned-address exception
+  exists, so silicon has **zero** detection: sim-only assert) · **Disposition:**
+  wontfix/expected (SW contract: aligned-only, Vortex toolchain/runtime always
+  comply) — assert routed into the run verdict by the A5 gate · **Found:** A5
+  investigation (2026-07-16); assert itself known since the riscv-dv misaligned
+  episode (2026-07-03).
+- **What (the silent-corruption mechanism):** `VX_lsu_slice.sv:159-184` — the
+  byte-enable TRUNCATES the address low bits per size: 16-bit uses
+  `{align[1],1'b0}`/`{align[1],1'b1}` (addr bit 0 discarded → a `sh/lh` at an odd
+  address is retargeted to the aligned halfword slot); RV32 32-bit misaligned
+  falls into `default` full-word byteen (reads/writes the containing aligned word
+  only — never crosses into the next word as the ISA's byte-span semantics
+  require). Store data is separately shifted by the full `req_align`
+  (`VX_lsu_slice.sv:195-210`), so enable-set and data-shift disagree → **torn
+  bytes at a wrong address, no error indication to software**. Detection is only
+  `VX_lsu_slice.sv:189` `RUNTIME_ASSERT` (sim-only; compiled out under
+  SYNTHESIS).
+- **Golden-model contrast:** SimX performs the access byte-accurately at the
+  exact address → any boundary-crossing misaligned access is a **guaranteed
+  DUT≠SimX divergence** (proven: lockstep 2026-07-14 no_fence, 18 errors).
+- **Same class, CSR flavor:** an invalid CSR write asserts
+  (`VX_csr_data.sv:150`) instead of raising illegal-instruction (no trap
+  architecture) — `riscv_illegal_instr_test` trips it (CSR `0x6f3`,
+  `run_105050` 2026-07-10). Same disposition: stimulus must not send it.
+- **Impact / handling:** aligned-only is the SW contract; violations are
+  silent data corruption in silicon. Handling: (1) A5 gate makes any assert
+  firing FAIL the run (defense in depth, catches contract violations in any
+  stimulus); (2) INV-4 stimulus sanitization removes the riscv-dv source
+  (OBS-012 cascade); (3) upstream ENHANCEMENT suggestion: misaligned-address
+  trap or at least a sticky error CSR.
