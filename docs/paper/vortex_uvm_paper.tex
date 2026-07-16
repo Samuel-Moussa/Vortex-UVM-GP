@@ -1,14 +1,15 @@
 % =========================================================================
-% From End-State Equivalence to Per-Instruction Lockstep:
-% A UVM Verification Environment for the Vortex RISC-V GPGPU
+% A UVM-Based Per-Instruction Verification Methodology
+% for the Vortex RISC-V GPGPU
 %
 % IEEE conference format (IEEEtran). Compile on Overleaf or any TeXLive:
 %   pdflatex vortex_uvm_paper.tex && pdflatex vortex_uvm_paper.tex
 %
-% All numbers and claims in this paper are sourced from the audited base
-% docs/PAPER_BASE_EVALUATION.md (commit 3a7de25) -- every figure was
-% re-verified against primary artifacts (UCDBs via vcover, RTL excerpts,
-% committed investigation docs) on 2026-07-16.
+% All numbers and claims are sourced from the audited evidence base
+% docs/PAPER_BASE_EVALUATION.md and the observations register
+% docs/RTL_OBSERVATIONS.md -- every figure was re-verified against
+% primary artifacts (UCDBs via vcover, RTL excerpts at pin 7a52ee5,
+% committed investigation documents) on 2026-07-16.
 % =========================================================================
 \documentclass[conference]{IEEEtran}
 \usepackage[utf8]{inputenc}
@@ -32,8 +33,8 @@
 
 \begin{document}
 
-\title{From End-State Equivalence to Per-Instruction Lockstep:\\
-A UVM Verification Environment for the Vortex RISC-V GPGPU}
+\title{A UVM-Based Per-Instruction Verification Methodology\\
+for the Vortex RISC-V GPGPU}
 
 \author{
 \IEEEauthorblockN{Samuel Moussa, Steven Ibrahim, Ahmad Sudky, Ahmad Fawzy, Abanoub Nabil}
@@ -46,541 +47,819 @@ Supervised by Dr.~Hossam Hassan and Assoc.~Prof.~Dr.~Alhassan SAYED}
 
 % =========================================================================
 \begin{abstract}
-General-purpose GPU (GPGPU) designs invert the assumptions of mainstream
-processor verification: the device under test is a program-executing bus
+General-purpose GPUs invert the assumptions of mainstream processor
+verification: the device under test is a program-executing bus
 \emph{master} whose stimulus is compiled kernels rather than bus
-transactions, and whose SIMT execution model (warps, thread masks,
-divergence, barriers) is outside the domain of standard RISC-V reference
-models. We present a complete UVM verification environment for Vortex, an
-open-source RISC-V GPGPU, built in two stages. The first stage is a
-black-box environment whose single checker is byte-exact final-memory
-equivalence against the project's functional simulator (SimX) integrated
-over DPI-C; its distinguishing discipline is \emph{provable
-non-vacuity}---permanent fault-injection tests that must stay red guard
-every scoreboard change---together with machine-generated,
-RTL-cited, per-configuration coverage exclusions and an explicitly
-classified \emph{unverifiable} verdict class. This stage reaches 100\%
-functional and 91.0\% total coverage on the primary configuration
-(43/43 tests passing) and 85.2\% on a two-cluster configuration. The
-second stage upgrades checking depth to an RVVI-style \emph{per-instruction
-lockstep} against the stepping functional model---to our knowledge the
-first for a SIMT GPGPU. We report five SIMT-specific alignment rules that
-a scalar-CPU lockstep never encounters, a sound two-pass load-value feed
-that renders racy, fenceless multi-core programs
-instruction-granularity verifiable (residual~0 over 5{,}432 retirements on
-the flagship case), a reference-model fetch bug found by the lockstep
-itself, and a precisely characterized soundness boundary at asynchronous
-interrupt timing.
+transactions, and whose SIMT execution model---warps, thread masks,
+divergence, barriers---lies outside the domain of standard RISC-V
+reference models and verification interfaces. We present a complete,
+fully configurable UVM verification environment for Vortex, an
+open-source RISC-V GPGPU, whose checking depth reaches RVVI-style
+\emph{per-instruction lockstep} against a stepping functional reference
+model (SimX) integrated over DPI-C---to our knowledge the first such
+flow for a SIMT GPGPU. The methodology contributes five SIMT-specific
+stream-alignment rules that no scalar-CPU lockstep encounters; a sound,
+region-filtered per-lane load-data compare; and a two-pass load-value
+feed that renders racy, fenceless multi-core programs
+instruction-granularity verifiable (residual~0 over 5{,}432 retirements
+on the flagship case), with a precisely characterized soundness boundary
+at asynchronous interrupt timing. Every verdict class is proven
+non-vacuous by permanent fault-injection tests. The environment achieves
+100\% functional and 91.0\% total coverage on the primary configuration
+(43/43 tests) and 85.2\% at two clusters, using only machine-generated,
+RTL-cited structural exclusions. Beyond the methodology, we report the
+defects and limitations the flow exposed in \emph{both} models: RTL
+findings including a JALR target-LSB ISA deviation whose skewed PC
+propagates into architectural results, a non-scaling watchdog macro
+(\code{1**N}), and silent misaligned-access corruption; and
+reference-model findings including a misaligned-fetch bug found by the
+lockstep itself. We close with a prioritized enhancement roadmap for
+both the RTL and the reference model.
 \end{abstract}
 
 \begin{IEEEkeywords}
 GPGPU verification, UVM, RISC-V, SIMT, lockstep, RVVI, functional
-coverage, fault injection, Vortex
+coverage, fault injection, reference models, Vortex
 \end{IEEEkeywords}
 
 % =========================================================================
 \section{Introduction}
 \label{sec:intro}
 
-Open-source RISC-V CPU cores enjoy a mature verification ecosystem:
-constrained-random instruction generators \cite{riscvdv}, spec-complete
-instruction-set simulators \cite{spike}, and step-and-compare frameworks
-such as OpenHW \code{core-v-verif} with the RISC-V Verification Interface
-(RVVI) \cite{corevverif,rvvi}. None of this transfers directly to an
-open-source GPGPU. Vortex \cite{vortex-micro,vortex-carrv}, a RISC-V
-GPGPU implementing RV32IMAF plus six SIMT control instructions
-(\code{wspawn}, \code{tmc}, \code{split}, \code{join}, \code{bar},
-\code{tex}), differs from a CPU DUT in three ways that shape the whole
-verification problem:
+Open-source RISC-V CPU cores enjoy a mature dynamic-verification
+ecosystem: constrained-random instruction generators
+(riscv-dv~\cite{riscvdv}), portable reference simulators
+(Spike~\cite{spike}), and per-instruction comparison flows in which
+every retirement is checked against a stepping golden model through a
+standard interface (RVVI~\cite{rvvi}, as industrialized by OpenHW
+core-v-verif~\cite{corevverif} and ImperasDV). None of this transfers
+directly to a GPGPU. Vortex~\cite{vortex-micro,vortex-carrv} executes
+RV32IMAF extended with six SIMT instructions
+(\code{wspawn}/\code{tmc}/\code{split}/\code{join}/\code{bar}/\code{tex});
+Spike cannot execute them, no RVVI transactor models per-lane thread
+masks, and the DUT is an AXI \emph{master} that fetches its own
+stimulus from memory---there is no sequence-item stimulus path to
+randomize.
+
+This paper presents a UVM environment and methodology that closes that
+gap, and reports what the resulting checking depth revealed about both
+the RTL and its reference model. Our contributions:
 
 \begin{enumerate}
-\item \textbf{The DUT is a master.} Vortex initiates all memory traffic
-      over AXI4; the testbench must \emph{respond}, not drive. Stimulus
-      is therefore a compiled program image plus a launch sequence, not a
-      stream of bus transactions.
-\item \textbf{The reference-model domain is SIMT.} A scalar ISS such as
-      Spike cannot execute warp-collective instructions, divergence
-      stacks, or hardware barriers, so the natural golden model is the
-      project's own cycle-level simulator, SimX---which was never
-      designed to be a verification reference.
-\item \textbf{Legal nondeterminism is first-class.} Fenceless multi-core
-      programs have many legal outcomes; a golden model resolves shared
-      memory ordering differently than timing-accurate RTL without either
-      being wrong.
+\item \textbf{A complete, configurable UVM environment for a SIMT
+GPGPU} (Section~\ref{sec:env}): role-inverted agents (DUT = AXI master,
+agents = reactive slaves), a DPI-C--integrated functional golden model
+rebuilt per configuration, a passive RVVI-style observability layer,
+and a bidirectional end-state scoreboard---any
+$\textit{clusters}\times\textit{cores}\times\textit{warps}\times\textit{threads}$
+topology from runtime options (plusargs) with elaboration-time
+parameter self-checks.
+\item \textbf{Per-instruction lockstep for SIMT}
+(Section~\ref{sec:lockstep}): five alignment rules---uuid-keyed
+program-order sorting, mask-union record aggregation, per-lane
+compare scoping, and volatile-CSR exclusion---that make CPU-style
+lockstep sound for a SIMT machine, validated lane-exact across a
+$2\times2\times3\times2$ configuration matrix.
+\item \textbf{A sound two-pass load-value feed}
+(Section~\ref{sec:loadfeed}) that makes racy, fenceless multi-core
+programs---architecturally undefined and previously unverifiable---%
+instruction-granularity verifiable, with the \emph{residual as the
+verdict} and non-vacuity proven by injection; plus a characterized
+soundness boundary at asynchronous interrupt timing
+(Section~\ref{sec:limits}).
+\item \textbf{An evidence-classified findings register}
+(Sections~\ref{sec:rtlfindings}--\ref{sec:reffindings}): RTL bugs,
+hazards, and observability limits, and reference-model defects---each
+with \code{file:line} evidence and a disposition---including a
+reference-model fetch bug found \emph{by} the lockstep, demonstrating
+that a lockstep flow verifies the golden model as much as the DUT.
+\item \textbf{Honest coverage closure} (Section~\ref{sec:coverage}):
+100\%/91.0\% (functional/total) on the primary configuration using only
+machine-generated, per-configuration, RTL-cited structural exclusions,
+with unreachable-versus-unhit distinguished by evidence and structural
+ceilings root-caused rather than waived.
 \end{enumerate}
 
-This paper describes how we addressed all three, in two stages, and what
-we believe generalizes. Our contributions are:
-
-\begin{enumerate}
-\item A complete black-box UVM environment for a SIMT GPGPU with a
-      role-inverted agent architecture (DUT master, reactive slave
-      agents backed by a memory model) and a DPI-integrated functional
-      golden model (Section~\ref{sec:env}).
-\item A \emph{trust-the-bench} methodology in which verdict non-vacuity
-      is demonstrated, not assumed: permanent negative fault-injection
-      tests (wrong-value and dropped-store) act as regression guards for
-      the checker itself (Section~\ref{sec:gate0}).
-\item An honest coverage-closure discipline: config-aware,
-      machine-generated exclusions each citing the RTL line that proves
-      structural unreachability; root-caused structural ceilings reported
-      at true value rather than gamed; per-configuration coverage banks
-      with a demonstration that cross-configuration merging is invalid
-      (Section~\ref{sec:coverage}).
-\item To our knowledge the first RVVI-style per-instruction lockstep for
-      a SIMT GPGPU, including five SIMT-specific alignment rules derived
-      from simulation evidence (Section~\ref{sec:lockstep}).
-\item A sound two-pass load-value feed that makes racy fenceless
-      multi-core programs verifiable at instruction granularity, with
-      the residual mismatch count as the verdict
-      (Section~\ref{sec:loadbus}); and a characterized soundness
-      boundary at asynchronous interrupt delivery
-      (Section~\ref{sec:boundary}).
-\item Evidence that \emph{the golden model is itself a verification
-      target}: the lockstep exposed and localized a reference-model
-      instruction-fetch bug that had silently misclassified runs
-      (Section~\ref{sec:refbug}).
-\end{enumerate}
-
-Throughout, we quantify an often-invisible cost: bring-up of the
-DUT--reference co-simulation alone surfaced 43 distinct root-caused
-issues before any meaningful verification could begin
-(Section~\ref{sec:bringup}).
+Section~\ref{sec:enhance} distills the findings into a prioritized
+enhancement roadmap for the RTL, the reference model, and the
+methodology itself.
 
 % =========================================================================
 \section{Background and Related Work}
 \label{sec:background}
 
 \subsection{Vortex}
-Vortex \cite{vortex-micro,vortex-carrv} is an open-source RISC-V GPGPU
-organized as clusters of sockets of cores behind shared L2/L3 caches. Each
-core is a five-stage in-order pipeline extended with SIMT machinery: a
-warp scheduler, an IPDOM divergence stack, banked register files, and a
-hardware barrier unit; execution units comprise ALU, FPU, LSU, SFU, and a
-tensor-core unit (TCU). The memory system is a multi-banked, non-blocking,
-\emph{write-through} cache hierarchy with per-bank MSHRs. Our work pins
-one RTL commit and verifies two build configurations: a primary
-single-cluster configuration (1 cluster / 1 core / 4 warps / 4 threads,
-RV32, AXI) and a scale configuration (2 clusters / 2 cores / 4 warps / 4
-threads).
+Vortex~\cite{vortex-micro,vortex-carrv} is an open-source RISC-V GPGPU
+organized as clusters $\to$ sockets $\to$ cores $\to$ warps $\to$
+threads, with per-core instruction/data caches, optional shared L2/L3,
+an immediate-post-dominator (IPDOM) reconvergence stack for divergence,
+and hardware barriers. Execution units
+comprise ALU, FPU (FPnew), LSU, SFU (CSR/warp control), and a tensor
+unit (TCU). The verified build is RV32IMAF at RTL pin \code{7a52ee5},
+primary configuration 1~cluster / 1~core / 4~warps / 4~threads
+(``1CL/1C/4W/4T'') with an AXI memory interface, simulated on
+QuestaSim 2021.2. Notably, Vortex has \emph{no trap architecture}: there
+are no illegal-instruction, misaligned-address, or CSR exceptions---a
+property with verification consequences developed in
+Section~\ref{sec:rtlfindings}.
 
 \subsection{Reference models}
-SimX is Vortex's C++ cycle-level simulator, intended for design-space
-exploration. Crucially, its functional emulator steps
-instruction-by-instruction, holds full SIMT architectural state, and is
-cleanly decoupled from its timing model---properties we exploit in
-Section~\ref{sec:lockstep}. SimX is written by the design team and is
-therefore \emph{not independent} of the DUT; shared assumptions can hide
-shared bugs. A scalar spec-authority ISS (Spike \cite{spike}) is planned
-as a base-ISA cross-check but cannot serve as the primary golden model
-because it cannot execute the SIMT instructions.
+Vortex ships SimX, a functional (non-timing) simulator maintained with
+the RTL. SimX's emulator steps per instruction, returns a retirement
+trace with full SIMT architectural state, and is decoupled from its
+timing model---structurally an RVVI-shaped golden model. Spike cannot
+execute the six SIMT instructions, so SimX is the primary golden model;
+Spike is retained as a planned base-ISA independence audit
+(Section~\ref{sec:enhance}). The consequence---that the golden model is
+maintained by the same project and must itself be treated as a
+verification target---is examined in Section~\ref{sec:reffindings}.
 
-\subsection{Related verification frameworks}
-OpenHW \code{core-v-verif} \cite{corevverif} established step-and-compare
-verification of RISC-V CPU cores against a reference model over RVVI
-\cite{rvvi}, commercialized in ImperasDV-style flows where
-unpredictable inputs (loads from volatile memory, asynchronous
-interrupts) are \emph{fed} from the DUT to the reference. riscv-dv
-\cite{riscvdv} provides constrained-random RISC-V program generation. Our
-environment began, deliberately, as an extension of the
-\code{core-v-verif} CV32E40P environment toward a GPGPU target, and the
-second stage of this work returns to that methodology family---but every
-step-and-compare mechanism had to be rethought for SIMT semantics
-(Section~\ref{sec:corrections}).
+\subsection{Related verification flows}
+core-v-verif~\cite{corevverif} established step-and-compare
+verification for CPU cores against ImperasDV via RVVI~\cite{rvvi};
+riscv-dv~\cite{riscvdv} supplies constrained-random programs. Our
+environment descends from this methodology family and extends it in
+three directions: to a bus-master DUT (role-inverted agents), to SIMT
+semantics (per-lane masked compare, divergence, multi-record
+retirements), and to weakly-ordered multi-core programs (the two-pass
+load feed). We are not aware of a prior per-instruction lockstep flow
+for a SIMT GPGPU.
 
 % =========================================================================
-\section{Black-Box Environment Architecture}
+\section{Verification Environment}
 \label{sec:env}
 
 \subsection{Role-inverted agent architecture}
-The environment comprises five UVM agents: host-control, DCR
-(device-configuration register), and AXI agents are active; a custom
-memory-protocol agent operates active-or-passive; a status agent is
-passive. Because the DUT masters the bus, the AXI and memory agents are
-\emph{reactive slaves}: drivers listen on AW/W/AR channels and serve B/R
-responses by querying a sparse byte-addressed memory model that also holds
-the pre-loaded program image. A virtual sequencer coordinates launch:
-DCR writes (startup address, kernel arguments) while reset is held,
-followed by liveness monitoring to a decoded-\code{EBREAK} completion
-event.
-
-Stimulus and tests are orthogonal by construction: a UVM \emph{test}
-defines how to drive (configuration, launch protocol, fault-injection
-modes); the \emph{program}---a compiled Vortex kernel ELF or a riscv-dv
-assembly image---defines what executes. The two compose at the build
-level, so every checker and coverage instrument applies uniformly to
-directed and random stimulus.
+A GPGPU DUT executes programs; it is not driven by them. The
+environment therefore inverts the usual UVM roles. Five agents
+surround the DUT: \emph{host} and \emph{device-configuration-register
+(DCR)} agents (active) drive the
+launch protocol---kernel base address, argument pointers, thread-count
+device-configuration registers---through the platform's control
+interface; the \emph{AXI} agent is an active \emph{responder}, a
+reactive slave backed by a memory model that services the DUT's fetch
+and data traffic; a \emph{memory} agent covers the non-AXI
+configuration of the same model; and a passive \emph{status} agent
+observes busy/completion state, the retired-instruction count, and the
+program counter. A virtual sequencer coordinates launch sequences.
+Stimulus is therefore a \emph{program} (a compiled ELF), and the UVM
+test class controls only \emph{how} it is launched, configured, and
+perturbed---tests and programs are orthogonal and composed at the build
+level.
 
 \subsection{Golden-model integration}
-SimX is compiled into the simulation as a DPI-C shared library. The
-scoreboard drives it with the same program image and DCR configuration as
-the RTL, runs it to completion, and performs a \emph{bidirectional}
-end-state comparison: a forward pass checks every word the DUT wrote
-against SimX, and a reverse pass checks words SimX wrote that the DUT
-never wrote---catching dropped stores, which a forward-only comparison
-is blind to. Sub-word stores are handled with per-byte validity masking;
-read-only sections and language-runtime artifacts (\code{.got}) are
-excluded with cited rationale. Both RTL and SimX are rebuilt per
-configuration so reference and DUT always match topology, and
-elaboration-time assertions compare every UVM topology parameter against
-the RTL's macros, failing loudly on mismatch.
+SimX is linked into the simulation via DPI-C
+(\code{simx\_init}/\code{load}/\code{dcr\_write}/\code{run} plus a
+per-retirement record export). Both the RTL and SimX are rebuilt per
+configuration so that DUT and reference always agree on topology.
+Golden-model crashes are trapped by a signal handler and mapped to a
+sentinel exit code, so a reference-model failure is \emph{classified}
+(Section~\ref{sec:verdicts}) rather than crashing the run or silently
+passing it.
 
-\subsection{Passive observability}
-A passive probe is bound to each core's commit arbiter, exposing the full
-retirement record (instruction UUID, warp ID, PC, thread mask,
-destination register, per-lane data) for coverage and---in
-stage two---for lockstep capture. Probes observe and never gate: the
-black-box verdict comes only from state comparison against the golden
-model.
-
-\subsection{The cost of bring-up}
-\label{sec:bringup}
-Before the environment produced its first honest verdict, integration
-surfaced \textbf{43 distinct root-caused issues} across three domains:
-RTL simulation under the commercial simulator (macro type strictness,
-protected diagnostics, third-party FPU packaging), the SimX DPI
-integration (a RAM page-size constructor bug yielding zero-reads, C++
-ABI/GLIBCXX mismatches against the simulator's bundled toolchain, global
-state ordering hazards, exit-code protocol), and the UVM architecture
-(dual-driver conflicts, dependency-ordered compilation). We report the
-count because this integration cost is real, rarely published, and
-dominated early schedule. Each issue is documented with symptom, root
-cause, and fix in the project record.
-
-% =========================================================================
-\section{Trust the Bench: Provable Non-Vacuity}
-\label{sec:gate0}
-
-Three independent incidents during bring-up produced \emph{vacuous
-passes}---green results that verified nothing:
-(i)~the scoreboard mirrored every DUT write into SimX memory before
-running it, so the reference computed from DUT-contaminated state and
-comparisons passed \emph{regardless of RTL correctness};
-(ii)~a smoke test passed having executed one instruction with zero
-comparisons; and
-(iii)~a hex-image base-address overflow left the code region empty, and
-the DUT ``passed'' by fetching NOPs.
-
-These incidents motivated a blocking methodology gate (``Gate-0''): no
-coverage or regression number is reported until the bench itself is
-proven. Its elements:
-
+\subsection{Passive observability layer}
+All white-box visibility is bound, passive, and never a checker:
 \begin{itemize}
-\item \textbf{Permanent negative tests.} Two fault-injection tests ship
-      with the environment: one flips a single bit in one DUT store; one
-      drops a store entirely. The checker must catch both---the tests
-      \emph{must stay red on injection}---and both run as regression
-      guards after any scoreboard change. Injection later extends to the
-      lockstep layer (Section~\ref{sec:lockstep}), where a single flipped
-      bit must be caught at the exact UUID, PC, and SIMT lane.
-\item \textbf{No fabricated metrics.} An instruction counter derived as
-      \code{mem\_ops/3} was replaced with a true retired-instruction tap
-      on the commit arbiter across all cores and lanes; an error gate
-      that subtracted two from the UVM error count was removed;
-      completion detection moved from an idle-threshold heuristic to
-      decoded \code{EBREAK}.
-\item \textbf{Derived, asserted parameters.} Interface widths are derived
-      from the RTL package (a hand-coded ``ID width = 8'' turned out to
-      be a 50-bit tag in reality) and checked by elaboration assertions.
+\item a \emph{commit probe} bound to the retire arbiter of every core,
+capturing each retirement beat
+$\{\textit{uuid}, \textit{wid}, \textit{PC}, \textit{rd},
+\textit{wb}, \textit{tmask}, \text{per-lane data}\}$---where
+\textit{uuid} is the RTL's unique per-instruction identifier,
+\textit{wid} the warp id, and \textit{tmask} the active-thread
+mask---across all clusters, sockets, cores, and issue lanes;
+\item an \emph{LSU writeback probe} bound to the load-store slice,
+capturing true per-lane load values after sign/zero extension
+(required because load data is not observable at the commit arbiter,
+Section~\ref{sec:rtlfindings});
+\item an RVVI-style interface and UVM monitor that publishes the merged
+retirement stream through an analysis port, following the
+core-v-verif \code{uvma\_rvvi} pattern;
+\item a scheduler probe and instruction-class probes feeding functional
+coverage.
 \end{itemize}
+Lockstep capture is plusarg-gated; with the gate off, runs are proven
+byte-identical to the plain environment.
 
-Gate-0 also root-caused two startup-protocol findings in the RTL's
-surrounding behavior: the core self-starts from reset while its DCR base
-registers have no reset value---a race the environment closes by holding
-reset until a configuration-done handshake---and a latent RTL bug in
-which a watchdog macro computes \code{1**N}, which is identically~1, so a
-stall timeout never scales with cache-hierarchy depth as intended.
+\subsection{Checkers}
+Two independent checkers render verdicts:
+\begin{enumerate}
+\item \textbf{Bidirectional end-state scoreboard.} After completion,
+every word the DUT wrote is compared byte-exact against SimX
+(forward pass, up to 32{,}836 words in one test), \emph{and} every
+word SimX wrote that the DUT never wrote is checked (reverse pass,
+catching dropped stores). Sub-word stores are handled with per-byte
+validity masking; IEEE-rounding-legitimate FP differences are
+tolerance-compared; read-only/GOT sections are excluded by region.
+\item \textbf{Lockstep scoreboard} (Section~\ref{sec:lockstep}): every
+retired instruction compared per active SIMT lane.
+\end{enumerate}
+A third, orthogonal gate makes the run verdict \emph{assertion-aware}:
+any RTL runtime assertion firing fails the run with a distinct exit
+code, and failing runs are excluded from coverage merging. A dedicated
+negative test (a deliberate misaligned load whose value is discarded)
+keeps this gate honest: it must fail through the assertion path alone
+while the scoreboards pass.
+
+\subsection{Configurability with self-checks}
+One compiled environment runs any topology from plusargs
+(\code{+CLUSTERS}/\code{+CORES}/\code{+WARPS}/\code{+THREADS});
+interface widths (e.g., the 50-bit memory tag) are derived from the RTL
+package, and elaboration-time assertions compare every UVM parameter
+against its DUT counterpart, failing loud on mismatch. Validated
+topologies include 1CL/1C/4W/4T, 1CL/2C, 2CL/2C/4W/4T, 4C/2W, and
+8C/8W/2T.
+
+\subsection{Protocol assertions}
+An AXI4 SVA layer (${\sim}15$--$18$ protocol properties plus 11
+handshake-stability assertions) checks burst legality,
+outstanding-count consistency, and signal stability under backpressure
+inline on the DUT's AXI interface; slave-side \emph{throttle}
+(ready wait-states) and \emph{flood} (back-to-back R beats) stress
+modes---plusarg-gated and proven byte-identical when off---exercise the
+stability properties.
 
 % =========================================================================
-\section{Stimulus and Honest Coverage Closure}
-\label{sec:coverage}
+\section{Verdicts and Non-Vacuity}
+\label{sec:verdicts}
 
-\subsection{Stimulus}
-The suite combines $\sim$30 directed kernels (real C kernels compiled
-with the Vortex toolchain: vector arithmetic, all 13 FPU operation
-classes, tensor-core WMMA, nested-divergence towers, barriers under
-partial thread masks, MSHR saturation, a 232\,KB-text kernel, a 256\,KB
-high-entropy store stress) with a working riscv-dv pipeline
-(RV32IM target; machine-mode CSRs stripped and \code{ecall} rewritten for
-the GPU target) contributing $\sim$12 random-program seeds, plus
-plusarg-gated AXI slave stress modes (response throttling and read
-flooding) that are proven byte-identical to default behavior when
-disabled.
+Every run renders one of four verdicts: \textsc{pass},
+\textsc{fail}, \textsc{unverifiable}, or (for lockstep runs)
+\textsc{end-state-verified} with an instruction-granularity residual.
+\textsc{unverifiable} is first-class: a run where the golden model
+cannot render a verdict (e.g., a reference-model abort) is classified
+with root-cause evidence---never force-compared, never silently
+dropped, and never counted as a pass.
 
-\subsection{Coverage model}
-Seventeen covergroups span instruction classes per execution unit
-(operation-decoded), SIMT divergence crossed with IPDOM depth,
-warp/thread-mask crosses for collective operations, barrier and
-warp-spawn behavior, a stall taxonomy crossed with windowed IPC, AXI
-transaction fields, DCR/host activity, and system state. Each group
-carries a written sufficiency rationale in a reviewed reference document.
-
-\subsection{Closure discipline}
-\label{sec:closure}
-Three rules kept closure honest:
-
-\begin{enumerate}
-\item \textbf{Exclusions are structural, cited, and generated.} A
-      generator script emits per-configuration exclusion files in which
-      every waiver cites the RTL line proving unreachability---e.g.,
-      write-response stability assertions are excluded because the AXI
-      adapter hardwires \code{bready=1}; a barrier's global flag is
-      excluded \emph{only} at single-core builds where it is
-      structurally unreachable, and kept at $\ge$2 cores. The merge flow
-      verifies zero ineffective exclusions.
-\item \textbf{Ceilings are root-caused, not gamed.} Toggle coverage
-      saturates near 78\%: the write-through cache never drives the
-      512-bit line write-data fields, and PC/address high bits are
-      constant for realistic program layouts. A maximum-entropy
-      adversarial kernel moved aggregate toggle by $+0.02$\%,
-      demonstrating the ceiling is structural. It is reported at true
-      value; the founding toggle goal ($>$90\%) is reported as
-      \emph{not met}.
-\item \textbf{Per-configuration banks, never blended.} Merging coverage
-      databases across configurations inflates the instance count
-      (2{,}247\,$\rightarrow$\,8{,}260 between our two configurations)
-      and mixes incompatible signal widths; per-configuration reporting
-      is the only sound aggregation.
-\end{enumerate}
-
-\subsection{Results}
-Table~\ref{tab:coverage} shows the banked results, reproduced from the
-coverage databases with the vendor tool during the audit of this paper.
-An observation of practical value: the tool's ``total'' is the
-\emph{unweighted mean of seven category percentages} regardless of bin
-count, so the lowest category is the largest lever---closing 11
-directive bins moved the total more than 425{,}000 toggle bins could.
-
-\begin{table}[t]
-\caption{Coverage results per configuration (never blended). Reproduced
-from the banked UCDBs via \code{vcover report -summary}.}
-\label{tab:coverage}
-\centering
-\begin{tabular}{lrr}
-\toprule
-Metric & 1CL/1C/4W/4T & 2CL/2C/4W/4T \\
-\midrule
-Functional (covergroups) & \textbf{100.00\%} & 92.48\% \\
-Statement   & 97.05\% & 96.19\% \\
-Branch      & 91.16\% & 89.68\% \\
-Condition   & 76.35\% & 69.57\% \\
-Toggle      & 78.65\% & 74.25\% \\
-Assertion   & 93.79\% & 73.96\% \\
-Directive   & 100.00\% & 100.00\% \\
-\midrule
-\textbf{Total} & \textbf{91.00\%} & \textbf{85.16\%} \\
-Tests passing  & 43/43 & 40/42 \\
-\bottomrule
-\end{tabular}
-\end{table}
-
-\subsection{The unverifiable verdict class}
-\label{sec:unverifiable}
-Runs the golden model cannot judge are \emph{classified}, never
-force-compared: $\sim$10 random programs abort SimX on exotic encodings
-(the current tree contains 56 \code{std::abort} sites in its
-decoder/executor); and at two clusters, two fenceless/interrupt-heavy
-random tests diverge from SimX deterministically \emph{per cluster}
-(SimX's cluster-0 cores match the DUT byte-exactly while cluster-1
-diverges by one propagating value)---root-caused by elimination to
-unsynchronized cross-core memory ordering resolved differently by a
-functional interleaving than by timing-accurate RTL, consistent with
-Vortex's relaxed coherence \cite{vortex-micro}. Under end-state checking
-these remained honest ``unverifiable'' entries. Retiring this bucket is
-the strongest motivation for stage two.
+Verdicts are only as good as their ability to go red. The environment
+therefore carries \emph{permanent negative fault-injection tests} as
+regression guards:
+\begin{itemize}
+\item \textbf{wrong-value injection}: one bit of one DUT store is
+flipped; the end-state scoreboard must catch it;
+\item \textbf{dropped-store injection}: one DUT store is suppressed;
+the reverse scoreboard pass must catch it;
+\item \textbf{lockstep injection}: one bit of one retirement is
+flipped; the lockstep comparator must catch it at the exact
+uuid/PC/lane;
+\item \textbf{assertion-gate guard}: the misaligned-load negative test
+must fail through the RTL-assertion path alone.
+\end{itemize}
+All four must stay red on injection after any checker change. This
+discipline, rather than any single checker, is what allows the coverage
+and pass-rate numbers below to be taken at face value.
 
 % =========================================================================
 \section{Per-Instruction Lockstep for SIMT}
 \label{sec:lockstep}
 
 \subsection{Architecture}
-The functional emulator inside SimX already steps one instruction at a
-time, returns an RVVI-shaped retirement record, and exposes per-lane
-destination-register readback---it is most of an RVVI golden model,
-needing only an export path. We serialize each retirement
-\{UUID, core, warp, thread mask, PC, destination, per-lane value,
-functional-unit type, volatile flag\} over the existing DPI bridge. On
-the DUT side, the passive commit probe captures every retirement beat
-under a runtime flag (default-off runs are proven byte-identical). A
-dedicated lockstep scoreboard aligns the two streams and compares every
-\emph{active SIMT lane}: PC, destination register, and written value,
-with a four-way outcome taxonomy (matched, field mismatch, data
-mismatch, orphan) and an end-of-test drain-empty check on both sides so
-dropped or extra retirements cannot hide. Non-vacuity is again proven by
-injection: a single flipped bit in one retirement is caught at the exact
-UUID, PC, and lane.
-
-On the primary configuration the proof-of-concept matched 1{,}035 of
-1{,}035 architectural writebacks with zero orphans and zero mismatches.
+The DUT-side probe stream and the SimX per-retirement stream meet in a
+lockstep scoreboard that aligns both streams per (core, warp) and
+compares each retirement per active SIMT lane: PC, destination
+register, and written value, with a four-way outcome taxonomy
+(matched / field mismatch / data mismatch / orphan) and drain-empty
+checks on both sides so that dropped or extra retirements are caught.
 
 \subsection{Five SIMT-specific alignment rules}
-\label{sec:corrections}
-Each of the following was forced by simulation evidence, and none arises
-in a scalar-CPU lockstep. We consider them the transferable design rules
-for SIMT step-and-compare:
+\label{sec:rules}
+A scalar-CPU RVVI flow never meets the following; each rule was forced
+by simulation evidence and is, we believe, transferable to any SIMT
+lockstep implementation.
 
+\subsubsection{Retire order is not program order}
+Within one warp, the commit arbiter retires whichever execution unit is
+ready first (\code{VX\_commit.sv:56-71}); an earlier-issued instruction
+was observed retiring after two later ones. The functional model
+retires in strict program order. \emph{Rule: align by the per-warp
+issue counter (uuid), sorted---never by position or cycle.}
+
+\subsubsection{The golden model's uuid is not a cross-key}
+SimX leaves its retirement uuid at zero (Section~\ref{sec:reffindings}),
+so DUT and reference uuids cannot be matched directly. \emph{Rule: the
+alignment key is per-(core, warp) program order; the DUT uuid's
+high bits---which encode $(\textit{CORE\_ID} \ll
+\textit{NW\_BITS}) + \textit{wid}$ (\code{VX\_uuid\_gen.sv:40})---%
+supply the (core, warp) attribution with no RTL change.}
+
+\subsubsection{One instruction is not one retirement record}
+A single load can appear as several commit records sharing one uuid
+with partial, overlapping thread masks (observed: masks \code{0xd} then
+\code{0xe}), because the LSU commits lanes as their memory responses
+arrive---distinct from clean SIMD-beat splitting. \emph{Rule: aggregate
+DUT records by uuid with thread-mask union before comparing; never
+aggregate by start/end-of-packet flags.}
+
+\subsubsection{Load data needs its own tap and its own soundness
+filter}
+The commit arbiter's data field is stale for loads (the LSU writes the
+register file on its asynchronous response path). A dedicated LSU
+writeback probe recovers true per-lane values---but a naive compare is
+\emph{unsound}: loads of uninitialized stack or local memory
+legitimately differ between models (429 false mismatches on a known-good
+kernel). \emph{Rule: compare a load lane only when the reference-model
+effective address lies in the verifiable data region and the golden
+value is not the initialization poison; defer everything else to the
+end-state check.} With this filter the load compare is exact and on by
+default (74 in-region lanes compared, 113 filtered, 0 false mismatches
+on the reference kernel).
+
+\subsubsection{Performance-counter CSRs are model-divergent by
+definition}
+\code{mcycle}/\code{minstret}/\code{mhpmcounter*} differ between a
+timing-accurate DUT and a functional model (observed off-by-one).
+\emph{Rule: the golden model flags the machine-performance-monitor CSR
+range as volatile and the comparator excludes their data (PC and
+destination still checked)---the standard RVVI exclusion class.}
+
+\subsection{Cross-configuration validation}
+The lockstep was validated lane-exact---zero mismatches, zero
+orphans---across a configuration matrix spanning
+$\textit{NCL}\in\{1,2\}$, $\textit{NC}\in\{1,2\}$,
+$\textit{NW}\in\{2,4,8\}$, $\textit{NT}\in\{2,4\}$
+(Table~\ref{tab:matrix}), including a nested-divergence kernel
+(asymmetric $3\text{v}1 \to 2\text{v}1 \to 1\text{v}1$ splits) that
+exercised the mask-union aggregation through divergence and
+reconvergence with no comparator changes.
+
+\begin{table}[t]
+\caption{Lockstep configuration matrix (all lane-exact: 0 mismatches,
+0 orphans)}
+\label{tab:matrix}
+\centering
+\small
+\begin{tabular}{lr}
+\toprule
+Configuration & Matched writebacks \\
+\midrule
+1CL/1C/4W/4T (vector-add kernel) & 1{,}035 / 1{,}035 \\
+1CL/1C/4W/4T (nested divergence) & 2{,}668 / 2{,}668 \\
+1CL/2C/4W/4T & 1{,}801 / 1{,}801 \\
+2CL/2C/4W/4T & 3{,}333 / 3{,}333 \\
+1CL/1C/2W/2T & 855 / 855 \\
+1CL/1C/8W/4T & 1{,}423 / 1{,}423 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% =========================================================================
+\section{Verifying Racy Programs: the Two-Pass Load-Value Feed}
+\label{sec:loadfeed}
+
+\subsection{The problem}
+A fenceless program run on $N$ shared-memory cores is architecturally
+undefined: any interleaving of the cross-core stores is legal, so a
+functional model stepping cores in a fixed order and a timing-accurate
+DUT legitimately read \emph{different} values at racy loads---and every
+downstream value forks. End-state comparison can only classify such
+runs unverifiable. Industrial RVVI flows solve the analogous CPU
+problem by feeding DUT-observed load data to the reference model over a
+``load bus''; no such mechanism existed for a SIMT multi-core.
+
+\subsection{The mechanism}
+We implement the load bus as a \emph{sound two-pass trace replay}:
 \begin{enumerate}
-\item \textbf{Retire order is not program order.} The commit arbiter
-      retires whichever execution unit is ready (we observed an earlier
-      UUID retiring after two later ones). The reference retires in
-      program order. Alignment must key on the per-warp issue counter
-      (UUID), sorted---never on position or cycle.
-\item \textbf{The reference's UUID is not a cross-key.} SimX does not
-      populate it; the practical key is per-(core, warp) program order,
-      with the DUT's warp ID recovered from high UUID bits.
-\item \textbf{One instruction is many retirement records.} SIMD-beat
-      splits and, more subtly, \emph{partial-mask load writebacks}: the
-      LSU commits lanes as memory responses arrive, so one \code{lw}
-      appeared as two records with overlapping thread masks. Records
-      must be aggregated by UUID with thread-mask union before
-      comparison; any single in-flight slot keyed on start/end flags
-      corrupts under interleaving.
-\item \textbf{Load data is unobservable at the commit arbiter} (the LSU
-      writeback path is asynchronous to it). Load values were first
-      scoped to PC/ordering checks and later recovered soundly through a
-      dedicated writeback probe and the feed of
-      Section~\ref{sec:loadbus}.
-\item \textbf{Performance-counter CSRs are model-divergent by
-      definition} (cycle counts differ between timing RTL and a
-      functional model). The reference flags them volatile and they are
-      excluded from data comparison---exactly as commercial RVVI flows
-      do.
+\item \textbf{Pass 1} runs lockstep normally and captures every
+divergent in-region load, keyed by
+$(\textit{cid}, \textit{wid}, \textit{PC}, \textit{occurrence})$---a
+key robust to instructions inserted at different points in the two
+streams.
+\item The captured DUT per-lane load values are fed into the reference
+model through a DPI overlay at its single load site.
+\item \textbf{Pass 2} re-runs the reference in-process, following the
+DUT's racy loads, and re-compares everything.
+\end{enumerate}
+Soundness rests on three properties: (i) \emph{the residual is the
+verdict}---any pass-2 divergence not explained by a fed racy load
+remains a hard error; (ii) a \code{consumed==pushed} self-check guards
+feed alignment; (iii) pass-1 divergences are demoted to diagnostics
+only when the feed is armed. The end-state comparison is deferred and
+re-run against the post-feed reference, so final-memory equivalence is
+still independently checked.
+
+\subsection{Flagship result}
+On the pinned fenceless test at 2CL/2C/4W/4T---previously undecidable---%
+pass~1 identified 20 racy loads causing 138 cascaded mismatches; pass~2
+reached \textbf{residual 0 over 5{,}432/5{,}432 retirements}, and the
+deferred end-state compare passed. The run is thereby \emph{positively
+verified} equivalent modulo the architecturally-undefined racy loads,
+not merely excused. Injection guards remained red, and the default
+(no-feed) path remained byte-identical on regression kernels.
+
+\subsection{Failure localization}
+The same lockstep replay pinpoints first divergences exactly. For the
+fenceless case the first divergent instruction is
+\code{mulhu s0,s3,a3} at PC \code{0x800004f4} (sequence 278,
+cluster-1 cores only; cluster-0 byte-exact), and the divergence is
+already present in its \emph{inputs}: an upstream shared load at
+\code{0x80020618} where the DUT reads the pristine ELF
+initialization value (\code{0x7aea0e77}) while the reference---having
+interleaved another core's store first---reads \code{0x7a000e77}. This
+confirms, at instruction granularity, a reference-model
+memory-ordering artifact and \emph{not} a DUT bug; end-state
+comparison alone could never make that distinction.
+
+% =========================================================================
+\section{Stimulus}
+\label{sec:stimulus}
+
+\textbf{Directed kernels} (${\sim}30$, all compiled with the Vortex
+toolchain, all byte-exact against the reference): arithmetic and
+memory baselines; all 13 FPU operation classes; tensor-unit WMMA
+including multi-warp collective launches; nested-divergence towers;
+barriers under partial thread masks; \code{wspawn}/\code{tmc} sweeps;
+cache miss-status-holding-register (MSHR) and memory-pressure stress;
+a 232\,KB-text kernel; a 256\,KB
+high-entropy store stress; division corner cases; CSR writes under
+SIMT masks; and VOTE/SHFL operations.
+
+\textbf{Constrained-random}: a riscv-dv~\cite{riscvdv} pipeline
+targeting rv32im, with GPU-specific post-processing (machine-mode CSR
+stripping, \code{ecall}$\to$\code{ebreak}) and end-state verification;
+twelve random-program seed profiles run in the suite. Two riscv-dv
+profiles are excluded as \emph{unimplementable} on this DUT---%
+unaligned-load/store (the DUT has no misaligned support,
+Section~\ref{sec:rtlfindings}) and illegal-instruction (no trap
+architecture)---and jump-stream generation is sanitized to keep the
+generator's deliberate JALR-LSB probing away from an RTL deviation it
+would otherwise trip (finding R1, Section~\ref{sec:rtlfindings}); the
+deviation itself is reported, not hidden.
+
+\textbf{Protocol stress}: the AXI throttle and flood modes of
+Section~\ref{sec:env}, plus host/DCR launch-space sweeps.
+
+% =========================================================================
+\section{Coverage Methodology and Results}
+\label{sec:coverage}
+
+\subsection{Closure discipline}
+Three rules govern closure. (1)~\emph{Exclusions are structural,
+RTL-cited, and machine-generated}: a per-configuration generator emits
+every waiver with a \code{file:line} citation (e.g., a write-response
+stability assertion is unreachable because the adapter hardwires
+\code{m\_axi\_bready = 1'b1}, \code{VX\_axi\_adapter.sv:313}), and the
+merge flow verifies zero ineffective waivers. Exclusions are keyed to
+the configuration---e.g., the global-barrier path is excluded only at
+single-core, where it is structurally unreachable, and kept at
+$\geq 2$ cores. (2)~\emph{Reachable-but-unhit is left red}: bins that
+stimulus could reach but did not are reported uncovered, never waived.
+(3)~\emph{Ceilings are root-caused}: the toggle plateau
+(${\sim}78\%$) was traced to the write-through cache configuration
+(512-bit line write-data fields never driven) and constant high
+PC/address bits for realistic programs; an adversarial maximum-entropy
+kernel moved aggregate toggle by $+0.02\%$, establishing the ceiling as
+structural. Coverage banks are reported \emph{per configuration}:
+merging coverage databases across topologies was shown to be invalid (instance-set
+inflation deflates by-instance percentages).
+
+\subsection{Functional model}
+Seventeen covergroups span instruction classes per execution unit
+(ALU/FPU/LSU/SFU/TCU, operation-decoded), SIMT divergence crossed with
+IPDOM depth, warp/thread-mask crosses, barrier/\code{wspawn}/\code{tmc}
+behavior, a stall taxonomy crossed with IPC buckets, AXI fields, DCR
+and host launch spaces, and system state---each with a written
+sufficiency rationale.
+
+\subsection{Results}
+Table~\ref{tab:coverage} summarizes the two banked configurations.
+
+\begin{table}[t]
+\caption{Coverage banks (QuestaSim; per-configuration, never blended)}
+\label{tab:coverage}
+\centering
+\small
+\begin{tabular}{lrr}
+\toprule
+Metric & 1CL/1C/4W/4T & 2CL/2C/4W/4T \\
+\midrule
+Functional (covergroups) & \textbf{100.0\%} & 92.5\% \\
+Statement & 97.1\% & 96.2\% \\
+Branch & 91.2\% & 89.7\% \\
+Condition & 76.4\% & 69.6\% \\
+Toggle & 78.7\% & 74.3\% \\
+Assertion & 93.8\% & 74.0\% \\
+Directive & 100.0\% & 100.0\% \\
+\midrule
+\textbf{Total} & \textbf{91.0\%} & \textbf{85.2\%} \\
+Tests passing & 43/43 & 40/42\textsuperscript{a} \\
+\bottomrule
+\multicolumn{3}{l}{\footnotesize\textsuperscript{a}The two exceptions
+are reference-model limits, root-caused in} \\
+\multicolumn{3}{l}{\footnotesize Sections~\ref{sec:loadfeed}
+and~\ref{sec:limits}, not DUT failures.}
+\end{tabular}
+\end{table}
+
+% =========================================================================
+\section{Findings I: RTL Observations}
+\label{sec:rtlfindings}
+
+Every finding is maintained in an evidence-cited register shipped with
+the work (one entry per finding: what was seen, \code{file:line} and/or
+run evidence, classification, disposition). Table~\ref{tab:rtlobs}
+summarizes the RTL findings as R1--R9; the substantive entries follow.
+
+\begin{table}[t]
+\caption{RTL findings (summary)}
+\label{tab:rtlobs}
+\centering
+\scriptsize
+\begin{tabular}{p{0.5cm}p{3.6cm}p{1.2cm}p{1.6cm}}
+\toprule
+ID & Finding & Class & Disposition \\
+\midrule
+R1 & JALR target LSB not cleared; odd PC propagates via AUIPC & Bug (ISA) & needs RTL fix; stimulus sanitized \\
+R2 & \code{STALL\_TIMEOUT} uses \code{1**N} $\equiv$ 1; watchdog never scales & Bug (latent) & needs RTL fix \\
+R3 & Misaligned access: no trap; silently retargeted/torn & Hazard & expected per SW contract; gated \\
+R4 & Core self-starts from reset; DCRs have no reset value & Hazard & worked around (reset handshake) \\
+R5 & Per-warp out-of-order commit & Quirk & handled (\S\ref{sec:rules}) \\
+R6 & One load $\to$ multiple commit records, overlapping masks & Quirk & handled (\S\ref{sec:rules}) \\
+R7 & uuid encodes flat core id + warp id & Quirk & exploited (\S\ref{sec:rules}) \\
+R8 & Load data not observable at commit arbiter & Observability & closed (LSU probe) \\
+R9 & Write path fire-and-forget (\code{bready} tied high) & Characteristic & cited exclusion \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{JALR does not clear the target LSB (R1)}
+The RISC-V specification requires JALR to clear the least-significant
+bit of the computed target. Vortex omits the clear
+(\code{VX\_alu\_int.sv:222}: the branch destination is the raw
+\code{rs1+imm}), and---having no trap architecture---cannot raise the
+instruction-address-misaligned exception the specification prescribes
+for a misaligned target on a non-compressed core. In the debug build
+(\code{PC\_BITS = XLEN}, identity PC conversion) the odd bit survives
+as the \emph{architectural} PC. Fetch silently word-aligns
+(\code{VX\_fetch.sv:101}), so execution continues on correct
+instruction words---but the skewed PC \emph{does} reach architectural
+results: every \code{auipc}/\code{la} computes
+$rd = \textit{PC} + \textit{imm}$ and inherits the skew, link-register
+writes accumulate it across chained jumps (observed $+1 \to +3$), and
+downstream loads/stores go misaligned, cascading into R3. The
+trigger is spec-legal stimulus: riscv-dv deliberately sets the JALR
+base LSB expecting the architectural clear, so roughly half of
+generated jumps derail---in a 12-profile suite, every profile fired
+misaligned-access assertions (30--7{,}616 per run). In the release
+build (\code{PC\_BITS = XLEN$-$2}) a $+1$ target is masked away by
+representation---spec-correct \emph{by accident}---while a $+2$ target
+would silently word-align where the specification demands a trap. The
+fix is a one-line \code{\&\,\~{}1} at the destination adder; because
+the reference model deliberately mirrors the no-clear behavior, the fix
+must un-mirror both models together.
+
+\subsection{Non-scaling stall watchdog (R2)}
+\code{VX\_config.vh:246} defines
+\code{STALL\_TIMEOUT = 100000 * (1 ** (L2\_ENABLED + L3\_ENABLED))}.
+The intent is to scale the pipeline stall watchdog with cache-hierarchy
+depth, but $1^N \equiv 1$, so the threshold is constant regardless of
+L2/L3. On deep-hierarchy configurations the watchdog can fire spuriously
+on legitimately long stalls. The fix is one character
+(\code{10\,**\,(\ldots)}).
+
+\subsection{Misaligned access: silent corruption, simulation-only
+detection (R3)}
+Misaligned data access is documented-unsupported, but the failure mode
+is hazardous. The byte-enable logic truncates address low bits per
+access size (\code{VX\_lsu\_slice.sv:159-184}): a halfword access at an
+odd address is silently \emph{retargeted} to the aligned slot, and an
+RV32 misaligned word access reads/writes only the containing aligned
+word---never crossing into the next word as byte-span semantics would
+require---while the store-data shifter uses the full alignment offset,
+so enable-set and data-shift disagree: \emph{torn bytes at a wrong
+address, with no error indication to software}. The only detection is a
+simulation-only runtime assertion (\code{VX\_lsu\_slice.sv:189}),
+compiled out under synthesis---silicon has zero detection. The same
+class recurs for CSRs: an invalid CSR access asserts in simulation
+(\code{VX\_csr\_data.sv:150}) instead of raising an exception. Our
+handling is defense in depth (the assertion-aware verdict gate fails
+any run that trips these) plus an upstream enhancement recommendation
+(Section~\ref{sec:enhance}). The reference model, by contrast, performs
+the access byte-accurately at the exact address, so any
+boundary-crossing misaligned access is a guaranteed DUT/reference
+divergence---detectable per-instruction under lockstep.
+
+\subsection{Startup protocol hazard}
+The core self-starts from reset (\code{VX\_schedule.sv:230}) while the
+base device-configuration registers have no reset value
+(\code{VX\_dcr\_data.sv:27}): a core that leaves reset before the host
+completes DCR programming fetches from an undefined base. The
+environment holds reset until a DCR-bootstrap-done handshake; an
+integration would need the same discipline or an RTL interlock.
+
+\subsection{Microarchitectural quirks and observability limits}
+Three quirks required---and validated---the alignment rules of
+Section~\ref{sec:rules}: per-warp out-of-order retirement (R5),
+multi-record partial-mask load retirement (R6), and the uuid
+encoding of flat core id and warp id (R7), which multi-core
+attribution exploits with no RTL change. One observability limit is
+structural: load writeback data never reaches the commit arbiter tap
+(R8); the dedicated LSU probe (with the soundness filter of
+Section~\ref{sec:rules}) closed it. Additionally, the LSU result bus
+broadcasts the active lane's value across all lane positions per beat
+(it is not a per-lane vector), and the AXI adapter hardwires write-%
+response ready---a fire-and-forget write path that makes one class of
+response-stability assertions structurally untestable (cited as a
+coverage exclusion, and a candidate RTL robustness improvement).
+
+% =========================================================================
+\section{Findings II: Reference-Model Observations}
+\label{sec:reffindings}
+
+A central lesson of this work: \emph{a lockstep flow verifies the
+reference model as much as the DUT}. SimX is maintained by the same
+project as the RTL, so shared assumptions can hide shared bugs; the
+per-instruction compare surfaced defects in the model itself.
+
+\subsection{Misaligned instruction fetch (found by lockstep; fixed)}
+SimX fetched at the exact byte PC
+(\code{emulator.cpp:145}). When a program's architectural PC is odd
+(the R1 mechanism---which the model correctly mirrors), the DUT
+fetches the word-aligned instruction and runs on, but SimX read
+misaligned bytes straddling two instructions, produced an undecodable
+word, and aborted---silently misclassifying every such run as
+unverifiable. The fix word-aligns the emulator fetch
+(\code{PC \& \~{}3}) while leaving the architectural PC odd to match
+the DUT. Notably, the ``obvious'' fix---masking the JALR target in the
+model---was tried and \emph{reverted with evidence}: it desynchronized
+the models (21{,}968 phantom PC mismatches), because it fixed the
+model to the specification rather than to the DUT under test.
+
+\subsection{Abort-on-unknown as an unverifiability source}
+The SimX decoder and executor abort on anything unrecognized:
+56 \code{std::abort()} sites (35 decode, 21 execute). Aborting is
+arguably correct for a golden model---refusing beats fabricating---but
+a bare abort converts a run into an unexplained \textsc{unverifiable}.
+Root-causing one such abort showed the DUT and model \emph{differ by
+design} here: a computed wild jump landed on non-instruction bytes; the
+RTL decoder degrades gracefully and runs to completion while the model
+dies. Two mitigations are in place: decode aborts now print the
+faulting PC and instruction word (self-documenting), and lockstep
+upgrades the verdict from ``nothing known'' to ``DUT $\equiv$ reference
+byte-exact for all 17{,}664 retirements the model executed before its
+crash''---corroboration end-state checking cannot provide.
+
+\subsection{Unpopulated retirement uuid}
+The model's retirement records carry $\textit{uuid} = 0$, so DUT and
+reference uuids cannot be cross-keyed; alignment must derive from
+per-(core, warp) program order (Section~\ref{sec:rules}). Populating it
+would upgrade an alignment heuristic into a strict 1:1 assertion.
+
+\subsection{Timing-class divergences}
+Two divergence classes are definitional for a functional model against
+a timing-accurate DUT, and must be engineered around rather than fixed:
+performance-counter CSR reads (flagged volatile and excluded, the
+standard RVVI class), and the ordering of cross-core memory operations
+in fenceless programs (the model steps cores in a fixed interleaving)---
+the class the two-pass load feed (Section~\ref{sec:loadfeed}) renders
+verifiable. Asynchronous interrupt delivery is the boundary of that
+technique (Section~\ref{sec:limits}).
+
+\subsection{Robustness gaps}
+Additional model defects surfaced during integration and are reported
+upstream: internal object sizing bound to compile-time defaults rather
+than the configured warp count (out-of-range crash at small
+configurations), aborts on machine-mode CSR ranges and compressed
+instructions that the generator legitimately emits, and a tensor-unit
+capability flag missing from the co-simulation build (silently
+classifying all tensor tests unverifiable). Each was root-caused and
+fixed or worked around; the pattern---\emph{the reference model needs
+its own verification and robustness budget}---is the finding.
+
+% =========================================================================
+\section{Limitations and the Soundness Boundary}
+\label{sec:limits}
+
+\subsection{Asynchronous interrupt timing}
+The interrupt-random test at two clusters collapses from 116 cascaded
+divergences to 7 under the load feed---and does not reach zero. The
+residual is proven \emph{keying-independent}: re-keying the feed from a
+per-warp ordinal to $(\textit{cid},\textit{wid},\textit{PC},
+\textit{occurrence})$ leaves it identical, disproving feed-alignment
+artifacts. The cause is genuine: the timing-accurate DUT and the
+functional model take asynchronous interrupts at different instruction
+boundaries, so an interrupt-affected path executes a different number
+of times; no load-data feeding can align \emph{when} an interrupt
+fires. The end-state compare against the post-feed model passes, so the
+disposition is: end-state \textsc{verified}, instruction-granularity
+residual classified---not forced green. This defines the method's
+soundness boundary: \emph{two-pass trace replay is a fixed point for
+data-only divergence; asynchronous-input timing requires a
+step-follower reference}.
+
+\subsection{Control-flow-steering races}
+A related boundary: when racy loaded bytes steer control flow (a random
+jump test), pass-2 replay walks a different path and meets \emph{fresh}
+racy loads the pass-1 trace never keyed (residual 15, all load-class;
+the post-feed end-state compare is clean). Two-pass replay has no fixed
+point when races feed branches; an iterated (bounded fixed-point) feed
+or a step-follower is required. The verdict is left honestly red.
+
+\subsection{Other limitations}
+\begin{itemize}
+\item \textbf{Reference-model independence.} SimX is not independent of
+the DUT; a base-ISA audit against Spike (which cannot execute the SIMT
+extensions) is planned, not done.
+\item \textbf{Unverifiable residue.} A minority of random-program runs
+remain unverifiable due to reference-model aborts; the abort-hardening
+sweep (Section~\ref{sec:enhance}) targets zero.
+\item \textbf{Structural coverage ceilings.} Toggle coverage plateaus
+near 78\% for root-caused structural reasons (write-through
+configuration, constant address high bits); we report the true value
+rather than gaming it.
+\item \textbf{No trap architecture.} Exception-path verification is
+unimplementable on this DUT (there are no exceptions); the
+corresponding generator profiles are excluded as unimplementable
+rather than skipped silently.
+\item \textbf{Verified build.} Findings are stated against the debug
+build (\code{PC\_BITS = XLEN}) at one RTL pin; the release build
+changes the visibility (not the presence) of finding R1.
+\end{itemize}
+
+% =========================================================================
+\section{Proposed Enhancements}
+\label{sec:enhance}
+
+\subsection{RTL (upstream recommendations)}
+\begin{enumerate}
+\item \textbf{JALR LSB clear} (\code{\&\,\~{}1} at the destination
+adder), coordinated with un-mirroring the reference model---restores
+specification conformance and un-derails spec-legal generators.
+\item \textbf{Watchdog scaling fix}: \code{1\,**\,N} $\to$
+\code{10\,**\,N} in \code{STALL\_TIMEOUT}.
+\item \textbf{Misaligned-access detection in silicon}: a
+misaligned-address trap, or minimally a sticky error CSR---today the
+only guard is a simulation-only assertion and the silicon failure mode
+is silent data corruption.
+\item \textbf{Write-response handling}: the fire-and-forget AXI write
+path (response-ready tied high) forfeits error observability; consuming
+write responses would also make the untestable stability assertions
+meaningful.
+\item \textbf{Startup interlock}: hold cores in reset until DCR
+programming completes, removing the integration hazard.
 \end{enumerate}
 
-\subsection{Generalization across SIMT and topology}
-With rules (1)--(5) in place and no further comparator changes, a
-nested-divergence kernel matched 2{,}668/2{,}668 retirements through
-split/join reconvergence. Multi-core attribution required no RTL change:
-we proved from the RTL that the DUT's UUID embeds a flat global core
-index matching the reference's core ID, and validated the comparator
-lane-exactly across a configuration matrix spanning clusters
-$\in\{1,2\}$, cores $\in\{1,2\}$, warps $\in\{2,4,8\}$, threads
-$\in\{2,4\}$ (e.g., 3{,}333/3{,}333 retirements across four cores in two
-clusters), all with zero mismatches and zero orphans.
-
-\subsection{The reference model is a verification target}
-\label{sec:refbug}
-Running formerly-unverifiable programs under lockstep immediately paid
-off \emph{against the golden model}: SimX fetched at the exact byte PC,
-while the DUT's debug build preserves a full odd PC after an
-indirect jump to an odd target but issues word-aligned fetches. SimX
-therefore read misaligned bytes, decoded garbage, and aborted---runs
-that were wrongly classified unverifiable. The fix word-aligns the
-emulator fetch; notably, the ``obvious'' alternative of masking the JALR
-target LSB was tried and \emph{reverted with evidence} (it desynchronizes
-the reference from the DUT's odd PC, producing 21{,}968 phantom PC
-mismatches). The decoder now prints the faulting PC and instruction word
-before any abort, so every remaining unverifiable case self-documents.
-
-% =========================================================================
-\section{Verifying Racy Programs: a Two-Pass Load-Value Feed}
-\label{sec:loadbus}
-
-For fenceless multi-core programs, racy load values are legally
-nondeterministic: the reference cannot predict them, and any interleaving
-is architecturally valid. Commercial RVVI flows solve this by feeding
-DUT-observed load data to the reference. Our implementation is a
-\emph{sound two-pass trace replay}:
-
+\subsection{Reference model}
 \begin{enumerate}
-\item \textbf{Pass 1} runs DUT and reference independently and captures
-      divergent loads keyed by (core, warp, PC, occurrence index)---
-      UUIDs differ across the two models, so instruction identity is
-      positional within this key.
-\item \textbf{Feed.} Captured values are pushed to the reference over
-      DPI; a \code{consumed==pushed} self-check guards feed alignment.
-\item \textbf{Pass 2} re-runs the reference in-process with the feed
-      active and re-compares everything. \emph{The residual mismatch
-      count is the verdict}: pass-1 divergences are demoted to
-      diagnostics only when the feed is armed, and any residual not
-      explained by a fed racy load remains a hard error.
+\item \textbf{Abort hardening}: route all 56 abort sites through
+self-documenting macros (PC + instruction word; done for 14), then
+classify each as garbage-input (keep aborting, now explained) versus
+genuinely unimplemented (implement, recovering verifiability)---driving
+the unverifiable class to zero.
+\item \textbf{Populate the retirement uuid}, upgrading lockstep
+alignment to a strict 1:1 key.
+\item \textbf{Spike base-ISA audit}: cross-check the model's RV32IM
+semantics against an independent simulator on the non-SIMT subset.
 \end{enumerate}
 
-On the pinned flagship case---a fenceless random program at two clusters
-whose end-state divergence had been unexplainable for weeks under
-end-state checking---lockstep first pinpointed the exact first divergent
-instruction (a \code{mulhu} at PC \code{0x800004f4}, sequence 278,
-cluster-1 cores only, with both register values in evidence; its inputs
-had already diverged, proving an upstream shared load rather than a
-compute bug). The feed then captured 20 racy loads, whose replay
-collapsed a 138-divergence cascade to \textbf{residual 0 over
-5{,}432/5{,}432 retirements}, and the deferred end-state comparison
-passed. A run that was ``unverifiable'' is now \emph{positively verified
-at instruction granularity}, with no waiver. Default-path regressions
-remain byte-identical and both stage-one injection guards remain red.
-
-% =========================================================================
-\section{Soundness Boundary: Interrupt Timing}
-\label{sec:boundary}
-
-The same feed applied to an interrupt-heavy random test at two clusters
-collapses 116 divergences to 7---and provably cannot reach zero. We
-re-keyed the feed from a global ordinal to (core, warp, PC, occurrence)
-and obtained a \emph{bit-identical residual of 7}, disproving the
-hypothesis that the residual is a feed-alignment artifact. The residual
-is genuine interrupt-\emph{delivery} timing: the timing-accurate DUT and
-the functional reference take the interrupt at different instruction
-boundaries, so the interrupt-affected path executes different iteration
-counts, and no amount of load-\emph{data} feeding can align \emph{when}
-an asynchronous event fires. The end-state comparison passes, so the run
-is dispositioned end-state-verified with a classified
-instruction-granularity residual---not forced green.
-
-This yields a precise statement of the method's domain: \textbf{two-pass
-trace replay is a fixed point for data-only divergence; asynchronous-input
-timing requires a step-follower reference}, i.e., stepping the reference
-one instruction at a time as a follower of the DUT retirement stream with
-interrupt delivery injected at the same retired-instruction boundary---the
-ImperasDV-style architecture, which we have scoped as future work.
-
-% =========================================================================
-\section{Limitations}
-\label{sec:limitations}
-
-(i)~SimX is written by the design team and is not independent of the DUT;
-a Spike base-ISA audit is planned but not yet layered in.
-(ii)~$\sim$10 random-program runs remain unverifiable pending
-abort-hardening of the reference decoder (56 abort sites measured at the
-time of writing); each fix shrinks the bucket.
-(iii)~The founding toggle-coverage goal is unmet for root-caused
-structural reasons (Section~\ref{sec:closure}).
-(iv)~Interrupt-timing tests are end-state-verified only
-(Section~\ref{sec:boundary}).
-(v)~The raw simulation logs behind the lockstep configuration-matrix
-tallies were session artifacts; the tallies are recorded in committed
-project documents, while coverage, investigation, and commit evidence
-remain reproducible from in-tree artifacts.
-
-% =========================================================================
-\section{Future Work}
-\label{sec:future}
-
-A single-pass \emph{step-follower} lockstep with interrupt-delivery
-alignment (closing Section~\ref{sec:boundary}'s residual); the Spike
-independence audit; harvesting the RTL's native runtime assertions into
-the UVM error gate; formal proof of the structural-unreachability
-exclusions on the cache arbiter and MSHR allocator (upgrading cited
-waivers to proofs); a UVM register-abstraction layer for the DCR block;
-and CI-driven parallel regression with automated, traceable sign-off.
+\subsection{Methodology}
+\begin{enumerate}
+\item \textbf{Step-follower lockstep} (the principal enhancement): a
+single-pass flow that steps the reference one retirement at a time
+behind the DUT with interrupt-delivery alignment---the ImperasDV
+pattern---which dissolves both soundness boundaries of
+Section~\ref{sec:limits}. The RVVI monitor/analysis-port architecture
+already in place is its prerequisite.
+\item \textbf{Bounded iterated load feed} as a cheaper partial
+alternative for control-flow-steering races (may not converge for
+interrupts).
+\item \textbf{LSU address/data compare} extension of the lockstep
+(store addresses and data at retirement).
+\item \textbf{Formal property verification} on the arbitration-heavy
+blocks the dynamic flow exercises least (cache MSHR, commit arbiter).
+\item \textbf{Register-abstraction layer} for the DCR space; continuous
+integration with seeded regression, graded sign-off, and per-seed
+triage.
+\end{enumerate}
 
 % =========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
 
-We presented a two-stage verification program for an open-source SIMT
-GPGPU. The black-box stage demonstrates that a program-executing
-master DUT can be verified rigorously with a functional-simulator golden
-model---\emph{provided} the bench itself is proven non-vacuous by
-standing fault injection, coverage closure is disciplined by RTL-cited
-structural evidence, and everything the reference cannot judge is
-classified rather than forced. The lockstep stage shows that RVVI-class
-per-instruction checking extends to SIMT execution once five specific
-alignment rules are observed; that a sound two-pass load feed makes racy
-multi-core programs verifiable at instruction granularity; and that the
-approach's boundary at asynchronous interrupt timing can be stated---and
-proven---precisely. Along the way the lockstep found and fixed a bug in
-the reference model itself, reinforcing the campaign's central lesson:
-\emph{verify the verifier}.
+We presented a UVM-based methodology that brings per-instruction
+golden-model verification---the standard of care for RISC-V CPU
+cores---to a SIMT GPGPU. The environment is complete and configurable:
+role-inverted agents around a bus-master DUT, a per-configuration
+co-built functional reference over DPI-C, a passive RVVI-style
+observability layer, bidirectional end-state checking, and an
+injection-proven non-vacuity discipline behind every verdict. The
+lockstep layer contributes five transferable SIMT alignment rules, a
+sound region-filtered load compare, and a two-pass load-value feed that
+turned an architecturally-undefined racy multi-core program from
+unverifiable into positively verified (residual 0 over 5{,}432
+retirements), while honestly delimiting its own soundness boundary at
+asynchronous interrupt timing. Coverage closed at 100\% functional /
+91.0\% total on the primary configuration with only machine-generated,
+RTL-cited exclusions.
+
+The checking depth paid for itself in findings on both sides of the
+comparison: in the RTL, a JALR ISA deviation with architectural
+consequences, a non-scaling watchdog macro, and a silent
+misaligned-access corruption mode with no silicon detection; in the
+reference model, a misaligned-fetch bug that had been silently
+discarding verification results, found by the lockstep itself. Both
+registers ship with the work, each entry evidence-cited and
+dispositioned. We believe the methodology---and its central lesson,
+that the reference model must be verified alongside the DUT---transfers
+directly to other open-source SIMT designs.
 
 % =========================================================================
 \section*{Acknowledgment}
