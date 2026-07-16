@@ -336,3 +336,19 @@ not scattered across per-fix docs.
   `DUT=1 vs SimX=0`), first-divergence on cid=0 only, other cores' orphan boundary
   unchanged. So the 12212 non-load per-lane data compares are live, not a pass.
   Evidence: `scratchpad/a1d_no_fence_2CL_INJECT.log`.
+
+### OBS-011 (RTL BUG — latent, correctness of a guard macro) — `STALL_TIMEOUT` never scales: `1 ** N` ≡ 1
+- **Class:** RTL BUG (latent; affects a watchdog threshold, not datapath) · **Disposition:** open — needs-RTL-fix (one-character change); harmless in our runs · **Found:** team bring-up phase (Issue 8 of the 43-issue report `Vortex_UVM_Issues_Report_Final.docx`); verified in-tree 2026-07-16
+- **What:** `VX_config.vh:246` defines
+  `` `define STALL_TIMEOUT (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED))) `` —
+  the intent is clearly to scale the pipeline stall-watchdog timeout with cache-hierarchy
+  depth, but `1 ** N` is always 1 in Verilog, so the timeout is a constant 100000
+  regardless of L2/L3 being enabled.
+- **Evidence:** `Vortex/hw/rtl/VX_config.vh:245-246` (verified at RTL pin `7a52ee5`);
+  consumer `VX_schedule.sv` `STALL_TIMEOUT` runtime assert.
+- **Impact / handling:** deeper cache hierarchies legitimately lengthen worst-case stall
+  latency; a non-scaling watchdog could fire spuriously on large configs (false STALL
+  assert), or mask the intent of the guard. Not observed firing falsely in our configs
+  (1CL/2CL small programs). Fix is `10 ** (...)` per the original intent. Left as an
+  upstream-reportable RTL observation; no waiver needed (assertion category unaffected in
+  our banks).
