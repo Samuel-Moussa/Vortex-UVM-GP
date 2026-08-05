@@ -75,6 +75,7 @@ package simx_pkg;
         output byte     unsigned eop,
         output byte     unsigned fu_type,
         output byte     unsigned is_volatile,
+        output byte     unsigned is_fsqrt,
         output longint unsigned result[],
         output longint unsigned mem_addr[]
     );
@@ -96,6 +97,21 @@ package simx_pkg;
     import "DPI-C" context function int  simx_cosim_load_feed_pushed();
     import "DPI-C" context function int  simx_cosim_load_feed_consumed();
 
+    // COMPUTE-writeback feed (OBS-014 sqrt reconvergence) — same contract as the
+    // load feed, applied at the FSQRT writeback instead of a load.
+    import "DPI-C" context function void simx_cosim_comp_feed_reset();
+    import "DPI-C" context function void simx_cosim_comp_feed_enable(input int en);
+    import "DPI-C" context function void simx_cosim_comp_feed_push(
+        input int      unsigned cid,
+        input int      unsigned wid,
+        input longint  unsigned pc,
+        input int      unsigned occurrence,
+        input int      unsigned feed_mask,
+        input longint  unsigned data[]
+    );
+    import "DPI-C" context function int  simx_cosim_comp_feed_pushed();
+    import "DPI-C" context function int  simx_cosim_comp_feed_consumed();
+
     // SV mirror of the C simx_retire_t struct. Used by scoreboard to pass
     // one popped record around as a single object.
     typedef struct {
@@ -111,6 +127,7 @@ package simx_pkg;
         byte     unsigned eop;
         byte     unsigned fu_type;
         byte     unsigned is_volatile;
+        byte     unsigned is_fsqrt;
         longint unsigned result[];
         longint unsigned mem_addr[];
     } simx_retire_s;
