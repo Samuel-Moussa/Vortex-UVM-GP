@@ -148,6 +148,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
     int unsigned n_load_dataskip;     // load retires with NO LSU-probe data → data skipped (end-state covers)
     int unsigned n_load_datacmp;      // load retires whose data WAS compared (LSU-probe overlay)
     int unsigned n_volatile_skip;     // perf-counter CSR reads: PC/rd checked, data model-divergent
+    int unsigned n_multireg_covered;  // multi-register retire (WMMA tile) regs the DUT commit trace
+                                      // did not expose → value verified by the end-state memory check
 
     // First-divergence capture per (cid,wid), in per-warp program order. This is
     // the A1(d) deliverable: the EARLIEST instruction on each warp where DUT and
@@ -208,6 +210,24 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // wid occupies the low NW_BITS of g_wid; mask by (2^NW_BITS - 1) so this
         // is correct for ANY NUM_WARPS (incl. non-power-of-2), not just num_warps-1.
         return int'((uuid >> 32) & ((1 << nw_bits()) - 1));
+    endfunction
+    // A multi-register / multi-beat retirement (the WMMA output tile) is emitted as
+    // several commit records that share the base per-warp counter but carry a beat/
+    // round SUB-INDEX in uuid bits[31:28] (observed: successive tile records differ by
+    // exactly 1<<28; the RTL counter itself increments by 1 per instruction). Sorting
+    // by the raw uuid scatters those high-valued sub-indexed records to the end of the
+    // per-warp FIFO, away from the instruction's program position. po_base() folds the
+    // sub-index away so all records of one instruction share a grouping key; po_order()
+    // moves the sub-index BELOW the counter so a sort yields true program order
+    // (counter, then sub-index). Bound: a per-warp retire count < 2^28 (all our tests);
+    // above that the base counter would collide with the sub-index field.
+    function automatic longint unsigned po_base(longint unsigned uuid);
+        return uuid & 64'hFFFF_FFFF_0FFF_FFFF;
+    endfunction
+    function automatic longint unsigned po_order(longint unsigned uuid);
+        return (uuid & 64'hFFFF_FFFF_0000_0000)
+             | ((uuid & 64'h0FFF_FFFF) << 4)
+             | ((uuid >> 28) & 64'hF);
     endfunction
 
     //--------------------------------------------------------------------------
@@ -275,36 +295,45 @@ class lockstep_scoreboard extends uvm_scoreboard;
     // within a per-wid bucket is correct even if uuid embeds wid in high bits.
     //--------------------------------------------------------------------------
     function automatic void build_dut();
-        retire_t merged [int][longint];   // [key][uuid] -> merged retirement
-        int      key, base, simd_w, l, gi, i;
+        // [key][uuid][rd] -> merged retirement. Keying by (uuid,rd) — NOT uuid alone —
+        // splits a MULTI-REGISTER retirement into one record per destination register.
+        // The WMMA tile writes rd 42..49 under ONE uuid; SimX's cosim export emits one
+        // retire record PER output register, so keying by uuid alone collapsed the whole
+        // tile into a single lossy DUT record and desynchronized the retire streams at
+        // every WMMA (DUT emitted 1 where SimX emits N → downstream position slip). A
+        // normal instruction has one rd (key == old behaviour); SIMD-beat splits and
+        // partial-mask load writebacks share the SAME (uuid,rd) and still merge correctly.
+        retire_t merged [int][longint][int];
+        int      key, base, simd_w, l, gi, i, rdk;
         lockstep_pkg::dut_retire_s b;
         for (i = 0; i < dut_retire_q.size(); i++) begin
             b      = dut_retire_q[i];
             // Derive the flat global (cid,wid) from the uuid rather than trusting
             // the probe's pushed cid (hardcoded 0). uuid embeds CORE_ID + wid.
             key    = key_of(cid_of_uuid(b.uuid), wid_of_uuid(b.uuid));
+            rdk    = b.rd;
             simd_w = b.data.size();
             base   = b.sid * simd_w;
-            if (!merged[key].exists(b.uuid)) begin
-                merged[key][b.uuid].uuid  = b.uuid;
-                merged[key][b.uuid].pc    = b.pc;
-                merged[key][b.uuid].rd    = b.rd;
-                merged[key][b.uuid].tmask = 0;
-                merged[key][b.uuid].load_filled_mask = 0;
-                merged[key][b.uuid].data  = new[cfg.num_threads];
+            if (!merged[key][b.uuid].exists(rdk)) begin
+                merged[key][b.uuid][rdk].uuid  = b.uuid;
+                merged[key][b.uuid][rdk].pc    = b.pc;
+                merged[key][b.uuid][rdk].rd    = b.rd;
+                merged[key][b.uuid][rdk].tmask = 0;
+                merged[key][b.uuid][rdk].load_filled_mask = 0;
+                merged[key][b.uuid][rdk].data  = new[cfg.num_threads];
             end
             // Place only the lanes this record actually wrote (tmask-gated), and
             // union them into the merged active mask.
             for (l = 0; l < simd_w; l++) begin
                 gi = base + l;
                 if (gi < cfg.num_threads && ((b.tmask >> l) & 1)) begin
-                    merged[key][b.uuid].data[gi]  = b.data[l];
-                    merged[key][b.uuid].tmask    |= (1 << gi);
+                    merged[key][b.uuid][rdk].data[gi]  = b.data[l];
+                    merged[key][b.uuid][rdk].tmask    |= (1 << gi);
                 end
             end
         end
         // OVERLAY real LOAD data from the LSU probe (dut_load_q) onto the matching
-        // commit retirement, keyed by uuid. The commit `data` field is stale for
+        // commit retirement, keyed by (uuid,rd). The commit `data` field is stale for
         // loads (OBS-002); VX_lsu_slice.result_if carries the true aligned per-lane
         // value. Place active lanes exactly like the commit path (sid*simd_w + l)
         // and record which lanes were filled (load_filled_mask) so compare_pair
@@ -312,28 +341,33 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // skipped (falls back to the end-state memory check).
         for (i = 0; i < dut_load_q.size(); i++) begin
             lockstep_pkg::dut_retire_s lb;
-            int lkey, lbase, lsimd, ll, lgi;
+            int lkey, lbase, lsimd, ll, lgi, lrd;
             lb    = dut_load_q[i];
             lkey  = key_of(cid_of_uuid(lb.uuid), wid_of_uuid(lb.uuid));
+            lrd   = lb.rd;
             if (!merged.exists(lkey)) continue;
-            if (!merged[lkey].exists(lb.uuid)) continue;   // load with no commit retire
+            if (!merged[lkey].exists(lb.uuid)) continue;       // load with no commit retire
+            if (!merged[lkey][lb.uuid].exists(lrd)) continue;
             lsimd = lb.data.size();
             lbase = lb.sid * lsimd;
             for (ll = 0; ll < lsimd; ll++) begin
                 lgi = lbase + ll;
                 if (lgi < cfg.num_threads && ((lb.tmask >> ll) & 1)) begin
-                    merged[lkey][lb.uuid].data[lgi]           = lb.data[ll];
-                    merged[lkey][lb.uuid].load_filled_mask   |= (1 << lgi);
+                    merged[lkey][lb.uuid][lrd].data[lgi]         = lb.data[ll];
+                    merged[lkey][lb.uuid][lrd].load_filled_mask |= (1 << lgi);
                 end
             end
         end
 
-        // Flatten each key's uuid-map into a uuid-sorted queue.
+        // Flatten each key's (uuid,rd) map into program order: uuid ascending (unsigned),
+        // then rd ascending within a uuid (matches SimX's rd-ordered tile emission).
         foreach (merged[key]) begin
             longint unsigned uus[$];
             foreach (merged[key][u]) uus.push_back(u);
-            uus.sort();
-            foreach (uus[j]) dut_fifo[key].push_back(merged[key][uus[j]]);
+            uus.sort() with (po_order(item));   // program order: counter, then tile sub-index
+            foreach (uus[j])
+                foreach (merged[key][uus[j]][r])
+                    dut_fifo[key].push_back(merged[key][uus[j]][r]);
         end
     endfunction
 
@@ -514,6 +548,17 @@ class lockstep_scoreboard extends uvm_scoreboard;
     // Walk each per-warp FIFO in lockstep and compare/tally. Reads the current
     // gold_fifo/dut_fifo (rebuilt per pass).
     //--------------------------------------------------------------------------
+    // Instruction-grouped alignment (industrial multi-register-retire handling). Both
+    // per-warp streams are in program order, but a MULTI-REGISTER retirement — the WMMA
+    // writes an 8-register output tile — is committed by the DUT as few records (grouped
+    // by its per-warp `uuid`) while SimX's cosim export emits one record PER written
+    // register (same PC, distinct rd). Naive position alignment desynchronizes there.
+    // Instead: group the DUT stream by uuid (its instruction id), take gold's leading
+    // records at that instruction's PC WITH DISTINCT rd (a repeated rd marks the next
+    // loop iteration, not a tile), and match within the group by rd. Gold registers the
+    // DUT never exposed (extra tile elements) are END-STATE-COVERED — their values are
+    // stored to memory and checked by the end-state scoreboard — counted honestly, never
+    // dropped. Streams stay synchronized regardless of per-instruction record counts.
     function automatic void run_compare();
         int keys[$];
         foreach (gold_fifo[k]) keys.push_back(k);
@@ -522,23 +567,87 @@ class lockstep_scoreboard extends uvm_scoreboard;
             int key = keys[ki];
             int nd  = dut_fifo.exists(key)  ? dut_fifo[key].size()  : 0;
             int ng  = gold_fifo.exists(key) ? gold_fifo[key].size() : 0;
-            int n   = (nd > ng) ? nd : ng;
-            for (int s = 0; s < n; s++) begin
-                if (s < nd && s < ng) begin
-                    compare_pair(key, s, dut_fifo[key][s], gold_fifo[key][s]);
-                end else if (s < nd) begin
-                    n_dut_orphan++;
-                    note_div(key, s, dut_fifo[key][s].pc, dut_fifo[key][s].uuid,
-                        "DUT-ORPHAN (no SimX retire)", $sformatf(
-                        "DUT-ORPHAN key=%0h seq=%0d PC=%0h uuid=%0h (no SimX retire)",
-                        key, s, dut_fifo[key][s].pc, dut_fifo[key][s].uuid));
-                end else begin
+            int di = 0, gi = 0, seq = 0;
+            while (di < nd || gi < ng) begin
+                longint unsigned cur_uuid, cur_pc;
+                int di_end, gi_end, dj, gj;
+                bit gused [$];
+                if (di >= nd) begin                       // gold tail, no DUT instruction
                     n_simx_orphan++;
-                    note_div(key, s, gold_fifo[key][s].pc, gold_fifo[key][s].uuid,
+                    note_div(key, seq, gold_fifo[key][gi].pc, gold_fifo[key][gi].uuid,
                         "SIMX-ORPHAN (no DUT retire)", $sformatf(
-                        "SIMX-ORPHAN key=%0h seq=%0d PC=%0h uuid=%0h (no DUT retire)",
-                        key, s, gold_fifo[key][s].pc, gold_fifo[key][s].uuid));
+                        "SIMX-ORPHAN key=%0h seq=%0d PC=%0h (no DUT retire)",
+                        key, seq, gold_fifo[key][gi].pc));
+                    gi++; seq++; continue;
                 end
+                cur_uuid = po_base(dut_fifo[key][di].uuid);
+                cur_pc   = dut_fifo[key][di].pc;
+                // DUT instruction extent = all records sharing this uuid (sub-index folded
+                // via po_base, so a multi-beat WMMA tile groups as ONE instruction).
+                di_end = di;
+                while (di_end < nd && po_base(dut_fifo[key][di_end].uuid) == cur_uuid) di_end++;
+                // Gold instruction extent = leading records at this instruction's PC. A
+                // multi-register op (WMMA) emits many same-PC gold records — possibly
+                // several ROUNDS of the tile (rd 42..49 repeating). Since the DUT has a
+                // SINGLE instruction (uuid) here, they ALL belong to it → consume every
+                // leading same-PC gold record. The one exception is a single-instruction
+                // LOOP (the NEXT DUT instruction is at the SAME PC): there each same-PC
+                // gold record is a distinct iteration, so cap the group at a distinct-rd
+                // run (one iteration's writes) to avoid swallowing later iterations.
+                begin
+                    longint unsigned next_dut_pc;
+                    next_dut_pc = (di_end < nd) ? dut_fifo[key][di_end].pc : 64'hFFFF_FFFF_FFFF_FFFF;
+                    gi_end = gi;
+                    if (next_dut_pc != cur_pc) begin
+                        while (gi_end < ng && gold_fifo[key][gi_end].pc == cur_pc) gi_end++;
+                    end else begin
+                        int seen_rd [int];
+                        while (gi_end < ng && gold_fifo[key][gi_end].pc == cur_pc
+                               && !seen_rd.exists(gold_fifo[key][gi_end].rd)) begin
+                            seen_rd[gold_fifo[key][gi_end].rd] = 1;
+                            gi_end++;
+                        end
+                    end
+                end
+                if (gi_end == gi) begin
+                    // Gold's next record is NOT at this instruction's PC → genuine PC
+                    // divergence. Compare 1:1 to record it, advance both to try to resync.
+                    if (gi < ng) begin
+                        compare_pair(key, seq, dut_fifo[key][di], gold_fifo[key][gi]);
+                        gi++;
+                    end else begin
+                        n_dut_orphan++;
+                        note_div(key, seq, dut_fifo[key][di].pc, dut_fifo[key][di].uuid,
+                            "DUT-ORPHAN (no SimX retire)", $sformatf(
+                            "DUT-ORPHAN key=%0h seq=%0d PC=%0h uuid=%0h",
+                            key, seq, dut_fifo[key][di].pc, dut_fifo[key][di].uuid));
+                    end
+                    di = di_end; seq++; continue;
+                end
+                // Match each DUT register write to a gold record by rd within the group.
+                gused = {};
+                for (gj = gi; gj < gi_end; gj++) gused.push_back(1'b0);
+                for (dj = di; dj < di_end; dj++) begin
+                    bit found = 1'b0;
+                    for (gj = gi; gj < gi_end; gj++) begin
+                        if (!gused[gj-gi] && gold_fifo[key][gj].rd == dut_fifo[key][dj].rd) begin
+                            compare_pair(key, seq, dut_fifo[key][dj], gold_fifo[key][gj]);
+                            gused[gj-gi] = 1'b1; found = 1'b1;
+                            break;
+                        end
+                    end
+                    if (!found) begin                     // DUT reg not present in gold group
+                        n_dut_orphan++;
+                        note_div(key, seq, dut_fifo[key][dj].pc, dut_fifo[key][dj].uuid,
+                            "DUT-ORPHAN (rd not in SimX group)", $sformatf(
+                            "DUT-ORPHAN key=%0h seq=%0d PC=%0h rd=%0d",
+                            key, seq, dut_fifo[key][dj].pc, dut_fifo[key][dj].rd));
+                    end
+                end
+                // Gold registers the DUT did not expose = end-state-covered tile elements.
+                for (gj = gi; gj < gi_end; gj++)
+                    if (!gused[gj-gi]) n_multireg_covered++;
+                di = di_end; gi = gi_end; seq++;
             end
         end
     endfunction
@@ -549,7 +658,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
     function automatic void reset_tallies();
         n_matched=0; n_dut_orphan=0; n_simx_orphan=0; n_mm_pc=0; n_mm_rd=0;
         n_mm_data=0; n_mm_loaddata=0; n_uuid_misaligned=0; n_pairs=0;
-        n_load_dataskip=0; n_load_datacmp=0; n_volatile_skip=0;
+        n_load_dataskip=0; n_load_datacmp=0; n_volatile_skip=0; n_multireg_covered=0;
         first_div_seen.delete(); first_div_seq.delete(); first_div_pc.delete();
         first_div_uuid.delete(); first_div_desc.delete(); div_count.delete();
         err_emitted.delete(); pc_occ_ctr.delete();
@@ -675,6 +784,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         `uvm_info("LOCKSTEP", $sformatf("  load data-compared  : %0d (LSU-probe overlay; needs +LOCKSTEP_LOADS)", n_load_datacmp), UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  load data-skipped   : %0d (gated off / no LSU beat; end-state covers)", n_load_dataskip), UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  volatile-CSR skipped: %0d (perf counters; model-divergent)", n_volatile_skip), UVM_LOW)
+        `uvm_info("LOCKSTEP", $sformatf("  multireg end-state  : %0d (WMMA tile regs not on DUT commit trace; end-state covers)", n_multireg_covered), UVM_LOW)
         // A1(d) deliverable: the earliest diverging instruction per warp. For a
         // clean run this block is empty; for a cross-core divergence it pinpoints
         // the exact core/warp/PC where DUT and SimX first disagree.
