@@ -440,3 +440,32 @@ not scattered across per-fix docs.
   stimulus); (2) INV-4 stimulus sanitization removes the riscv-dv source
   (OBS-012 cascade); (3) upstream ENHANCEMENT suggestion: misaligned-address
   trap or at least a sticky error CSR.
+
+### OBS-014 (RTL BUG / accuracy limitation) — hardware `fsqrt.s` deviates 1 ULP from the IEEE-correct result
+- **Class:** RTL FPU accuracy deviation (IEEE-754 §5.4.1 requires `sqrt` to be
+  correctly rounded) · **Disposition:** OPEN — real DUT≠reference divergence, the
+  golden (SoftFloat) side is authoritative · **Found:** 2CL lockstep sweep FP
+  investigation (2026-08-05), fpu_test / fpu_mt @1CL.
+- **What:** at `fpu_test.dump` PC=`0x800000e8` `fsqrt.s fa0, fs0`, per-instruction
+  lockstep reports lane0 `DUT=0x3fef7750` vs `SimX=0x3fef7751` — **adjacent float32
+  values, 1 ULP apart**. fpu_mt shows the same signature on other inputs
+  (`0x3fef7750` vs `…7751`, `0x402f456e` vs `…456f`). The `fdiv.s` at the adjacent
+  PC=`0x800000e0` (same operands class) **matched exactly**, so the hardware divider
+  is correctly rounded but the **sqrt unit is not**.
+- **Why SimX is the reference:** SimX computes `fsqrt` via Berkeley SoftFloat
+  (`Vortex/third_party/softfloat`), the canonical correctly-rounded IEEE
+  implementation → the 1-ULP deviation is on the DUT side (cvfpu/FPnew sqrt unit,
+  likely an area-optimized non-correctly-rounded configuration).
+- **Why it was invisible until now:** the END-STATE scoreboard uses an FP-tolerant
+  compare for fpu kernels (absorbs ≤1 ULP), so it PASSED — the per-instruction
+  lockstep is what surfaced it. In fpu_test the rounded result then feeds downstream
+  FP ops and a compare/branch, cascading (1488 divergences, 112 SimX-orphans from a
+  control-flow split); fpu_mt is smaller (4 isolated 1-ULP writebacks).
+- **Impact / handling (decision pending):** the lockstep comparator flags it
+  correctly (it is a real deviation — NOT to be silently tolerated). Options:
+  (a) leave fpu_test/fpu_mt RED, classified as this documented RTL FPU limitation
+  (SoftFloat authoritative), or (b) add a DOCUMENTED, bounded FP-ULP tolerance to the
+  lockstep FP-writeback compare (logging each toleranced op) so fpu passes modulo the
+  cited hardware limitation. Do NOT apply blanket tolerance to `+ - * /` (IEEE
+  requires correct rounding there; the divider already matches — a future mismatch on
+  those WOULD be a distinct bug).
