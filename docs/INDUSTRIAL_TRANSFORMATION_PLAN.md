@@ -11,11 +11,46 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. NEXT ACTION: (optional) 2CL directed-suite lockstep sweep, then A5 — harvest DUT native assertions.**
+**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. A5 (RTL-assert gate) ✅. INV-4 (riscv-dv jalr derail) ✅. **2CL directed-suite lockstep sweep ✅** (findings below). A6 (Spike audit) FROZEN by user. NEXT ACTION: layer-4 multi-register WMMA/FP retirement (closes tcu + fpu_test lockstep) — see ▶▶ block.**
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
-### ▶▶ NEXT ACTION (exact, resumable — 2026-07-16)
+### ▶▶ NEXT ACTION (exact, resumable — 2026-07-17)
+**2CL DIRECTED-SUITE LOCKSTEP SWEEP = DONE (this session).** Ran the 15 deterministic
+directed kernels under per-instruction lockstep at 2CL/2C/4W/4T (`scripts/lockstep_sweep_2cl.sh`),
+then load-feed-classified every RED, then ran a 1CL control to separate multi-cluster race
+artifacts from genuine differences. Findings:
+- **5 lane-exact at 2CL** (vecadd_lite, vote_shfl, div_edge, spawn_tmc_sweep, bar_masks).
+- **diverge/Bucket-B REDs = 2CL cross-cluster RACE artifacts, DUT CORRECT** (diverge_lite
+  lane-exact 1850/1850 at 1CL; deep/peel/uni3 verify residual=0 modulo racy loads; lite/fpu/fpu_mt
+  hit the two-pass fixed-point boundary = ENH-2). NOT bugs — end-state hides them, lockstep exposes
+  them at instruction granularity. Same OBS-009 class.
+- **TCU + FP REDs = COMPARATOR representation gaps, DUT PROVEN CORRECT** (ELF ground truth +
+  end-state + SimX value agreement; SimX emits 0 qNaN FP writebacks — decisive). Root-caused to
+  FOUR layers: (1) FP register index — DUT unified 64-entry (fp=32+n) vs SimX local-idx+is_fp;
+  (2) FP writeback NaN-box width — SimX 64-bit boxed (upper32=0xFFFFFFFF) vs F-only DUT 32-bit;
+  (3) FP **load** NaN-box width (flw) — same, on the LOAD-data compare path; (4) **WMMA multi-
+  register retirement** — SimX exports one retire record per output-tile register (uuid high-nibble
+  = tile index), the DUT merges its per-register commits by uuid into ONE record → the retire
+  streams slip by ~N at the WMMA → the whole downstream PC/rd/data residual is that one cascade.
+- **FIXES 1–3 COMMITTED + VALIDATED** (`lockstep_scoreboard.sv`, all `g.is_fp`-guarded so integer
+  kernels are provably unaffected; low-32/FLEN compare keeps the FP VALUE bit-exact — real fixes,
+  NOT waivers): vecadd_lite 1035/1035 (no regression) · **diverge_fpu RED→GREEN 2738/2738** ·
+  fpu_mt data-mismatch 907→4. New `scripts/lockstep_sweep_2cl.sh` (checking-depth sweep, no UCDB merge).
+- **▶ OPEN — LAYER 4 (next action): multi-register WMMA/FP retirement.** Explains BOTH remaining
+  REDs: tcu_test/tcu_mt (PC=140/rd=85/data=93 pure WMMA slip) AND fpu_test (PC=504 — same "one
+  instruction, different retire-record count per side" class, likely a soft-float libcall / multi-
+  writeback op). The lockstep record model is "one instruction → one dest register"; WMMA violates
+  it on both sides with different uuid/count conventions. Fix = teach the record/export/comparator
+  about multi-register retirements (record struct + SimX export aggregation + comparator alignment).
+  fpu_mt's residual 4 = a separate small genuine item to check after. This is the agreed next task.
+- **FUTURE WORK (user-directed 2026-07-17): FLEN=64 / XLEN=64 support.** Current env is pinned
+  RV32IMAF (XLEN=32, FLEN=32). The comparator's FP-box fix deliberately stays STRICT for FLEN=64
+  (non-boxed gold → full-width compare). A real 64-bit build (D extension / RV64) needs its own
+  config bring-up AND a dedicated coverage push (new tests to close 64-bit-specific bins) — do this
+  ONLY AFTER all the 32-bit work is closed. Recorded here so the trajectory is on file (see C5/I6/D-matrix).
+
+### ▶▶ PRIOR NEXT ACTION (2026-07-16)
 **A5 RTL-ASSERT GATE = DONE (this session, pending commit).** Investigation found the gate
 HALF-EXISTED since the original import: `simulate.sh` already counted `^# ** Error:` lines and set
 EXIT_CODE=2 — but the verdict was **print-only** (simulate.sh never `exit`ed with it; run.sh sources
