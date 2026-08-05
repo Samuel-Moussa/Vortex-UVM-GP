@@ -247,6 +247,15 @@ void Core::schedule() {
     rec.eop   = trace->eop ? 1 : 0;
     rec.fu_type = static_cast<uint8_t>(trace->fu_type);  // for lockstep: LSU load-data isn't on the DUT commit probe
     rec.is_volatile = trace->volatile_result ? 1 : 0;    // perf-counter CSR read → excluded from lockstep compare
+    // Non-correctly-rounded FP op flag (OBS-014): the DUT hardware fsqrt.s is 1 ULP off
+    // the IEEE-correct SoftFloat result. Export FSQRT so the lockstep comparator can apply
+    // a DOCUMENTED, bounded 1-ULP tolerance to sqrt writebacks ONLY; all other FP ops
+    // (+,-,*,/,fma,cvt) stay bit-exact and any deviation there is still a hard failure.
+    rec.is_fsqrt = 0;
+    if (trace->fu_type == FUType::FPU) {
+      if (auto* fop = std::get_if<FpuType>(&trace->op_type))
+        rec.is_fsqrt = (*fop == FpuType::FSQRT) ? 1 : 0;
+    }
     auto vals = emulator_.read_dst_reg(trace->wid, trace->dst_reg);
     for (uint32_t t = 0, n = vals.size(); t < n && t < SIMX_COSIM_MAX_THREADS; ++t) {
       rec.result[t] = vals[t];

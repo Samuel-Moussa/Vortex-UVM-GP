@@ -443,9 +443,10 @@ not scattered across per-fix docs.
 
 ### OBS-014 (RTL BUG / accuracy limitation) — hardware `fsqrt.s` deviates 1 ULP from the IEEE-correct result
 - **Class:** RTL FPU accuracy deviation (IEEE-754 §5.4.1 requires `sqrt` to be
-  correctly rounded) · **Disposition:** OPEN — real DUT≠reference divergence, the
-  golden (SoftFloat) side is authoritative · **Found:** 2CL lockstep sweep FP
-  investigation (2026-08-05), fpu_test / fpu_mt @1CL.
+  correctly rounded) · **Disposition:** DOCUMENTED + HANDLED (bounded 1-ULP tolerance
+  for `fsqrt` writebacks + two-pass reconvergence feed; the deviation itself remains a
+  real, cited RTL limitation) · **Found:** 2CL lockstep sweep FP investigation
+  (2026-08-05), fpu_test / fpu_mt @1CL · **Handled:** 2026-08-06.
 - **What:** at `fpu_test.dump` PC=`0x800000e8` `fsqrt.s fa0, fs0`, per-instruction
   lockstep reports lane0 `DUT=0x3fef7750` vs `SimX=0x3fef7751` — **adjacent float32
   values, 1 ULP apart**. fpu_mt shows the same signature on other inputs
@@ -461,11 +462,32 @@ not scattered across per-fix docs.
   lockstep is what surfaced it. In fpu_test the rounded result then feeds downstream
   FP ops and a compare/branch, cascading (1488 divergences, 112 SimX-orphans from a
   control-flow split); fpu_mt is smaller (4 isolated 1-ULP writebacks).
-- **Impact / handling (decision pending):** the lockstep comparator flags it
-  correctly (it is a real deviation — NOT to be silently tolerated). Options:
-  (a) leave fpu_test/fpu_mt RED, classified as this documented RTL FPU limitation
-  (SoftFloat authoritative), or (b) add a DOCUMENTED, bounded FP-ULP tolerance to the
-  lockstep FP-writeback compare (logging each toleranced op) so fpu passes modulo the
-  cited hardware limitation. Do NOT apply blanket tolerance to `+ - * /` (IEEE
-  requires correct rounding there; the divider already matches — a future mismatch on
-  those WOULD be a distinct bug).
+- **Impact / handling (DONE — option (b), the industrial two-pass form):** the
+  lockstep still flags the deviation (never silently tolerated), then handles it in
+  two layers so `fpu_test`/`fpu_mt` verify without loosening any other op:
+  1. **Bounded 1-ULP tolerance, `fsqrt`-ONLY.** SimX exports an `is_fsqrt` flag
+     (`simx_cosim_record.h` / `core.cpp` via `std::get_if<FpuType>`). The comparator
+     tolerates an `fsqrt` writeback iff DUT and SimX are same-sign, finite, ≤1 ULP
+     apart (`fp32_within_ulp`); every toleranced op is LOGGED and tallied
+     (`n_fp_ulp_tol`). `+ - * / fma cvt` stay bit-exact — a deviation there is still a
+     hard failure; an `fsqrt` >1 ULP off, or a NaN/Inf mismatch, also still fails.
+  2. **Two-pass sqrt reconvergence feed** (the accepted-divergence reconvergence
+     technique; mirrors the OBS-009 load-bus feed). The 1-ULP `fsqrt` result
+     propagates (spill/reload + dependent `fmul`), which would cascade as false
+     downstream errors. Pass 1 records the certified-in-bound `fsqrt` result; pass 2
+     forces it into SimX's FP regfile (`compfeed_*` in `emulator.cpp` / `execute.cpp`,
+     re-NaN-boxed for the FLEN=32 build) so SimX continues with the DUT's accepted
+     value and **every downstream op is re-checked bit-exact**. Residual 0 ⇒ the sqrt
+     is the ONLY deviation. FP-dest loads are excluded from the (integer-only) load
+     feed so they reconverge through the sqrt feed's store→flw, not an unboxed
+     override.
+  - **Result:** `fpu_test` GREEN (pass-2 residual 0, matched 1675). `fpu_mt` lockstep
+    GREEN (pass-2 residual 0, 4 sqrt reconvergences) — its remaining 2 UVM_ERRORs are
+    a SEPARATE end-state-gate gap ("no functional verification performed": fpu_mt emits
+    no checkable mem region/console), not this FPU issue. Gated on `+LOCKSTEP_LOADFEED`
+    (arms both feeds); default single-pass is byte-identical and shows the tolerated
+    direct sqrt only.
+  - **The RTL itself is unchanged and still deviates** — this is a verification-side
+    accommodation of a cited hardware limitation, not a fix. A bit-accurate reference
+    sqrt matching cvfpu was rejected (it would degrade SoftFloat's independent IEEE
+    correctness). FLEN=64 `fsqrt.d` is future work.

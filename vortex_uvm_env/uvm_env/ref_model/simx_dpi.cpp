@@ -697,6 +697,7 @@ int simx_run() {
         // counting restarts for this run. Overrides pushed by the scoreboard
         // (pass 2) persist; a no-op when the feed is disabled/empty.
         vortex::loadfeed_rewind();
+        vortex::compfeed_rewind();   // OBS-014 sqrt-writeback feed cursors
 
         // (3) Verify the arg struct is now real (not poison).
         {
@@ -885,6 +886,7 @@ int simx_cosim_pop(
     unsigned char* eop,
     unsigned char* fu_type,
     unsigned char* is_volatile,
+    unsigned char* is_fsqrt,
     const svOpenArrayHandle result,
     const svOpenArrayHandle mem_addr
 ) {
@@ -907,6 +909,7 @@ int simx_cosim_pop(
     *eop   = rec.eop;
     *fu_type = rec.fu_type;
     *is_volatile = rec.is_volatile;
+    *is_fsqrt = rec.is_fsqrt;
 
     const int lo = svLow(result, 1);
     const int hi = svHigh(result, 1);
@@ -980,5 +983,31 @@ void simx_cosim_load_feed_push(
 // matched at a load retirement. consumed==pushed ⇒ DUT and SimX uuids aligned.
 unsigned simx_cosim_load_feed_pushed()   { return vortex::loadfeed_pushed(); }
 unsigned simx_cosim_load_feed_consumed() { return vortex::loadfeed_consumed(); }
+
+// --- COMPUTE-writeback feed (OBS-014 sqrt reconvergence) — same contract as the
+// load feed, applied at the FSQRT writeback (execute.cpp FPU lambda).
+void simx_cosim_comp_feed_reset()      { vortex::compfeed_reset(); }
+void simx_cosim_comp_feed_enable(int en){ vortex::compfeed_enable(en != 0); }
+void simx_cosim_comp_feed_push(
+    unsigned cid,
+    unsigned wid,
+    uint64_t pc,
+    unsigned occurrence,
+    unsigned feed_mask,
+    const svOpenArrayHandle data
+) {
+    const int lo = svLow(data, 1);
+    const int hi = svHigh(data, 1);
+    const int n  = hi - lo + 1;
+    uint64_t buf[SIMX_COSIM_MAX_THREADS] = {0};
+    for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(data, lo + i));
+        if (slot) buf[i] = *slot;
+    }
+    vortex::compfeed_push(cid, wid, pc, occurrence, feed_mask, buf,
+                          (n < SIMX_COSIM_MAX_THREADS) ? (unsigned)n : SIMX_COSIM_MAX_THREADS);
+}
+unsigned simx_cosim_comp_feed_pushed()   { return vortex::compfeed_pushed(); }
+unsigned simx_cosim_comp_feed_consumed() { return vortex::compfeed_consumed(); }
 
 } // extern "C"

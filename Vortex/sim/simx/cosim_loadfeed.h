@@ -60,4 +60,28 @@ const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid, uint64_t pc);
 uint32_t loadfeed_pushed();                   // records pushed this pass
 uint32_t loadfeed_consumed();                 // pushed records actually hit by a LOAD
 
+// -----------------------------------------------------------------------------
+// COMPUTE-writeback feed (OBS-014 reconvergence). Parallel to the load feed but
+// applied at a COMPUTE writeback (currently FSQRT) instead of a load. The DUT
+// hardware fsqrt.s rounds 1 ULP off the IEEE-correct SoftFloat result; once the
+// scoreboard has independently certified that deviation is within the documented
+// 1-ULP bound (and logged it), pass 2 forces SimX's sqrt destination register to
+// the DUT value so SimX's REGISTER FILE reconverges — every downstream op (via
+// registers OR a spill/reload) then follows the DUT, and any residual mismatch is
+// a genuinely-independent bug still caught bit-exact. Same (cid,wid,PC,occurrence)
+// key and semantics as the load feed; a SEPARATE cursor set (a sqrt and a load at
+// the same PC cannot alias). Default OFF ⇒ byte-identical.
+// -----------------------------------------------------------------------------
+void compfeed_reset();
+void compfeed_rewind();
+void compfeed_enable(bool en);
+bool compfeed_enabled();
+void compfeed_push(uint32_t cid, uint32_t wid, uint64_t pc, uint32_t occurrence,
+                   uint32_t feed_mask, const uint64_t* data, uint32_t n);
+// Consume the next execution of the FED compute op at `pc` on warp (cid,wid).
+// Call EXACTLY once per such instruction (fed or not) to keep occurrences aligned.
+const LoadFeedRec* compfeed_next(uint32_t cid, uint32_t wid, uint64_t pc);
+uint32_t compfeed_pushed();
+uint32_t compfeed_consumed();
+
 } // namespace vortex

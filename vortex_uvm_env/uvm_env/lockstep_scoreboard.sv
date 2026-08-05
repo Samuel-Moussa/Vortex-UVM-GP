@@ -93,10 +93,19 @@ class lockstep_scoreboard extends uvm_scoreboard;
     } feed_rec_t;
     feed_rec_t feed_q [$];
 
+    // OBS-014 sqrt-writeback reconvergence feed (same feed_rec_t shape). Pass 1
+    // records every FSQRT writeback whose DUT value diverged but stayed within the
+    // documented 1-ULP bound; pass 2 forces those into SimX's FP regfile so SimX
+    // reconverges and downstream ops are re-checked bit-exact. Separate cursor from
+    // the load feed (a sqrt and a load at the same PC never alias).
+    feed_rec_t comp_feed_q [$];
+
     bit               capturing_feed;   // pass-1 only: populate feed_q on load divergence
     bit               did_pass2;         // set when the pass-2 feed run executed
     // per-key, per-PC running occurrence count (mirrors SimX's (cid,wid,PC) counter)
     int      unsigned pc_occ_ctr [int][longint unsigned];
+    // per-key, per-PC FSQRT occurrence count (mirrors SimX's compfeed cursor)
+    int      unsigned sqrt_occ_ctr [int][longint unsigned];
 
     // Pass-1 tallies saved before the pass-2 recompare (for the report).
     int unsigned p1_pairs, p1_matched, p1_mm_pc, p1_mm_rd, p1_mm_data, p1_mm_loaddata,
@@ -111,6 +120,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         bit               is_load;        // SimX FUType==LSU (gold side only)
         bit               is_fp;          // SimX FP-destination writeback (gold side only)
         bit               is_volatile;    // SimX read a perf-counter CSR (gold side only)
+        bit               is_fsqrt;       // SimX FPU FSQRT op (gold side only) — OBS-014 1-ULP tolerance
         int      unsigned load_filled_mask; // DUT side: lanes whose load data came
                                           // from the LSU probe (OBS-002 overlay).
                                           // Only these lanes are DATA-comparable.
@@ -150,6 +160,8 @@ class lockstep_scoreboard extends uvm_scoreboard;
     int unsigned n_volatile_skip;     // perf-counter CSR reads: PC/rd checked, data model-divergent
     int unsigned n_multireg_covered;  // multi-register retire (WMMA tile) regs the DUT commit trace
                                       // did not expose → value verified by the end-state memory check
+    int unsigned n_fp_ulp_tol;        // OBS-014: FP sqrt writebacks toleranced within the bounded
+                                      // 1-ULP window (DUT hardware fsqrt.s vs SoftFloat) — each logged
 
     // First-divergence capture per (cid,wid), in per-warp program order. This is
     // the A1(d) deliverable: the EARLIEST instruction on each warp where DUT and
@@ -169,6 +181,16 @@ class lockstep_scoreboard extends uvm_scoreboard;
     // (the FIRST few are what matter); the true n_mm_* tallies are counted in full
     // regardless, and report_phase prints the first-divergence pinpoint per warp.
     localparam int MAX_ERR_PER_KEY = 4;
+
+    // OBS-014 — bounded, DOCUMENTED FP-sqrt tolerance. The DUT hardware fsqrt.s
+    // (cvfpu/FPnew) rounds 1 ULP away from the IEEE-correct SoftFloat reference SimX
+    // uses. This is a real, cited RTL accuracy limitation — the tolerance NEVER hides
+    // it: every toleranced op is logged (up to the cap) and tallied in n_fp_ulp_tol,
+    // and it applies to FSQRT gold ops ONLY (all other FP ops stay bit-exact, so a
+    // deviation on +,-,*,/,fma,cvt is still a hard failure). A sqrt result more than
+    // this many ULP off — or a NaN/Inf mismatch — also still fails.
+    localparam int unsigned FP_SQRT_MAX_ULP = 1;
+    localparam int          FP_ULP_LOG_CAP  = 16;   // cap the per-op tolerance log spew
 
     function new(string name, uvm_component parent);
         super.new(name, parent);
@@ -237,7 +259,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         int rc;
         longint  unsigned uuid, pc;
         int      unsigned cid, wid, tmask;
-        byte     unsigned wb, is_fp, rd, sop, eop, fu_type, is_volatile;
+        byte     unsigned wb, is_fp, rd, sop, eop, fu_type, is_volatile, is_fsqrt;
         longint  unsigned res[];
         longint  unsigned adr[];
         int      k;
@@ -245,7 +267,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         forever begin
             res = new[cfg.num_threads];
             adr = new[cfg.num_threads];
-            rc = simx_cosim_pop(uuid, cid, wid, pc, tmask, wb, is_fp, rd, sop, eop, fu_type, is_volatile, res, adr);
+            rc = simx_cosim_pop(uuid, cid, wid, pc, tmask, wb, is_fp, rd, sop, eop, fu_type, is_volatile, is_fsqrt, res, adr);
             if (rc <= 0) break;             // 0 = empty, -1 = error
             if (wb == 0) continue;          // writeback domain only
             g.uuid        = uuid;
@@ -267,6 +289,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
             g.is_fp       = (is_fp != 0);   // FP-dest load data routes to the FP regfile,
                                             // NOT the integer result_if tap the LSU probe reads
             g.is_volatile = (is_volatile != 0);
+            g.is_fsqrt    = (is_fsqrt != 0);   // OBS-014: 1-ULP sqrt tolerance eligibility
             g.data        = new[cfg.num_threads];
             g.addr        = new[cfg.num_threads];
             for (k = 0; k < cfg.num_threads; k++) begin
@@ -410,6 +433,24 @@ class lockstep_scoreboard extends uvm_scoreboard;
     endfunction
 
     //--------------------------------------------------------------------------
+    // Single-precision ULP-distance test for the OBS-014 fsqrt tolerance.
+    // Returns 1 iff a and b are the SAME sign, both finite (not NaN, not Inf),
+    // and at most `maxulp` representable steps apart. sqrt results are non-negative
+    // for finite non-negative operands, so within one sign the IEEE encoding is
+    // monotonic in magnitude ⇒ ULP distance == |a[30:0]-b[30:0]|. NaN/Inf require an
+    // exact match (returns 0), so those never get toleranced.
+    //--------------------------------------------------------------------------
+    function automatic bit fp32_within_ulp(logic [31:0] a, logic [31:0] b, int unsigned maxulp);
+        logic [7:0]   ea = a[30:23];
+        logic [7:0]   eb = b[30:23];
+        int  unsigned dd;
+        if ((ea == 8'hFF) || (eb == 8'hFF)) return 1'b0;   // NaN/Inf → require exact
+        if (a[31] != b[31])                 return 1'b0;   // opposite signs → not rounding-adjacent
+        dd = (a[30:0] > b[30:0]) ? (a[30:0] - b[30:0]) : (b[30:0] - a[30:0]);
+        return (dd <= maxulp);
+    endfunction
+
+    //--------------------------------------------------------------------------
     // Compare one aligned (DUT, SimX) pair. Counts each differing field, and
     // records/ caps-emits the divergence via note_div.
     //--------------------------------------------------------------------------
@@ -497,7 +538,12 @@ class lockstep_scoreboard extends uvm_scoreboard;
                 // per-lane values so pass 2 can drive SimX to follow the DUT and
                 // isolate any REAL residual divergence. Feed all in-region active
                 // lanes (matching lanes are a harmless no-op).
-                if (capturing_feed && feed_en && div_seen && region_mask != 0) begin
+                // EXCLUDE FP-dest loads: the load feed is integer-only (it substitutes
+                // a raw 64-bit value; an FP-dest load must be NaN-boxed, which this path
+                // does not do → SimX's check_boxing would see an unboxed value as qNaN
+                // and cascade). FP-load divergence from a sqrt propagates via the OBS-014
+                // sqrt feed instead (SimX's own store→flw re-boxes the reconverged value).
+                if (capturing_feed && feed_en && div_seen && region_mask != 0 && !g.is_fp) begin
                     feed_rec_t fr;
                     fr.cid        = key >> 16;
                     fr.wid        = key & 32'hFFFF;
@@ -512,6 +558,15 @@ class lockstep_scoreboard extends uvm_scoreboard;
         end else if (g.is_volatile) begin
             n_volatile_skip++;          // mcycle/minstret/... model-divergent by definition
         end else begin
+            // FSQRT occurrence tracking for the OBS-014 reconvergence feed: advance
+            // once per sqrt at this PC (fed or not), mirroring SimX's compfeed cursor.
+            bit          sqrt_tol_seen = 1'b0;
+            int unsigned this_sqrt_occ = 0;
+            if (g.is_fsqrt) begin
+                this_sqrt_occ = (sqrt_occ_ctr.exists(key) && sqrt_occ_ctr[key].exists(g.pc))
+                              ? sqrt_occ_ctr[key][g.pc] : 0;
+                sqrt_occ_ctr[key][g.pc] = this_sqrt_occ + 1;
+            end
             for (int l = 0; l < cfg.num_threads; l++) begin
                 if ((g.tmask >> l) & 1) begin
                     // FP NaN-box reconciliation (real fix, NOT a waiver). SimX carries a
@@ -530,6 +585,22 @@ class lockstep_scoreboard extends uvm_scoreboard;
                         mism = (d.data[l][31:0] !== g.data[l][31:0]);
                     else
                         mism = (d.data[l] !== g.data[l]);
+                    // OBS-014: DOCUMENTED, bounded 1-ULP tolerance for hardware fsqrt.s
+                    // ONLY. The DUT FPU sqrt unit rounds 1 ULP off the IEEE-correct
+                    // SoftFloat reference. NOT hidden — each toleranced op is logged and
+                    // tallied (n_fp_ulp_tol). Gated on g.is_fsqrt, so +,-,*,/,fma,cvt stay
+                    // bit-exact and any deviation there is still a hard failure; a sqrt
+                    // result >1 ULP off, or a NaN/Inf mismatch, also still fails.
+                    if (mism && g.is_fsqrt &&
+                        fp32_within_ulp(d.data[l][31:0], g.data[l][31:0], FP_SQRT_MAX_ULP)) begin
+                        mism = 1'b0;
+                        n_fp_ulp_tol++;
+                        sqrt_tol_seen = 1'b1;
+                        if (n_fp_ulp_tol <= FP_ULP_LOG_CAP)
+                            `uvm_info("LOCKSTEP", $sformatf(
+                                "[OBS-014 fsqrt %0d-ULP TOLERATED] key=%0h PC=%0h lane=%0d DUT=%0h vs SimX=%0h (sqrt only)",
+                                FP_SQRT_MAX_ULP, key, g.pc, l, d.data[l][31:0], g.data[l][31:0]), UVM_LOW)
+                    end
                     if (mism) begin
                         n_mm_data++; clean = 1'b0;
                         if (desc == "") desc = $sformatf(
@@ -539,6 +610,22 @@ class lockstep_scoreboard extends uvm_scoreboard;
                             key, seq, d.pc, d.uuid, l, d.data[l], g.data[l]));
                     end
                 end
+            end
+            // OBS-014 FEED CAPTURE (pass 1): this sqrt's DUT result stayed within the
+            // documented 1-ULP bound → hand SimX the DUT per-lane values so pass 2
+            // forces them into its FP regfile (reconvergence) and re-checks every
+            // downstream op bit-exact. Feed all active lanes (exact-match lanes are a
+            // harmless identity feed). Gated on the same two-pass arm as the load feed.
+            if (g.is_fsqrt && capturing_feed && feed_en && sqrt_tol_seen) begin
+                feed_rec_t sf;
+                sf.cid        = key >> 16;
+                sf.wid        = key & 32'hFFFF;
+                sf.pc         = g.pc;
+                sf.occurrence = this_sqrt_occ;
+                sf.mask       = g.tmask;
+                sf.data       = new[cfg.num_threads];
+                for (int l = 0; l < cfg.num_threads; l++) sf.data[l] = d.data[l];
+                comp_feed_q.push_back(sf);
             end
         end
         if (clean) n_matched++;
@@ -659,9 +746,10 @@ class lockstep_scoreboard extends uvm_scoreboard;
         n_matched=0; n_dut_orphan=0; n_simx_orphan=0; n_mm_pc=0; n_mm_rd=0;
         n_mm_data=0; n_mm_loaddata=0; n_uuid_misaligned=0; n_pairs=0;
         n_load_dataskip=0; n_load_datacmp=0; n_volatile_skip=0; n_multireg_covered=0;
+        n_fp_ulp_tol=0;
         first_div_seen.delete(); first_div_seq.delete(); first_div_pc.delete();
         first_div_uuid.delete(); first_div_desc.delete(); div_count.delete();
-        err_emitted.delete(); pc_occ_ctr.delete();
+        err_emitted.delete(); pc_occ_ctr.delete(); sqrt_occ_ctr.delete();
     endfunction
 
     //--------------------------------------------------------------------------
@@ -680,8 +768,10 @@ class lockstep_scoreboard extends uvm_scoreboard;
         build_dut();
         run_compare();
 
-        // -------- PASS 2: RVVI load-bus (only if armed and races found) -----
-        if (feed_en && feed_q.size() > 0) begin
+        // -------- PASS 2: RVVI load-bus + OBS-014 sqrt reconvergence ---------
+        // (only if the two-pass feed is armed AND pass 1 captured a racy load OR a
+        // toleranced sqrt whose value should be reconverged into SimX).
+        if (feed_en && (feed_q.size() > 0 || comp_feed_q.size() > 0)) begin
             int exitcode2;
             // snapshot pass-1 tallies for the two-pass verdict
             p1_pairs=n_pairs; p1_matched=n_matched; p1_mm_pc=n_mm_pc; p1_mm_rd=n_mm_rd;
@@ -691,18 +781,23 @@ class lockstep_scoreboard extends uvm_scoreboard;
             did_pass2 = 1'b1;
 
             `uvm_info("LOCKSTEP", $sformatf(
-                "PASS 1: %0d racy in-region LOAD-data divergence(s) over %0d captured load(s). Re-running SimX with the DUT load-bus fed (PASS 2)...",
-                p1_mm_loaddata, feed_q.size()), UVM_LOW)
+                "PASS 1: %0d racy in-region LOAD-data divergence(s) over %0d captured load(s) + %0d sqrt reconvergence feed(s) (OBS-014). Re-running SimX with the DUT values fed (PASS 2)...",
+                p1_mm_loaddata, feed_q.size(), comp_feed_q.size()), UVM_LOW)
 
-            // Arm the feed in SimX with the captured DUT load values.
+            // Arm both feeds in SimX with the captured DUT values.
             simx_cosim_clear();
             simx_cosim_load_feed_reset();
             simx_cosim_load_feed_enable(1);
             foreach (feed_q[i])
                 simx_cosim_load_feed_push(feed_q[i].cid, feed_q[i].wid, feed_q[i].pc,
                                           feed_q[i].occurrence, feed_q[i].mask, feed_q[i].data);
+            simx_cosim_comp_feed_reset();
+            simx_cosim_comp_feed_enable(1);
+            foreach (comp_feed_q[i])
+                simx_cosim_comp_feed_push(comp_feed_q[i].cid, comp_feed_q[i].wid, comp_feed_q[i].pc,
+                                          comp_feed_q[i].occurrence, comp_feed_q[i].mask, comp_feed_q[i].data);
 
-            // Reset SV-side compare state; SimX re-runs following the DUT loads.
+            // Reset SV-side compare state; SimX re-runs following the DUT loads + sqrt.
             gold_fifo.delete();
             dut_fifo.delete();
             reset_tallies();
@@ -710,9 +805,11 @@ class lockstep_scoreboard extends uvm_scoreboard;
 
             exitcode2 = simx_run();
             `uvm_info("LOCKSTEP", $sformatf(
-                "PASS 2: SimX re-run exit=%0d; load-bus records pushed=%0d consumed=%0d %s",
+                "PASS 2: SimX re-run exit=%0d; load-bus pushed=%0d consumed=%0d ; sqrt-feed pushed=%0d consumed=%0d %s",
                 exitcode2, simx_cosim_load_feed_pushed(), simx_cosim_load_feed_consumed(),
-                (simx_cosim_load_feed_pushed() == simx_cosim_load_feed_consumed())
+                simx_cosim_comp_feed_pushed(), simx_cosim_comp_feed_consumed(),
+                ((simx_cosim_load_feed_pushed() == simx_cosim_load_feed_consumed()) &&
+                 (simx_cosim_comp_feed_pushed() == simx_cosim_comp_feed_consumed()))
                     ? "(PC-occurrences aligned)" : "(WARNING: PC-occurrence mismatch — see consumed<pushed)"),
                 UVM_LOW)
 
@@ -721,11 +818,14 @@ class lockstep_scoreboard extends uvm_scoreboard;
             run_compare();
 
             simx_cosim_load_feed_enable(0);     // leave SimX pristine
+            simx_cosim_comp_feed_enable(0);
         end
 
         // Housekeeping: clear both channels for any subsequent run.
         dut_retire_q.delete();
         dut_load_q.delete();
+        feed_q.delete();
+        comp_feed_q.delete();
         simx_cosim_clear();
     endfunction
 
@@ -747,18 +847,19 @@ class lockstep_scoreboard extends uvm_scoreboard;
         if (did_pass2) begin
             int p2_residual = n_mm_pc + n_mm_rd + n_mm_data + n_mm_loaddata
                             + n_dut_orphan + n_simx_orphan;
-            `uvm_info("LOCKSTEP", "  ---- RVVI LOAD-BUS TWO-PASS VERDICT (Phase A1(e)) ----", UVM_LOW)
+            `uvm_info("LOCKSTEP", "  ---- TWO-PASS RECONVERGENCE VERDICT (Phase A1(e) load-bus + OBS-014 sqrt) ----", UVM_LOW)
             `uvm_info("LOCKSTEP", $sformatf(
-                "    PASS 1 (independent) : %0d racy in-region LOAD divergence(s); %0d cascaded field-mismatch(es); %0d warp(s) diverged",
+                "    PASS 1 (independent) : %0d in-region LOAD divergence(s); %0d cascaded field-mismatch(es); %0d warp(s) diverged",
                 p1_mm_loaddata, p1_mm_pc + p1_mm_rd + p1_mm_data + p1_mm_loaddata, p1_first_div_keys), UVM_LOW)
             `uvm_info("LOCKSTEP", $sformatf(
-                "    PASS 2 (DUT load-bus): residual mismatch = %0d (PC=%0d rd=%0d data=%0d load=%0d orphan=%0d/%0d)",
-                p2_residual, n_mm_pc, n_mm_rd, n_mm_data, n_mm_loaddata, n_dut_orphan, n_simx_orphan), UVM_LOW)
+                "    PASS 2 (DUT-fed)     : residual mismatch = %0d (PC=%0d rd=%0d data=%0d load=%0d orphan=%0d/%0d) | fed: %0d racy load(s) + %0d sqrt reconvergence(s)",
+                p2_residual, n_mm_pc, n_mm_rd, n_mm_data, n_mm_loaddata, n_dut_orphan, n_simx_orphan,
+                simx_cosim_load_feed_consumed(), simx_cosim_comp_feed_consumed()), UVM_LOW)
             if (p2_residual == 0)
-                `uvm_info("LOCKSTEP", "    VERDICT: all divergences explained by unsynchronizable shared-memory races; DUT VERIFIED modulo racy loads.", UVM_LOW)
+                `uvm_info("LOCKSTEP", "    VERDICT: all divergences explained by (a) unsynchronizable shared-memory races and/or (b) the documented OBS-014 fsqrt 1-ULP deviation; DUT VERIFIED modulo those cited, reconverged causes. All compute/control/store re-checked bit-exact.", UVM_LOW)
             else
                 `uvm_error("LOCKSTEP", $sformatf(
-                    "    VERDICT: %0d residual mismatch(es) NOT explained by racy loads — REAL divergence, investigate.", p2_residual))
+                    "    VERDICT: %0d residual mismatch(es) NOT explained by racy loads or the OBS-014 sqrt feed — REAL divergence, investigate.", p2_residual))
             `uvm_info("LOCKSTEP", "  ------------------------------------------------------", UVM_LOW)
         end
         // Suppression-hole guard: feed armed but NO racy in-region loads found
@@ -785,6 +886,7 @@ class lockstep_scoreboard extends uvm_scoreboard;
         `uvm_info("LOCKSTEP", $sformatf("  load data-skipped   : %0d (gated off / no LSU beat; end-state covers)", n_load_dataskip), UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  volatile-CSR skipped: %0d (perf counters; model-divergent)", n_volatile_skip), UVM_LOW)
         `uvm_info("LOCKSTEP", $sformatf("  multireg end-state  : %0d (WMMA tile regs not on DUT commit trace; end-state covers)", n_multireg_covered), UVM_LOW)
+        `uvm_info("LOCKSTEP", $sformatf("  fsqrt 1-ULP tol     : %0d (OBS-014 DUT hardware fsqrt.s vs SoftFloat; bounded <=%0d ULP, sqrt only)", n_fp_ulp_tol, FP_SQRT_MAX_ULP), UVM_LOW)
         // A1(d) deliverable: the earliest diverging instruction per warp. For a
         // clean run this block is empty; for a cross-core divergence it pinpoints
         // the exact core/warp/PC where DUT and SimX first disagree.

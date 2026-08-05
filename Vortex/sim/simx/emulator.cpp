@@ -725,4 +725,50 @@ const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid, uint64_t pc) {
 uint32_t loadfeed_pushed()   { return g_loadfeed_pushed; }
 uint32_t loadfeed_consumed() { return g_loadfeed_consumed; }
 
+// --- COMPUTE-writeback feed (OBS-014 reconvergence) — parallel store, own cursors.
+namespace {
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t,uint32_t>, LoadFeedRec> g_compfeed;
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t>, uint32_t> g_compfeed_cursor;
+  bool     g_compfeed_en = false;
+  uint32_t g_compfeed_pushed = 0;
+  uint32_t g_compfeed_consumed = 0;
+}
+
+void compfeed_reset() {
+  g_compfeed.clear();
+  g_compfeed_cursor.clear();
+  g_compfeed_pushed = 0;
+  g_compfeed_consumed = 0;
+}
+
+void compfeed_rewind() {
+  g_compfeed_cursor.clear();
+  g_compfeed_consumed = 0;
+}
+
+void compfeed_enable(bool en) { g_compfeed_en = en; }
+bool compfeed_enabled() { return g_compfeed_en; }
+
+void compfeed_push(uint32_t cid, uint32_t wid, uint64_t pc, uint32_t occurrence,
+                   uint32_t feed_mask, const uint64_t* data, uint32_t n) {
+  LoadFeedRec r{};
+  r.feed_mask = feed_mask;
+  for (uint32_t i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i)
+    r.data[i] = data[i];
+  g_compfeed[std::make_tuple(cid, wid, pc, occurrence)] = r;
+  ++g_compfeed_pushed;
+}
+
+const LoadFeedRec* compfeed_next(uint32_t cid, uint32_t wid, uint64_t pc) {
+  if (!g_compfeed_en) return nullptr;
+  uint32_t occ = g_compfeed_cursor[std::make_tuple(cid, wid, pc)]++;
+  auto it = g_compfeed.find(std::make_tuple(cid, wid, pc, occ));
+  if (it == g_compfeed.end()) return nullptr;
+  ++g_compfeed_consumed;
+  return &it->second;
+}
+
+uint32_t compfeed_pushed()   { return g_compfeed_pushed; }
+uint32_t compfeed_consumed() { return g_compfeed_consumed; }
+
 } // namespace vortex

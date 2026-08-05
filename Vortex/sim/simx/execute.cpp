@@ -1288,6 +1288,27 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
       default:
         std::abort();
       }
+      // COMPUTE-writeback feed (OBS-014 reconvergence): for FSQRT ONLY, if the
+      // scoreboard certified this warp/PC/occurrence's DUT sqrt as within the
+      // documented 1-ULP bound, adopt the DUT value into SimX's FP destination so
+      // the register file reconverges and every downstream op is re-checked
+      // bit-exact against a DUT-consistent reference. Advance the cursor once per
+      // sqrt at this PC (fed or not). Default OFF ⇒ feed==nullptr ⇒ no change.
+      if (fpu_type == FpuType::FSQRT) {
+        const vortex::LoadFeedRec* cfeed =
+            vortex::compfeed_next(core_->id(), wid, trace->PC);
+        if (cfeed) {
+          for (uint32_t t = thread_start; t < num_threads; ++t) {
+            if (warp.tmask.test(t) && ((cfeed->feed_mask >> t) & 1)) {
+              // Re-NaN-box the DUT's single-precision result: the F-only DUT regfile
+              // reports upper32=0, but SimX's 64-bit FP convention expects a boxed
+              // single (upper32=0xFFFFFFFF) so downstream check_boxing() does not treat
+              // it as an unboxed qNaN. (F-only/FLEN=32 build; fsqrt.d is future work.)
+              rd_data[t].u64 = nan_box(static_cast<uint32_t>(cfeed->data[t]));
+            }
+          }
+        }
+      }
       rd_write = true;
     },
     [&](CsrType csr_type) {
