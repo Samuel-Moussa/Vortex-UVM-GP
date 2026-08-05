@@ -11,7 +11,7 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. A5 (RTL-assert gate) ✅. INV-4 (riscv-dv jalr derail) ✅. **2CL directed-suite lockstep sweep ✅** (findings below). A6 (Spike audit) FROZEN by user. NEXT ACTION: layer-4 multi-register WMMA/FP retirement (closes tcu + fpu_test lockstep) — see ▶▶ block.**
+**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. A5 (RTL-assert gate) ✅. INV-4 (riscv-dv jalr derail) ✅. **2CL directed-suite lockstep sweep ✅** (findings below). A6 (Spike audit) FROZEN by user. layer-4 multi-register WMMA retirement ✅ (tcu_test/tcu_mt lane-exact). **fpu_test + fpu_mt ✅ CLOSED via OBS-014 (fsqrt 1-ULP tolerance + two-pass sqrt reconvergence feed, commit `483a655`).** NEXT ACTION: sfu_masks frm-CSR divergence classification, then Phase B (B2 scoreboard→mem_model) — see ▶▶ block.**
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
@@ -49,10 +49,21 @@ artifacts from genuine differences. Findings:
   so tile records stay at their program position instead of scattering. **Result: tcu_test 785/785,
   tcu_mt 1179/1179 — fully lane-exact, 0 mismatch, 0 orphan, PASS.** Zero regression (diverge_fpu
   2738/2738, vecadd_lite 1035/1035, diverge_deep 3264/3264). Config bound: per-warp retire < 2^28.
-- **▶ OPEN — fpu_test + fpu_mt (next action).** fpu_test: 112 SimX-orphans (matched 1155/1675,
-  PC=504) — a DIFFERENT multi-writeback phenomenon, NOT a WMMA tile (multireg=0), likely a soft-
-  float libcall / fcvt sequence where SimX retires more instructions than the DUT. fpu_mt: 4 data
-  mismatches (matched 1408/1412) — small genuine item. Investigate both next.
+- **✅ CLOSED — fpu_test + fpu_mt (OBS-014, 2026-08-06, commit `483a655`).** Root cause was NOT a
+  comparator gap: the DUT hardware **`fsqrt.s` rounds 1 ULP off** the IEEE-correct SoftFloat
+  reference (real RTL FPU accuracy limitation — end-state's FP-tolerance had masked it; lockstep
+  exposed it). The 1-ULP result then propagates through a spill/reload + a dependent `fmul`,
+  producing the downstream cascade (the earlier "112 orphans / 4 mismatches" characterization was
+  that propagation, not a libcall). Handled two-layer, sqrt-ONLY, keeping `+-*/` bit-exact:
+  (1) **bounded 1-ULP tolerance** for `fsqrt` writebacks (SimX exports `is_fsqrt`; comparator
+  `fp32_within_ulp`, each toleranced op logged + tallied); (2) **two-pass sqrt reconvergence feed**
+  (`compfeed_*`, mirrors the OBS-009 load-bus feed) forces the certified DUT sqrt value into SimX's
+  FP regfile at pass 2 so every downstream op is re-checked bit-exact. **fpu_test GREEN** (pass-2
+  residual 0, matched 1675); **fpu_mt lockstep GREEN** (residual 0, 4 reconvergences). Gated on
+  `+LOCKSTEP_LOADFEED`; default single-pass byte-identical. Full detail: `docs/RTL_OBSERVATIONS.md`
+  OBS-014. **Residual TB gap (separate, flagged):** fpu_mt still trips the legacy end-state gate
+  ("no functional verification performed" — it emits no checkable mem region/console); the lockstep
+  now IS its verification. Candidate: let a passing lockstep satisfy that gate (Phase B territory).
 - **FUTURE WORK (user-directed 2026-07-17): FLEN=64 / XLEN=64 support.** Current env is pinned
   RV32IMAF (XLEN=32, FLEN=32). The comparator's FP-box fix deliberately stays STRICT for FLEN=64
   (non-boxed gold → full-width compare). A real 64-bit build (D extension / RV64) needs its own
