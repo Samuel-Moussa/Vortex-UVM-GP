@@ -37,13 +37,22 @@ artifacts from genuine differences. Findings:
   kernels are provably unaffected; low-32/FLEN compare keeps the FP VALUE bit-exact — real fixes,
   NOT waivers): vecadd_lite 1035/1035 (no regression) · **diverge_fpu RED→GREEN 2738/2738** ·
   fpu_mt data-mismatch 907→4. New `scripts/lockstep_sweep_2cl.sh` (checking-depth sweep, no UCDB merge).
-- **▶ OPEN — LAYER 4 (next action): multi-register WMMA/FP retirement.** Explains BOTH remaining
-  REDs: tcu_test/tcu_mt (PC=140/rd=85/data=93 pure WMMA slip) AND fpu_test (PC=504 — same "one
-  instruction, different retire-record count per side" class, likely a soft-float libcall / multi-
-  writeback op). The lockstep record model is "one instruction → one dest register"; WMMA violates
-  it on both sides with different uuid/count conventions. Fix = teach the record/export/comparator
-  about multi-register retirements (record struct + SimX export aggregation + comparator alignment).
-  fpu_mt's residual 4 = a separate small genuine item to check after. This is the agreed next task.
+- **LAYER 4 (multi-register WMMA retirement) = DONE for TCU, comparator-side (industrial choice —
+  golden model kept faithful).** Implemented in `lockstep_scoreboard.sv`: (a) `build_dut` keys the
+  merge by (uuid,rd) so multi-register retires split per-register; (b) `run_compare` rewritten to
+  **instruction-grouped alignment** — group the DUT stream by instruction, take gold's leading
+  same-PC records as that instruction's register writes, match by rd, and count tile registers the
+  DUT doesn't expose as an explicit `multireg end-state-covered` bucket (their values verified by
+  the end-state memory compare — honest, reported, never dropped); (c) `po_base`/`po_order` handle
+  the WMMA tile's beat/round SUB-INDEX in uuid bits[31:28] (the RTL counter increments by 1, but the
+  tile writebacks carry round<<28) — fold it for grouping, order it below the counter for the sort,
+  so tile records stay at their program position instead of scattering. **Result: tcu_test 785/785,
+  tcu_mt 1179/1179 — fully lane-exact, 0 mismatch, 0 orphan, PASS.** Zero regression (diverge_fpu
+  2738/2738, vecadd_lite 1035/1035, diverge_deep 3264/3264). Config bound: per-warp retire < 2^28.
+- **▶ OPEN — fpu_test + fpu_mt (next action).** fpu_test: 112 SimX-orphans (matched 1155/1675,
+  PC=504) — a DIFFERENT multi-writeback phenomenon, NOT a WMMA tile (multireg=0), likely a soft-
+  float libcall / fcvt sequence where SimX retires more instructions than the DUT. fpu_mt: 4 data
+  mismatches (matched 1408/1412) — small genuine item. Investigate both next.
 - **FUTURE WORK (user-directed 2026-07-17): FLEN=64 / XLEN=64 support.** Current env is pinned
   RV32IMAF (XLEN=32, FLEN=32). The comparator's FP-box fix deliberately stays STRICT for FLEN=64
   (non-boxed gold → full-width compare). A real 64-bit build (D extension / RV64) needs its own
