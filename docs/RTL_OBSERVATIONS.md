@@ -626,3 +626,69 @@ not scattered across per-fix docs.
   it should **not** change — the staleness lives in the per-socket L1 dcaches, which have no
   invalidation (no `snoop|coheren|invalidat|MESI` anywhere in `hw/rtl/cache/*.sv`); L2/L3
   only back *misses*, and at `SOCKET_SIZE=2` both cores of a cluster already share one L1.
+
+---
+
+### OBS-017 (RTL BUG — verification guard, blocking for L2/L3 configs) — `VX_mem_scheduler` hardcodes a ~1000-cycle response timeout that ignores the configurable `STALL_TIMEOUT` and does not scale with cache depth
+- **Class:** RTL BUG (runtime-assert guard; the datapath itself is correct) ·
+  **Disposition:** OPEN — root-caused, not yet fixed (needs an RTL change) ·
+  **Found:** 2026-08-06, first-ever build with `L2_ENABLE`+`L3_ENABLE` (unblocked by OBS-016).
+- **What we saw:** with L2+L3 enabled at 2CL/2C/4W/4T, **every** tier-1 kernel emitted a flood
+  of `*** <core>-execute-lsu0-memsched response timeout: tag=0x...` RTL errors — e.g.
+  `tcu_test` produced **22,187** of them starting at t=148,095,000 ps. Because the A5
+  RTL-assert gate counts `** Error:` lines, every run returned `make rc=2` (RED) — including
+  kernels that are perfectly lane-exact.
+- **IT IS A FALSE ALARM, NOT A HANG — the DUT is correct.** The same `tcu_test` run reached
+  **EBREAK at 21,968 cycles**, lockstep **matched 2789/2789** (0 PC / 0 rd / 0 data / 0 orphan),
+  `UVM_ERROR: 0`, `*** TEST PASSED ***`. The memory responses *did* return; they merely took
+  longer than the guard allows. So the guard, not the design, is what fails.
+- **ROOT CAUSE:** `libs/VX_mem_scheduler.sv:91` declares its own
+  ``localparam STALL_TIMEOUT = 10000000;`` which **shadows** the configurable global
+  (`VX_config.vh:246`, `VX_gpu_pkg.sv:109`). The assert at `:580` is
+  ``($time - pending_reqs_time[i]) < STALL_TIMEOUT``. With the TB at ``timescale 1ns/1ps`` and
+  `CLK_PERIOD=10` (`vortex_tb_top.sv:15,31`), `$time` is in ps and one cycle = 10,000 ps ⇒ the
+  budget is **10,000,000 ps = 1,000 cycles**. A full L1→L2→L3→DRAM miss chain under 4-core
+  contention exceeds that routinely, so the guard fires spuriously. Two consequences:
+  1. It is **hardcoded** — `+define+STALL_TIMEOUT=...` cannot tune it, because the localparam
+     shadows the global inside this module.
+  2. It **does not scale with cache depth**, which is precisely what the global was written to
+     do — and that global is itself broken, see next point.
+- **RELATIONSHIP TO OBS-011 (which this run promotes from *latent* to *confirmed*):** the global
+  is ``(100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))``. Since ``1 ** N ≡ 1``, it never scales.
+  The clear intent was "widen the stall/response budget when extra cache levels are added" —
+  exactly the configuration that now floods. So the one mechanism designed to prevent this is
+  a no-op, AND the memory scheduler ignores it anyway. OBS-011 is no longer theoretical.
+- **Suggested fix (RTL):** delete the shadowing localparam in `VX_mem_scheduler.sv:91` and use
+  the package value, and fix the scaling base in `VX_config.vh:246` / `VX_gpu_pkg.sv:109`
+  (`1 ** N` → e.g. `4 ** N` or `10 ** N`) so the budget actually grows with hierarchy depth.
+  Both are guard-only changes; no datapath impact. NOT applied — RTL edits need sign-off.
+
+---
+
+### OBS-018 (RESULT — architectural, confirms OBS-009) — enabling the shared L2+L3 caches does NOT remove the cross-cluster divergences
+- **Class:** architectural result (verification evidence for OBS-009) · **Disposition:** closed —
+  question answered · **Found:** 2026-08-06.
+- **Experiment:** rebuilt at 2CL/2C/4W/4T with `L2_ENABLE`+`L3_ENABLE` (the optional levels are
+  `PASSTHRU`/pure-bypass by default) and re-ran the full 15-kernel tier-1 lockstep sweep.
+  **Prediction was recorded BEFORE the run** (see OBS-016 follow-up) that the races would persist.
+- **L2/L3 were genuinely elaborated** — not merely defined. Verified from the run's coverage
+  database: `vcover report -recursive <ucdb>` lists **`l2cache`** and **`l3cache`** instances
+  alongside `dcache`/`icache`. (Grepping the sim log for the names is NOT sufficient evidence —
+  `dcache` does not appear there either.)
+- **RESULT: bit-identical to the PASSTHRU baseline on all 15 kernels** (mechanically diffed:
+  `compared=`, `matched=`, and `mm[PC,rd,data,LOAD]` all equal). 7 lane-exact
+  (vecadd_lite, tcu_test, tcu_mt, vote_shfl, div_edge, spawn_tmc_sweep, bar_masks); the same 8
+  kernels diverge by exactly the same amounts (e.g. diverge_fpu/uni3/sfu_masks `data=222 LOAD=32`).
+- **WHY (and why this was predictable):** the staleness lives in the **per-socket L1 dcaches**,
+  which have **no invalidation** — a scan of `hw/rtl/cache/*.sv` for
+  `snoop|coheren|invalidat|MESI|MOESI|probe_req` returns **zero hits**; the only cross-cache
+  mechanism is `flush` (`VX_cache.sv:118-137`). Adding L2/L3 provides a common backing store for
+  *misses*, but a core whose L1 already holds a line still hits stale data. Additionally, at
+  `SOCKET_SIZE=MIN(4,NUM_CORES)=2` both cores of a cluster already share ONE L1
+  (`VX_socket.sv:135-138`), so intra-cluster traffic was never the issue.
+- **Significance:** this is direct experimental confirmation that the OBS-009 divergences are the
+  **published weak-coherence memory model** (MICRO'21 §4.1.4: *"Flush operations among caches are
+  provided as a means of providing weak coherent memory space"*; §3.1 uses the RISC-V `fence` for
+  memory synchronization) — NOT a missing-cache artifact and NOT a DUT bug. Coherence in Vortex is
+  the program's responsibility via fence/flush; a fenceless cross-cluster kernel has no
+  architecturally-defined single result, so DUT≠SimX there is expected.
