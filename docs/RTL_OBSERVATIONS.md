@@ -725,3 +725,40 @@ not scattered across per-fix docs.
   memory synchronization) — NOT a missing-cache artifact and NOT a DUT bug. Coherence in Vortex is
   the program's responsibility via fence/flush; a fenceless cross-cluster kernel has no
   architecturally-defined single result, so DUT≠SimX there is expected.
+
+---
+
+### OBS-019 (TB BUG — silent config drift) — UVM `vortex_config.sv` duplicated the RTL cache geometry as hand-written fallbacks, and had drifted (L3 = 1 MB vs RTL 2 MB)
+- **Class:** TB/infrastructure bug (config fidelity) · **Disposition:** **FIXED** ·
+  **Found:** 2026-08-06, while auditing "is everything parametrized, nothing hardcoded".
+- **What we found:** `vortex_config.sv` set the cache geometry with `` `ifdef X / `else <literal> ``
+  pairs whose `else` branch **restated the RTL default by hand**:
+  ```
+  `ifdef L3_CACHE_SIZE  l3_cache_size = `L3_CACHE_SIZE;
+  `else                 l3_cache_size = 1048576;   // "1MB"
+  ```
+  Two problems compounded:
+  1. **The fallbacks were ALWAYS the values actually used.** The UVM `vlog` gets
+     `$COMPILE_OPTS` (so command-line `+define+`s reach it) but does **not** include
+     `VX_config.vh` — so `` `DCACHE_SIZE ``/`` `L3_CACHE_SIZE `` etc. are undefined there and
+     every `` `ifdef `` took the `else` path.
+  2. **They had drifted.** RTL `L3_CACHE_SIZE` is **2097152 (2 MB)** (`VX_config.vh:750`);
+     the TB fallback said **1048576 (1 MB)** — a silent 2x mismatch between what the TB
+     believed and what was elaborated. `cache_line_size` was likewise hardcoded to `64`
+     instead of tracking `MEM_BLOCK_SIZE`.
+  This is precisely the drift class the I2 topology assert exists to prevent for
+  cores/warps/threads — but the cache geometry had no such guard.
+- **FIX (single source of truth, no duplication possible):**
+  1. `VX_gpu_pkg.sv` now **exports** the geometry the RTL actually elaborated with:
+     `ICACHE_SIZE_BYTES`, `DCACHE_SIZE_BYTES`, `L2_CACHE_SIZE_BYTES`, `L3_CACHE_SIZE_BYTES`,
+     `CACHE_LINE_SIZE_BYTES`, `L2_IS_ENABLED`, `L3_IS_ENABLED`.
+  2. `vortex_config.sv` reads them directly (`VX_gpu_pkg::…`) — the same pattern already
+     endorsed at the top of that file for `VX_MEM_TAG_WIDTH` (*"derived from RTL — never
+     hardcode"*). All hand-written fallbacks and the hardcoded line size are gone.
+  Because anything set from the terminal flows through the RTL macros into the package,
+  a terminal override (`make sim … L2=1 L3=1`) is now reflected in the TB automatically —
+  TB and RTL cannot disagree by construction rather than by manual sync.
+- **Note:** this also means the TB's cache view was wrong for every previous run that
+  consulted `l3_cache_size`/`cache_line_size`. Nothing in the current checkers keys off
+  them (they are informational/randomization bounds), so no past result is invalidated —
+  but the mismatch would have silently mis-shaped any future cache-aware stimulus.
