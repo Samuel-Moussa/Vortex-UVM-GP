@@ -11,7 +11,7 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A COMPLETE except A6 (frozen).** A0 ✅ · A1(a–e) ✅ · A2 ✅ · **A3 ✅ CLOSED (2026-08-06)** — golden refusals are now NAMED halts (-4 GOLDEN_HALT) not anonymous crashes (-3); disassembler never aborts (33 sites); 39 semantic sites record pc/instr/sub-field; verified prefix preserved, truncated tail excluded. **MEASURED: the UNVERIFIABLE bucket is EMPTY** — all 10 retained riscv-dv re-run, zero SimX aborts, real byte-exact compares (15..1414 words); the "~10 still abort / 69 std::abort" claim was STALE. Non-vacuity proven via `SIMX_FORCE_HALT` (default OFF). · A4 ✅ (2CL divergence grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · A6 ❄️ FROZEN (**not a blocker for A3 — Spike has no SIMT model and cannot run a Vortex kernel; the bucket emptied without it**). **2CL sweep 5→12 of 15 verified.** TCU ✅ · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). **cache_tier VALIDATED @1CL** (460,769 cyc, 64,772 instr, 16,452 byte-exact words, 0 err). NEXT ACTION: (1) L2/L3 cache-tier coverage confirmation + 15-kernel L2/L3 sweep re-run; (2) **Phase B — B2 scoreboard→mem_model**. See ▶▶ block.
+**CURRENT MILESTONE: Phase A COMPLETE except A6 (frozen).** A0 ✅ · A1(a–e) ✅ · A2 ✅ · **A3 ✅ CLOSED (2026-08-06)** — golden refusals are now NAMED halts (-4 GOLDEN_HALT) not anonymous crashes (-3); disassembler never aborts (33 sites); 39 semantic sites record pc/instr/sub-field; verified prefix preserved, truncated tail excluded. **MEASURED: the UNVERIFIABLE bucket is EMPTY** — all 10 retained riscv-dv re-run, zero SimX aborts, real byte-exact compares (15..1414 words); the "~10 still abort / 69 std::abort" claim was STALE. Non-vacuity proven via `SIMX_FORCE_HALT` (default OFF). · A4 ✅ (2CL divergence grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · A6 ❄️ FROZEN (**not a blocker for A3 — Spike has no SIMT model and cannot run a Vortex kernel; the bucket emptied without it**). **2CL sweep 5→12 of 15 verified.** TCU ✅ · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). **cache_tier VALIDATED @1CL** (460,769 cyc, 64,772 instr, 16,452 byte-exact words, 0 err). NEXT ACTION: (1) L2/L3 cache-tier coverage confirmation + 15-kernel L2/L3 sweep re-run; (2) **Phase B — B2 scoreboard→mem_model**. See ▶▶ block. **⚠ Before making any "we verified / we stressed it" claim, read the 🎯 VERIFICATION-MATURITY ASSESSMENT & FUTURE WORK section (FW-1..FW-7) — FW-1 (no seed control ⇒ random results not reproducible) is the top gap.**
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
@@ -463,7 +463,7 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 - **D1 — Parallel + graded regression.** Bounded worker pool in `run_suite.sh` (riscv-dv regen lane kept serial; respect QuestaSim licenses). `vcover ranktest` for a minimal sign-off set.
 - **D2 — Coverage-off dev fast path.** `COVERAGE=0` compile/sim mode for verdict-only iteration; scope toggle instrumentation off third-party (cvfpu/HardFloat).
 - **D3 — CI.** Nightly regression, results database, coverage-trend tracking, auto-triage.
-- **D4 — Seed farm.** riscv-dv scaled to hundreds of seeds (C-extension enabled once Spike is the reference — it decodes RVC where SimX aborts).
+- **D4 — Seed farm.** riscv-dv scaled to hundreds of seeds. **SUPERSEDED/ABSORBED by FW-1** (see the Verification-Maturity Assessment section) — which also records the more serious finding that there is currently NO seed control at all, so random results are not reproducible. (The old parenthetical here — "C-extension enabled once Spike is the reference, it decodes RVC where SimX aborts" — is obsolete: RVC is excluded upstream at the toolchain level, `prepare.sh:321 --target=rv32im`.)
 - **D5 — Automated sign-off.** One report: pass rate, merged per-config coverage vs goal, matrix status, **requirements traceability matrix**, tool versions + seeds logged (reproducibility).
 
 ---
@@ -523,6 +523,96 @@ A0 → A1 → A2 → A3 → A4 → A5        (flagship, depth-first — do first
 3. RAL-based register access; single-source-of-truth scoreboard.
 4. Traceable coverage plan; per-config sign-off across the config matrix.
 5. CI-driven parallel/graded regression with reproducible, auto-generated sign-off + traceability.
+
+## 🎯 VERIFICATION-MATURITY ASSESSMENT & FUTURE WORK (added 2026-08-06)
+
+Honest self-assessment against the industrial sign-off yardstick above, written to keep the
+project's claims defensible. **The distinguishing weakness is NOT the checkers — it is how many
+scenarios the checkers have been shown.** Blunt summary: *a good microscope pointed at ~42 slides.*
+
+### What is defensible TODAY
+> "We built a per-instruction lockstep verification environment with **proven-non-vacuous**
+> checkers, achieved 100% functional and 91% total code coverage on the primary configuration,
+> and found and documented real RTL defects — including an **ISA spec deviation** (OBS-012 JALR)
+> and an **IEEE-754 accuracy bug** (OBS-014 `fsqrt.s`). Stimulus breadth, reference-model
+> independence, and the error/exception axis are identified as remaining work."
+
+Every number in that sentence is reproducible on demand. **Do NOT upgrade it to "the design is
+verified" or "we stressed the design"** — neither is currently supportable (see FW-1, FW-7).
+
+**Genuine strengths (keep these visible — they are the project's real credibility):**
+- **Non-vacuity discipline.** Two checking layers (end-state byte-exact + per-instruction
+  lockstep) and BOTH proven able to fail (`negative_result_test`, `negative_dropped_store_test`).
+  A checker never observed to fail is not a checker; most benches skip this.
+- **Track record, not just claims.** Real RTL defects found: OBS-011/012/013/014/017, plus
+  infrastructure defects OBS-016/019/020. A bench that finds real bugs is doing real work.
+- **Config fidelity by construction** (`VX_gpu_pkg` exports elaborated geometry; elaboration
+  asserts proven non-vacuous) rather than by convention.
+
+### Maturity by axis
+| Axis | Status |
+|---|---|
+| Checker strength / non-vacuity | **Strong** — above typical |
+| Reference-model quality | Good but **NOT independent** (hard ceiling — see FW-2) |
+| Bug-discovery track record | **Strong** |
+| Stimulus volume & randomization | **Weak** — 1 seed, non-reproducible (FW-1) |
+| Config coverage | **Weak** — 2 points, but now cheap (FW-3) |
+| Error/exception handling | **Absent** (FW-4) |
+| X-prop / reset randomization / GLS | **Absent** (FW-5) |
+| Coverage-model provenance | **Moderate** — self-authored, not spec-traced (FW-6) |
+| Stress / soak | **Weak** — directed single-shots (FW-7) |
+
+### FUTURE WORK — ordered by claim-strength gained per unit effort
+
+- **FW-1 — Seed control + seed farm. HIGHEST PRIORITY; partly a CORRECTNESS bug, not just
+  throughput.** `prepare.sh:322` passes `--iterations=1` and **`grep -i seed` across
+  `run_suite.sh` / `simulate.sh` / `prepare.sh` returns NOTHING** — there is no seed control
+  anywhere. Two consequences:
+  1. One program per riscv-dv profile = **directed testing wearing a CRV costume**. Sign-off
+     elsewhere means thousands of seeds.
+  2. **Results are NOT REPRODUCIBLE.** Each `RISCV_DV_REGEN=1` generates a *different* program.
+     This is almost certainly why `riscv_non_compressed_instr_test` and `riscv_rand_jump_test`
+     failed in the 2026-08-06 sweep having passed previously. **You cannot debug, bisect, or
+     regress what you cannot reproduce** — this currently undermines every random-stimulus
+     result in the project.
+  *Do:* plumb an explicit `SEED=` through `prepare.sh`→riscv-dv (`--seed`) and record it in the
+  run log; raise `--iterations`; add a seed-sweep mode. *Accept:* a named seed reproduces a
+  failing program byte-identically; ≥100-seed sweep runs green or yields triaged failures.
+  Supersedes/absorbs the older, thinner **D4**.
+
+- **FW-2 — Reference-model independence (unfreeze A6/Spike).** SimX is written by the Vortex
+  team ⇒ shared assumptions ⇒ **shared blind spots**: the bug class where DUT and golden are
+  wrong in the SAME way is structurally invisible, regardless of how many instructions match.
+  This is a hard ceiling on every lockstep claim. Note this was never an A3 blocker (A3 closed
+  without it, 2026-08-06) — it is a *quality-of-claim* item, not a coverage item.
+
+- **FW-3 — Config-matrix breadth.** Two points sampled (1CL/1C/4W/4T, 2CL/2C/4W/4T) of
+  clusters × cores × warps × threads × L1/L2/L3 × XLEN × extensions; coverage cannot be blended
+  across configs, so each needs independent closure. **Now compute time, not engineering** —
+  the terminal-control work (2026-08-06) already made every knob settable.
+
+- **FW-4 — Error/exception axis (currently ABSENT).** AXI `bresp`/`rresp` were waived as
+  *"TB always OKAY, no error-inject test"* — so there is **zero evidence** about behaviour when
+  something goes wrong. Add a plusarg-gated slave error-injection mode (infrastructure already
+  exists from the throttle/flood modes in `axi_driver.sv`), un-waive those coverpoints, and
+  close the open **T-exc** checklist item.
+
+- **FW-5 — X-propagation, randomized reset, gate-level.** Reset is a single deterministic
+  sequence. X-prop is likely to find real bugs here — INV-2 already established that the base
+  DCRs have **no reset**.
+
+- **FW-6 — Spec-traced coverage model.** "100% functional coverage" currently means *100% of the
+  bins we wrote*. There is no traced path from an ISA/microarchitecture feature list to
+  covergroups with review sign-off, so it measures completeness of the MODEL, not of the DESIGN.
+  This is the claim most likely to be challenged in review. `docs/Coverage_Model_Reference.md` is
+  the starting point; what is missing is the requirements→covergroup traceability matrix
+  (feeds acceptance criterion #4).
+
+- **FW-7 — Real stress / soak.** The directed stress kernels (`mem_stress`, `wide_stress`,
+  `cache_stress`, `axi_stress`, throttle/flood, `cache_tier`) are each **one short run**. They
+  demonstrate a path WORKS; they do not stress it. Industrial stress = sustained randomized
+  pressure, long soak, arbitration fairness/starvation, saturated outstanding transactions,
+  multi-core contention. **Until this exists, do not use the word "stressed" in any claim.**
 
 ## Non-negotiables carried from CLAUDE.md
 Black-box honesty (no fabricated verdicts); per-config coverage never blended; negative tests stay RED after any scoreboard change; announce/confirm expensive sim runs; no Claude attribution on commits.
