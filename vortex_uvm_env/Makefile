@@ -36,6 +36,15 @@ THREADS       ?= 4
 TIMEOUT       ?= 1000000
 STARTUP_ADDR  ?= 0x80000000
 
+# ── Cache hierarchy (defaults mirror the RTL's own defaults) ──────────────────
+# L2/L3 are the OPTIONAL levels and are PASSTHRU (pure bypass, no cache array)
+# unless enabled — see VX_cache_wrap.sv:160. Example:
+#   make sim TEST=... PROGRAM_NAME=... CLUSTERS=2 CORES=2 L2=1 L3=1
+L2            ?= 0
+L3            ?= 0
+ICACHE        ?= 1
+DCACHE        ?= 1
+
 # ── Regression-program support (kernel_arg_t / MSCRATCH harness) ──────────────
 PROGRAM_KIND  ?=
 DOGFOOD_TESTID ?=
@@ -92,6 +101,10 @@ _FLAGS += --warps=$(WARPS)
 _FLAGS += --threads=$(THREADS)
 _FLAGS += --timeout=$(TIMEOUT)
 _FLAGS += --startup-addr=$(STARTUP_ADDR)
+_FLAGS += --l2=$(L2)
+_FLAGS += --l3=$(L3)
+_FLAGS += --icache=$(ICACHE)
+_FLAGS += --dcache=$(DCACHE)
 ifeq ($(VERBOSE),1)
     _FLAGS += --verbose
 endif

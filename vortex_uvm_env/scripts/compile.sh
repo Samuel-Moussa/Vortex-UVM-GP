@@ -72,13 +72,23 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MREQ_SIZE=16"
     COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MREQ_SIZE=16"
 
-    # Escape hatch for extra RTL compile defines, e.g. enabling the optional cache
-    # levels that are PASSTHRU by default (VX_cluster.sv:107 / Vortex.sv:96 pass
-    # PASSTHRU=!L{2,3}_ENABLED, and VX_cache_wrap.sv:160 only instantiates the real
-    # VX_cache storage when PASSTHRU==0):
-    #   EXTRA_RTL_DEFINES="+define+L2_ENABLE +define+L3_ENABLE" make sim ...
-    # Empty by default => byte-identical to a normal build. Config-generic: whatever
-    # is passed is appended verbatim after the topology defines, so it can override.
+    # ── Cache hierarchy (terminal-controlled: make L2=1 L3=1 / --l2=1 --l3=1) ──
+    # These are PRESENCE guards in the RTL — defined with NO value. L2/L3 are the
+    # optional levels: VX_cluster.sv:107 / Vortex.sv:96 pass PASSTHRU=!L{2,3}_ENABLED
+    # and VX_cache_wrap.sv:160 instantiates the real VX_cache storage only when
+    # PASSTHRU==0, so leaving them off means pure bypass (no cache array at all).
+    # I/D caches are ON unless explicitly disabled (VX_config.vh:531-534, 586-589
+    # define {I,D}CACHE_ENABLE unless {I,D}CACHE_DISABLE is set), so we emit the
+    # *_DISABLE guard for the off case rather than an *_ENABLE for the on case.
+    [[ "${ENABLE_L2:-0}" == "1" ]] && COMPILE_OPTS="$COMPILE_OPTS +define+L2_ENABLE"
+    [[ "${ENABLE_L3:-0}" == "1" ]] && COMPILE_OPTS="$COMPILE_OPTS +define+L3_ENABLE"
+    [[ "${ENABLE_ICACHE:-1}" == "0" ]] && COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_DISABLE"
+    [[ "${ENABLE_DCACHE:-1}" == "0" ]] && COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_DISABLE"
+    print_info "Caches: icache=${ENABLE_ICACHE:-1} dcache=${ENABLE_DCACHE:-1} L2=${ENABLE_L2:-0} L3=${ENABLE_L3:-0}"
+
+    # Escape hatch for any OTHER non-default RTL define, without editing this script:
+    #   EXTRA_RTL_DEFINES="+define+DCACHE_WRITEBACK=1" make sim ...
+    # Empty by default => byte-identical. Appended last so it can override the above.
     if [[ -n "${EXTRA_RTL_DEFINES:-}" ]]; then
         COMPILE_OPTS="$COMPILE_OPTS $EXTRA_RTL_DEFINES"
         print_info "Extra RTL defines: $EXTRA_RTL_DEFINES"
