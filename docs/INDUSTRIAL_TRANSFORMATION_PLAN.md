@@ -601,12 +601,27 @@ verified" or "we stressed the design"** — neither is currently supportable (se
   sequence. X-prop is likely to find real bugs here — INV-2 already established that the base
   DCRs have **no reset**.
 
-- **FW-6 — Spec-traced coverage model.** "100% functional coverage" currently means *100% of the
-  bins we wrote*. There is no traced path from an ISA/microarchitecture feature list to
-  covergroups with review sign-off, so it measures completeness of the MODEL, not of the DESIGN.
-  This is the claim most likely to be challenged in review. `docs/Coverage_Model_Reference.md` is
-  the starting point; what is missing is the requirements→covergroup traceability matrix
-  (feeds acceptance criterion #4).
+- **FW-6 — Spec-traced coverage model. ✅ MATRIX DONE (2026-08-07), gaps now named:
+  `docs/COVERAGE_TRACEABILITY_MATRIX.md`.** Traces 17 design features → 18 covergroup types, and
+  — the actual payoff — names the features **no covergroup observes at all**:
+  - **G1 (biggest): NO cache-event coverage at any level.** Zero coverpoints matching
+    `hit|miss|evict|writeback|mshr|flush` exist; the only cache-adjacent points (`cp_id_route`,
+    `cross_type_route`) sample **routing tag bits**, not cache events. So the cache hierarchy —
+    a prime location for real bugs — is covered only by code coverage plus end-state/lockstep
+    equivalence, which a buggy cache can still satisfy. This is also **why the L2/L3 hit-path
+    question can only be answered from CODE coverage today.**
+  - **G2** exceptions/errors: only `cp_ebreak` (a status bit); no illegal-instruction,
+    misaligned or bus-error coverage (couples with FW-4).
+  - **G3** double-precision FP: `EXT_D_ENABLE` **is** in `flists/vortex_rtl.flist` (hardware is
+    built) but kernels compile `-march=rv32imaf` and riscv-dv targets `rv32im` — **built and
+    never stimulated by any path**, so it dilutes every coverage number. Either stimulate it or
+    drop the extension from the build.
+  - **G4** reset/init sequencing (with FW-5) · **G5** cross-cluster arbitration (with FW-7).
+  **NOT a gap:** atomics — `EXT_A_ENABLE` is absent from the RTL flist, so the A extension is out
+  of scope by configuration, not untested.
+  **Claim to use:** *"100% of a coverage model spanning 17 design features; the model does not
+  observe cache events, exception behaviour or double-precision FP — named gaps, not passing
+  results."* Feeds acceptance criterion #4.
 
 - **FW-7 — Real stress / soak.** The directed stress kernels (`mem_stress`, `wide_stress`,
   `cache_stress`, `axi_stress`, throttle/flood, `cache_tier`) are each **one short run**. They
