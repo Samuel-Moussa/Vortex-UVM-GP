@@ -19,8 +19,14 @@
 class kernel_launch_test extends vortex_base_test;
 	`uvm_component_utils(kernel_launch_test)
 
+	// Set when this program has no end-state check (no result region, no console
+	// output) but lockstep is armed: the non-vacuity verdict moves to check_phase,
+	// where the lockstep tallies are final. See check_results()/check_phase().
+	bit lockstep_vacuity_deferred;
+
 	function new(string name = "kernel_launch_test", uvm_component parent = null);
 		super.new(name, parent);
+		lockstep_vacuity_deferred = 0;
 	endfunction
 
 	virtual function void customize_config();
@@ -229,12 +235,31 @@ class kernel_launch_test extends vortex_base_test;
 		end
 
 		// A program passes only if SOME real check ran (memory or console).
+		//
+		// PHASE-ORDERING CAVEAT: this runs in run_phase, but two checkers deliberately
+		// complete LATER, so their counters are legitimately 0 here:
+		//   (a) with +LOCKSTEP_LOADFEED the end-state MEM compare is deferred to the
+		//       scoreboard's report_phase so it runs against POST-FEED SimX
+		//       (vortex_scoreboard.sv `endstate_feed_mode`); and
+		//   (b) the per-instruction lockstep compares in its check_phase.
+		// Failing here would be a FALSE "nothing was verified" verdict. So when either
+		// deferred checker is armed, defer the non-vacuity verdict to this test's
+		// report_phase (a UVM phase barrier guarantees both have finished by then).
+		// Non-vacuity is preserved, not weakened: the deferred check still FAILS if
+		// nothing actually compared anything.
 		if (env.m_scoreboard.num_comparisons == 0 &&
 		    env.m_scoreboard.num_console_checks == 0) begin
-			`uvm_error(get_type_name(),
-				"FAIL — no functional verification performed (no memory or console comparison)")
-			test_passed = 0;
-			return;
+			if (cfg != null && cfg.enable_lockstep) begin
+				lockstep_vacuity_deferred = 1;
+				`uvm_info(get_type_name(),
+					"No end-state check counted yet (deferred end-state compare and/or lockstep still pending) — deferring the non-vacuity verdict to report_phase",
+					UVM_LOW)
+			end else begin
+				`uvm_error(get_type_name(),
+					"FAIL — no functional verification performed (no memory or console comparison, and lockstep is disabled)")
+				test_passed = 0;
+				return;
+			end
 		end
 
 		if ((env.m_scoreboard.num_mem_failed + env.m_scoreboard.num_console_failed) != 0) begin
@@ -250,9 +275,10 @@ class kernel_launch_test extends vortex_base_test;
 		if (err_count == 0) begin
 			test_passed = 1;
 			`uvm_info(get_type_name(),
-				$sformatf("PASS — verified against SimX (mem comparisons=%0d passed, console checks=%0d passed)",
+				$sformatf("PASS — verified against SimX (mem comparisons=%0d passed, console checks=%0d passed)%s",
 					env.m_scoreboard.num_comparisons,
-					env.m_scoreboard.num_console_checks),
+					env.m_scoreboard.num_console_checks,
+					lockstep_vacuity_deferred ? " [non-vacuity pending: lockstep check_phase]" : ""),
 				UVM_LOW)
 		end else begin
 			test_passed = 0;
@@ -261,6 +287,45 @@ class kernel_launch_test extends vortex_base_test;
 		end
 
 		`uvm_info(get_type_name(), "----------------------------------------------------------------", UVM_LOW)
+	endfunction
+
+	//==========================================================================
+	// report_phase — completes the DEFERRED non-vacuity verdict.
+	//
+	// Runs here (not check_phase) because BOTH deferred checkers must have finished:
+	// the lockstep compares in check_phase, but the end-state MEM compare under
+	// +LOCKSTEP_LOADFEED runs in vortex_scoreboard's report_phase (against post-feed
+	// SimX). UVM function phases execute bottom-up, so the scoreboard — a deeper
+	// component — has already produced its final counts when this executes.
+	//
+	// This is NOT a relaxation of Gate-0 non-vacuity: a run where NOTHING compared
+	// anything still FAILS. It only stops a false "nothing was verified" verdict when
+	// the real checks simply had not run yet at run_phase time. The error is emitted
+	// BEFORE super.report_phase() so the base class's err_count/verdict includes it.
+	//==========================================================================
+	virtual function void report_phase(uvm_phase phase);
+		int unsigned endstate_checks;
+		int unsigned lockstep_pairs;
+
+		if (lockstep_vacuity_deferred) begin
+			endstate_checks = (env != null && env.m_scoreboard != null)
+				? (env.m_scoreboard.num_comparisons + env.m_scoreboard.num_console_checks) : 0;
+			lockstep_pairs  = (env != null && env.m_lockstep_scoreboard != null)
+				? env.m_lockstep_scoreboard.n_pairs : 0;
+
+			if (endstate_checks == 0 && lockstep_pairs == 0) begin
+				`uvm_error(get_type_name(),
+					"FAIL — no functional verification performed (end-state compared 0 words/console checks AND lockstep compared 0 instructions)")
+				test_passed = 0;
+			end else begin
+				`uvm_info(get_type_name(),
+					$sformatf("Non-vacuity satisfied: end-state checks=%0d, lockstep instruction pairs=%0d (both vs SimX)",
+						endstate_checks, lockstep_pairs),
+					UVM_LOW)
+			end
+		end
+
+		super.report_phase(phase);
 	endfunction
 
 endclass : kernel_launch_test

@@ -61,9 +61,13 @@ artifacts from genuine differences. Findings:
   FP regfile at pass 2 so every downstream op is re-checked bit-exact. **fpu_test GREEN** (pass-2
   residual 0, matched 1675); **fpu_mt lockstep GREEN** (residual 0, 4 reconvergences). Gated on
   `+LOCKSTEP_LOADFEED`; default single-pass byte-identical. Full detail: `docs/RTL_OBSERVATIONS.md`
-  OBS-014. **Residual TB gap (separate, flagged):** fpu_mt still trips the legacy end-state gate
-  ("no functional verification performed" — it emits no checkable mem region/console); the lockstep
-  now IS its verification. Candidate: let a passing lockstep satisfy that gate (Phase B territory).
+  OBS-014. **Follow-on FIXED (same session):** fpu_mt's residual 2 UVM_ERRORs were a
+  **phase-ordering false verdict** in the non-vacuity gate, NOT a missing checker — under
+  `+LOCKSTEP_LOADFEED` the end-state MEM compare is deferred to the scoreboard's report_phase and
+  lockstep compares in check_phase, so both counters read 0 in run_phase where the gate sat.
+  fpu_mt actually does 68 end-state comparisons + 1412 lockstep pairs. Gate moved to the test's
+  `report_phase` (after both); still FAILS if both are 0. Regression: fpu_mt PASS, vecadd_lite PASS
+  (84 + 1035), and BOTH Gate-0 negative guards still DETECT their injected faults.
 - **FUTURE WORK (user-directed 2026-07-17): FLEN=64 / XLEN=64 support.** Current env is pinned
   RV32IMAF (XLEN=32, FLEN=32). The comparator's FP-box fix deliberately stays STRICT for FLEN=64
   (non-boxed gold → full-width compare). A real 64-bit build (D extension / RV64) needs its own
