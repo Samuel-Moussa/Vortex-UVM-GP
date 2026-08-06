@@ -956,16 +956,70 @@ programming completes, removing the integration hazard.
 
 \subsection{Reference model}
 \begin{enumerate}
-\item \textbf{Abort hardening}: route all 56 abort sites through
-self-documenting macros (PC + instruction word; done for 14), then
-classify each as garbage-input (keep aborting, now explained) versus
-genuinely unimplemented (implement, recovering verifiability)---driving
-the unverifiable class to zero.
+\item \textbf{Abort hardening} (\emph{completed since the first draft;
+retained here because the classification is the transferable result}).
+Auditing the abort sites showed they were not one population but two.
+The majority lay in the disassembly formatter---off the execution path
+entirely, reached only when a trace line is printed---so aborting there
+destroyed an otherwise fully checked run because the model could not
+\emph{name} an instruction; these now emit a placeholder. The remainder
+are genuine semantic refusals, and for those aborting is
+\emph{correct}: a golden model that guessed a writeback would corrupt
+every later comparison while still reporting agreement. Those sites now
+record the PC, instruction word and offending sub-field before
+aborting, and the co-simulation layer returns a distinct
+\emph{golden-halt} sentinel (refused at a known point) rather than the
+former anonymous crash code---so the instructions retired \emph{before}
+the refusal remain valid evidence, and the truncated tail is excluded
+from the verdict rather than counted as divergence. Re-measuring the
+constrained-random suite afterwards showed the unverifiable class was
+already empty: every retained profile produced real end-state
+comparisons. Because nothing in the suite then exercises the halt path,
+it is proven non-vacuous by a gated injection, in the same discipline
+as the negative tests of Section~\ref{sec:verdicts}.
 \item \textbf{Populate the retirement uuid}, upgrading lockstep
 alignment to a strict 1:1 key.
 \item \textbf{Spike base-ISA audit}: cross-check the model's RV32IM
 semantics against an independent simulator on the non-SIMT subset.
 \end{enumerate}
+
+\subsection{Upstream contribution}
+\label{sec:upstream}
+
+We regard the findings of Section~\ref{sec:rtlfindings} as belonging to the
+Vortex project rather than to this report, and they are being submitted
+upstream as individual issues against the public repository, each with
+the exact source location, a reproducer, and our assessment of
+severity.\footnote{Prepared as a standing document in our repository so
+that the submitted text and the text analysed here cannot drift apart.}
+Two points of discipline govern that submission and are worth stating,
+because they are what separate a useful report from a noisy one.
+
+First, \emph{severity is claimed conservatively}. Of the findings,
+only the JALR specification deviation is a conformance bug with silent
+data-corruption consequences; the stall-watchdog items are
+verification-guard defects that make correct runs appear broken but do
+not affect the datapath, and we label them as such. Misclassifying a
+guard defect as a design defect would be the fastest way to lose a
+maintainer's attention.
+
+Second, \emph{every claim is re-verified against upstream before
+filing}. All findings were made at a pinned revision; a finding already
+fixed upstream costs reviewer time and costs the reporter credibility,
+so re-checking each cited line against current \texttt{master} is a
+precondition of submission rather than a courtesy.
+
+We also offer the independent base-ISA cross-check of
+Section~\ref{sec:limits} back to the project. We deliberately do
+\emph{not} propose extending the scalar reference simulator to the SIMT
+model: the warp, thread-mask and reconvergence-stack state that Vortex
+requires cannot be hosted by a single-hart processor model without
+re-architecting it, and the result would be a second implementation of
+the existing reference rather than an independent check on it. Scoping
+the independent reference to the scalar subset---which carries the
+overwhelming majority of dynamic instructions, and where the external
+simulator is the actual specification authority---is what makes the
+audit meaningful.
 
 \subsection{Methodology}
 \begin{enumerate}
