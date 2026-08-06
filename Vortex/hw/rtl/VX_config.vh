@@ -242,8 +242,18 @@
 
 `define RESET_DELAY     8
 
+// Stall guard, in CYCLES (compared against a per-clock counter — see
+// VX_schedule.sv:415 / VX_scoreboard.sv:236). It is meant to widen as optional
+// cache levels are added, since each level lengthens the worst-case miss chain.
+// The scaling base was `1`, and 1**N is identically 1, so it never actually
+// scaled (see docs/RTL_OBSERVATIONS.md OBS-011). Base 4 per enabled level.
+// NOTE: this is the CYCLE-domain guard. VX_mem_scheduler.sv has a separate
+// TIME-domain ($time, ps) guard — the two are NOT interchangeable.
+`ifndef STALL_TIMEOUT_SCALE
+`define STALL_TIMEOUT_SCALE (4 ** (`L2_ENABLED + `L3_ENABLED))
+`endif
 `ifndef STALL_TIMEOUT
-`define STALL_TIMEOUT   (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)))
+`define STALL_TIMEOUT   (100000 * `STALL_TIMEOUT_SCALE)
 `endif
 
 `ifndef SV_DPI

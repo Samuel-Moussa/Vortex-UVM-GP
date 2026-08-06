@@ -631,7 +631,7 @@ not scattered across per-fix docs.
 
 ### OBS-017 (RTL BUG — verification guard, blocking for L2/L3 configs) — `VX_mem_scheduler` hardcodes a ~1000-cycle response timeout that ignores the configurable `STALL_TIMEOUT` and does not scale with cache depth
 - **Class:** RTL BUG (runtime-assert guard; the datapath itself is correct) ·
-  **Disposition:** OPEN — root-caused, not yet fixed (needs an RTL change) ·
+  **Disposition:** **FIXED** (guard-only RTL change, validated) ·
   **Found:** 2026-08-06, first-ever build with `L2_ENABLE`+`L3_ENABLE` (unblocked by OBS-016).
 - **What we saw:** with L2+L3 enabled at 2CL/2C/4W/4T, **every** tier-1 kernel emitted a flood
   of `*** <core>-execute-lsu0-memsched response timeout: tag=0x...` RTL errors — e.g.
@@ -658,10 +658,30 @@ not scattered across per-fix docs.
   The clear intent was "widen the stall/response budget when extra cache levels are added" —
   exactly the configuration that now floods. So the one mechanism designed to prevent this is
   a no-op, AND the memory scheduler ignores it anyway. OBS-011 is no longer theoretical.
-- **Suggested fix (RTL):** delete the shadowing localparam in `VX_mem_scheduler.sv:91` and use
-  the package value, and fix the scaling base in `VX_config.vh:246` / `VX_gpu_pkg.sv:109`
-  (`1 ** N` → e.g. `4 ** N` or `10 ** N`) so the budget actually grows with hierarchy depth.
-  Both are guard-only changes; no datapath impact. NOT applied — RTL edits need sign-off.
+- **⚠️ CORRECTION to the first-draft fix (would have made things WORSE):** "delete the shadowing
+  localparam and use the package value" is **wrong** — the two guards are in **different units**.
+  The global is a CYCLE count (`timeout_ctr < STALL_TIMEOUT`, incremented once per clock,
+  `VX_schedule.sv:409-415`); the mem-scheduler one is a **simulation-TIME** delta
+  (`($time - pending_reqs_time[i]) < STALL_TIMEOUT`). At 1ns/1ps with a 10ns clock, 1 cycle =
+  10,000 time units, so feeding the cycle-domain 100000 into the time-domain compare yields a
+  **10-cycle** timeout — ~100x TIGHTER than the value that was already misfiring.
+- **FIX APPLIED (2026-08-06):**
+  1. `VX_config.vh:245-255` — new ``STALL_TIMEOUT_SCALE = (4 ** (`L2_ENABLED + `L3_ENABLED))``
+     (was the no-op `1 ** N`), and `STALL_TIMEOUT = 100000 * STALL_TIMEOUT_SCALE`. Both are
+     ``ifndef``-guarded ⇒ overridable from the terminal via `+define+`.
+  2. `VX_gpu_pkg.sv:109` — was a second, independent copy of the same broken expression; now
+     ``localparam STALL_TIMEOUT = `STALL_TIMEOUT;`` so the two cannot drift.
+  3. `VX_mem_scheduler.sv` — keeps its TIME-domain semantics (correctly), but the hardcoded
+     `10000000` becomes ``ifndef``-guarded ``MEM_STALL_TIMEOUT = 10000000 * `STALL_TIMEOUT_SCALE``,
+     so it scales with cache depth and is terminal-overridable. Added ```include "VX_define.vh"``
+     (include-guarded; same pattern as `VX_avs_adapter.sv`/`VX_stream_xbar.sv`) so the macro is
+     deterministically visible rather than relying on cross-file macro leakage.
+- **VALIDATION (guard-only ⇒ behaviour must not move):** `tcu_test` @2CL/2C/4W/4T —
+  · **default build:** 12,215 cycles, matched 2789, **0** timeouts, `UVM_ERROR 0`, rc=0 —
+    byte-identical to pre-fix (scale = 4^0 = 1 ⇒ same values, no regression).
+  · **L2+L3 build:** 21,968 cycles, matched 2789, timeouts **22,187 → 0**, `UVM_ERROR 0`,
+    **rc=2 → rc=0**. Cycle count and matched count unchanged from the pre-fix L2/L3 run,
+    confirming only the false alarm was removed, not any DUT behaviour.
 
 ---
 

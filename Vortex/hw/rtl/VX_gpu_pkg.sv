@@ -106,7 +106,10 @@ package VX_gpu_pkg;
     localparam VX_DCR_ADDR_WIDTH = `VX_DCR_ADDR_BITS;
     localparam VX_DCR_DATA_WIDTH = 32;
 
-    localparam STALL_TIMEOUT = (100000 * (1 ** (`L2_ENABLED + `L3_ENABLED)));
+    // CYCLE-domain stall guard — single source of truth is `STALL_TIMEOUT`
+    // (VX_config.vh). Previously duplicated the `1 ** N` expression here, which
+    // never scaled (OBS-011); keep it derived so the two cannot drift apart.
+    localparam STALL_TIMEOUT = `STALL_TIMEOUT;
 
     ///////////////////////////////////////////////////////////////////////////
 
