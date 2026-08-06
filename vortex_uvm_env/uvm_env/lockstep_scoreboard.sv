@@ -844,9 +844,26 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // pass-2 residual of 0 ⇒ every divergence was an unsynchronizable shared
         // load; the DUT is self-consistent given its own memory ordering, and all
         // compute/control/stores match. Nonzero residual ⇒ a REAL divergence.
+        // A3 GOLDEN_HALT: if the golden REFUSED partway (simx_run() == -4), its
+        // retire stream is TRUNCATED at that instruction. Every DUT retirement
+        // after it then has no counterpart and lands in n_dut_orphan — that is
+        // expected truncation, NOT divergence, and must not be reported as a DUT
+        // defect. Field mismatches (PC/rd/data/load) are a different matter: those
+        // occurred while a golden value still existed, so they stay errors.
         if (did_pass2) begin
+            bit gh = (simx_golden_halt_valid() != 0);
             int p2_residual = n_mm_pc + n_mm_rd + n_mm_data + n_mm_loaddata
-                            + n_dut_orphan + n_simx_orphan;
+                            + (gh ? 0 : (n_dut_orphan + n_simx_orphan));
+            if (gh)
+                `uvm_info("LOCKSTEP", $sformatf(
+                    {"  GOLDEN_HALT: reference model refused '%s' at PC=0x%0h (%s.cpp:%0d). ",
+                     "The %0d pair(s) compared BEFORE that point are real verification and are ",
+                     "judged below; the %0d orphan(s) after it are the truncated tail (no golden ",
+                     "to compare against) and are EXCLUDED from the verdict, not counted as ",
+                     "divergence."},
+                    simx_golden_halt_detail(), simx_golden_halt_pc(),
+                    simx_golden_halt_where(), simx_golden_halt_line(),
+                    n_pairs, n_dut_orphan + n_simx_orphan), UVM_LOW)
             `uvm_info("LOCKSTEP", "  ---- TWO-PASS RECONVERGENCE VERDICT (Phase A1(e) load-bus + OBS-014 sqrt) ----", UVM_LOW)
             `uvm_info("LOCKSTEP", $sformatf(
                 "    PASS 1 (independent) : %0d in-region LOAD divergence(s); %0d cascaded field-mismatch(es); %0d warp(s) diverged",
@@ -867,8 +884,19 @@ class lockstep_scoreboard extends uvm_scoreboard;
         // such divergence is NOT a race (nothing to feed) ⇒ it is REAL and must
         // fail. (When the feed is disabled, note_div already emitted uvm_error.)
         else if (feed_en) begin
+            // Same GOLDEN_HALT rule as above: a truncated golden stream produces
+            // orphans that are not evidence of anything.
+            bit gh1 = (simx_golden_halt_valid() != 0);
             int p1_total = n_mm_pc + n_mm_rd + n_mm_data + n_mm_loaddata
-                         + n_dut_orphan + n_simx_orphan;
+                         + (gh1 ? 0 : (n_dut_orphan + n_simx_orphan));
+            if (gh1)
+                `uvm_info("LOCKSTEP", $sformatf(
+                    {"  GOLDEN_HALT: reference model refused '%s' at PC=0x%0h (%s.cpp:%0d); ",
+                     "%0d orphan(s) after that point are the truncated tail and are EXCLUDED ",
+                     "from the verdict. %0d pair(s) were compared before it."},
+                    simx_golden_halt_detail(), simx_golden_halt_pc(),
+                    simx_golden_halt_where(), simx_golden_halt_line(),
+                    n_dut_orphan + n_simx_orphan, n_pairs), UVM_LOW)
             if (p1_total > 0)
                 `uvm_error("LOCKSTEP", $sformatf(
                     "  VERDICT: %0d divergence(s) with NO racy shared-load to explain them (load-bus feed found nothing) — REAL divergence, investigate.",

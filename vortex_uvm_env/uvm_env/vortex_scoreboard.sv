@@ -94,7 +94,8 @@ class vortex_scoreboard extends uvm_scoreboard;
   // State flags
   //==========================================================================
   bit simx_ran;     // Set after simx_run() completes
-  bit simx_crashed; // Set when simx_run() returns the crash sentinel (-3)
+  bit simx_crashed; // Set when simx_run() returns a crash/halt sentinel (-3 or -4)
+  bit simx_halted;  // A3: set only for -4 (GOLDEN_HALT) — refusal at a NAMED point
   bit ebreak_seen;  // Set when status monitor reports EBREAK
 
   // RVVI load-bus (Phase A1(e)): when the lockstep two-pass feed is armed, the
@@ -425,10 +426,39 @@ class vortex_scoreboard extends uvm_scoreboard;
     // -3 = SimX model aborted/crashed (decode/memory fault), caught in the DPI
     // so vsim survives. SimX never reached a valid end-state, so its memory is
     // meaningless — skip the comparison and classify the run UNVERIFIABLE.
+    // A3: two distinct outcomes, both of which make the END-STATE image useless
+    // (SimX never reached a valid final state), but which mean very different
+    // things for what we may claim about the run.
+    //
+    //   -4 GOLDEN_HALT — the golden REFUSED at a recorded instruction. We can name
+    //                    the PC, the encoding and the sub-field, so the gap is a
+    //                    concrete work item, and any per-instruction lockstep
+    //                    comparisons made BEFORE that point are still real
+    //                    verification (the lockstep scoreboard reports them).
+    //   -3 CRASH       — nothing recorded (segfault, or an abort site not yet
+    //                    converted). Genuinely unknown; fully UNVERIFIABLE.
+    //
+    // Either way this is NOT a DUT defect, so neither passes nor fails the run.
+    if (exitcode == -4) begin
+      simx_crashed  = 1;   // end-state compare must still be skipped
+      simx_halted   = 1;
+      `uvm_warning("SCOREBOARD", $sformatf(
+        {"GOLDEN_HALT: SimX refused '%s' (%s.cpp:%0d) at PC=0x%0h instr=0x%08h wid=%0d. ",
+         "The golden model does not implement this case, so no END-STATE equivalence ",
+         "can be claimed — but this is a NAMED gap in the reference model, not a DUT ",
+         "defect and not an anonymous crash. Per-instruction lockstep results recorded ",
+         "before this point remain valid."},
+        simx_golden_halt_detail(), simx_golden_halt_where(), simx_golden_halt_line(),
+        simx_golden_halt_pc(), simx_golden_halt_code(), simx_golden_halt_wid()))
+      return;
+    end
+
     if (exitcode == -3) begin
       simx_crashed = 1;
       `uvm_warning("SCOREBOARD",
-        "SimX aborted/crashed during run-to-completion — run is UNVERIFIABLE (no DUT/SimX compare).")
+        {"SimX crashed during run-to-completion with NO recorded reason (segfault, or an ",
+         "abort site not yet converted to a GOLDEN_HALT) — run is UNVERIFIABLE (no ",
+         "DUT/SimX compare)."})
       return;
     end
 
@@ -995,11 +1025,27 @@ class vortex_scoreboard extends uvm_scoreboard;
       "╚══════════════════════════════════════════╝\n"
     }, UVM_NONE)
 
-    if (simx_crashed) begin
-      // SimX model could not execute this program to a valid end-state (decode/
-      // memory abort, caught in the DPI). Not a DUT defect — do not pass or fail.
+    if (simx_halted) begin
+      // A3 GOLDEN_HALT: the golden refused at a NAMED instruction. Still no
+      // end-state equivalence (SimX has no valid final image), and still not a
+      // DUT defect — but this is a specific, actionable reference-model gap, not
+      // an anonymous failure. Report it as such so it can be closed rather than
+      // accumulating in an opaque bucket.
+      `uvm_warning("SCOREBOARD", $sformatf(
+        {"UNVERIFIABLE (END-STATE) — GOLDEN_HALT, reference-model gap: SimX refused ",
+         "'%s' at PC=0x%0h instr=0x%08h (%s.cpp:%0d, wid=%0d). The DUT is NOT implicated. ",
+         "To close this, implement that case in SimX (A3). Any per-instruction lockstep ",
+         "comparisons made before this point are reported separately and remain valid."},
+        simx_golden_halt_detail(), simx_golden_halt_pc(), simx_golden_halt_code(),
+        simx_golden_halt_where(), simx_golden_halt_line(), simx_golden_halt_wid()))
+      // Intentionally NOT counted as pass or fail.
+    end
+    else if (simx_crashed) begin
+      // SimX model could not execute this program to a valid end-state and left NO
+      // recorded reason (segfault, or an abort site not yet converted to a
+      // GOLDEN_HALT). Not a DUT defect — do not pass or fail.
       `uvm_warning("SCOREBOARD",
-        "UNVERIFIABLE: SimX golden model aborted during run-to-completion (decode/memory fault). No DUT/SimX equivalence could be established for this program.")
+        "UNVERIFIABLE: SimX golden model crashed during run-to-completion with no recorded reason (segfault, or an unconverted abort site). No DUT/SimX equivalence could be established for this program.")
       // Intentionally NOT counted as pass or fail.
     end
     else if (spawn_detected || cfg.is_spawn_kernel) begin

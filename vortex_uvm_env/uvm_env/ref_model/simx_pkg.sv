@@ -97,6 +97,18 @@ package simx_pkg;
     import "DPI-C" context function int  simx_cosim_load_feed_pushed();
     import "DPI-C" context function int  simx_cosim_load_feed_consumed();
 
+    // A3 GOLDEN_HALT (simx_run() == -4): the golden REFUSED at a known point
+    // rather than crashing for an unknown reason. These name that point, so an
+    // UNVERIFIABLE tail can be reported as a specific missing encoding instead
+    // of an anonymous "SimX died". Valid only when simx_golden_halt_valid().
+    import "DPI-C" context function int     simx_golden_halt_valid();
+    import "DPI-C" context function longint simx_golden_halt_pc();
+    import "DPI-C" context function int     simx_golden_halt_code();
+    import "DPI-C" context function int     simx_golden_halt_wid();
+    import "DPI-C" context function int     simx_golden_halt_line();
+    import "DPI-C" context function string  simx_golden_halt_where();
+    import "DPI-C" context function string  simx_golden_halt_detail();
+
     // COMPUTE-writeback feed (OBS-014 sqrt reconvergence) — same contract as the
     // load feed, applied at the FSQRT writeback instead of a load.
     import "DPI-C" context function void simx_cosim_comp_feed_reset();
