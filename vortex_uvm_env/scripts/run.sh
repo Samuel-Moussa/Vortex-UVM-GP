@@ -155,6 +155,16 @@ STARTUP_ADDR="0x80000000"
 # Interface
 MEMORY_INTERFACE="axi"
 
+# Cache-hierarchy knobs — mirror the RTL's own defaults so the TB and RTL agree.
+# L2/L3 are OPTIONAL levels: VX_cluster.sv:107 / Vortex.sv:96 pass PASSTHRU=!L{2,3}_ENABLED
+# and VX_cache_wrap.sv:160 instantiates the real VX_cache storage only when PASSTHRU==0,
+# so 0 here means "pure bypass, no cache array". I/D caches are ON unless disabled
+# (VX_config.vh:531-534, 586-589 define {I,D}CACHE_ENABLE unless {I,D}CACHE_DISABLE).
+ENABLE_L2=0
+ENABLE_L3=0
+ENABLE_ICACHE=1
+ENABLE_DCACHE=1
+
 # Compilation flags
 FPU_TYPE="FPU_FPNEW"
 TCU_TYPE="TCU_BHF"
@@ -194,6 +204,10 @@ for arg in "$@"; do
         --interface=*)      MEMORY_INTERFACE="${arg#*=}" ;;
         --clusters=*)       NUM_CLUSTERS="${arg#*=}" ;;
         --cores=*)          NUM_CORES="${arg#*=}" ;;
+        --l2=*)             ENABLE_L2="${arg#*=}" ;;
+        --l3=*)             ENABLE_L3="${arg#*=}" ;;
+        --icache=*)         ENABLE_ICACHE="${arg#*=}" ;;
+        --dcache=*)         ENABLE_DCACHE="${arg#*=}" ;;
         --warps=*)          NUM_WARPS="${arg#*=}" ;;
         --threads=*)        NUM_THREADS="${arg#*=}" ;;
         --timeout=*)        TIMEOUT_CYCLES="${arg#*=}" ;;

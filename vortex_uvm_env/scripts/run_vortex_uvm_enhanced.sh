@@ -92,6 +92,10 @@ ${YELLOW}Optional Configuration:${NC}
     --cores=N                Number of cores (default: 1)
     --warps=N                Number of warps per core (default: 4)
     --threads=N              Number of threads per warp (default: 4)
+    --l2=0|1                 Enable the per-cluster L2 cache (default: 0 = PASSTHRU/bypass)
+    --l3=0|1                 Enable the GPU-wide L3 cache   (default: 0 = PASSTHRU/bypass)
+    --icache=0|1             Enable the per-socket I-cache  (default: 1)
+    --dcache=0|1             Enable the per-socket D-cache  (default: 1)
     --timeout=CYCLES         Simulation timeout in cycles (default: 1000000)
     --startup-addr=ADDR      Startup PC in hex (default: 0x80000000 RV32,
                               use 0x080000000 for RV64)
