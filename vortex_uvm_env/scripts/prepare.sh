@@ -301,14 +301,46 @@ if [[ -n "$PROGRAM" ]]; then
             exit 1
         fi
 
-        # Try pre-generated first unless RISCV_DV_REGEN=1
+        # ── FW-1: SEED CONTROL + REPRODUCIBILITY ────────────────────────────
+        # Before this, riscv-dv was invoked with --iterations=1 and NO seed, so
+        # every regeneration produced a DIFFERENT program: a random-stimulus
+        # failure could not be reproduced, bisected or regressed. (That is the
+        # most likely cause of riscv_non_compressed_instr_test / riscv_rand_jump_test
+        # failing in the 2026-08-06 sweep having passed earlier.)
+        #
+        #   RV_SEED=<n>        pin the seed (DEFAULT 1 => the committed suite is a
+        #                      STABLE regression gate: a failure means a real change,
+        #                      not merely a different program)
+        #   RV_START_SEED=<n>  + RV_ITERATIONS=<k> => sweep k consecutive seeds
+        #                      (the FW-1 seed-farm mode; mutually exclusive with RV_SEED)
+        #
+        # The generated program is cached in a SEED-KEYED output directory, so
+        # reuse is deterministic. The previous "newest .S found on disk" lookup was
+        # itself a second reproducibility hole: which program you got depended on
+        # what happened to be generated last, across all seeds and all profiles.
+        RV_SEED="${RV_SEED:-1}"
+        RV_ITERATIONS="${RV_ITERATIONS:-1}"
+        if [[ -n "${RV_START_SEED:-}" ]]; then
+            RV_SEED_ARGS="--start_seed=${RV_START_SEED} --iterations=${RV_ITERATIONS}"
+            RV_SEED_TAG="s${RV_START_SEED}n${RV_ITERATIONS}"
+            RV_SEED_DESC="start_seed=${RV_START_SEED} iterations=${RV_ITERATIONS}"
+        else
+            # --seed implies --iterations=1 in riscv-dv; do not pass both.
+            RV_SEED_ARGS="--seed=${RV_SEED}"
+            RV_SEED_TAG="s${RV_SEED}"
+            RV_SEED_DESC="seed=${RV_SEED}"
+        fi
+        RV_OUT_DIR="$RISCV_DV_HOME/out_vortex_${RISCV_DV_TEST}_${RV_SEED_TAG}"
+        print_info "riscv-dv randomization: ${RV_SEED_DESC}  (out: $(basename "$RV_OUT_DIR"))"
+
+        # Try the SEED-KEYED cache first unless RISCV_DV_REGEN=1
         RISCV_DV_ASM=""
         if [[ "${RISCV_DV_REGEN:-0}" != "1" ]]; then
-            RISCV_DV_ASM=$(find "$RISCV_DV_HOME" -path "*/asm_test/${RISCV_DV_TEST}_0.S" \
-                               -type f 2>/dev/null | sort -r | head -1)
+            RISCV_DV_ASM=$(find "$RV_OUT_DIR" -path "*/asm_test/${RISCV_DV_TEST}_0.S" \
+                               -type f 2>/dev/null | sort | head -1)
             if [[ -n "$RISCV_DV_ASM" ]]; then
                 PROGRAM_SOURCE="$RISCV_DV_ASM"
-                print_info "Using pre-generated assembly (RISCV_DV_REGEN=1 to force refresh): $PROGRAM_SOURCE"
+                print_info "Using cached assembly for ${RV_SEED_DESC} (RISCV_DV_REGEN=1 to force refresh): $PROGRAM_SOURCE"
             fi
         fi
 
@@ -319,11 +351,12 @@ if [[ -n "$PROGRAM" ]]; then
                 --test="$RISCV_DV_TEST" \
                 --simulator=questa \
                 --target=rv32im \
-                --iterations=1 \
+                $RV_SEED_ARGS \
+                -o "$RV_OUT_DIR" \
                 --steps=gen \
                 2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
-                PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" \
-                    -path "*/asm_test/${RISCV_DV_TEST}_0.S" -type f 2>/dev/null | sort -r | head -1)
+                PROGRAM_SOURCE=$(find "$RV_OUT_DIR" \
+                    -path "*/asm_test/${RISCV_DV_TEST}_0.S" -type f 2>/dev/null | sort | head -1)
                 if [[ -z "$PROGRAM_SOURCE" ]]; then
                     print_error "Generated assembly not found — expected: out_*/asm_test/${RISCV_DV_TEST}_0.S"
                     exit 1
@@ -336,6 +369,19 @@ if [[ -n "$PROGRAM" ]]; then
             fi
             cd "$FLISTS_DIR" || exit 1
         fi
+
+        # FW-1: make the run self-describing. The seed and the EXACT program are
+        # recorded next to the results, so a failure found months later can be
+        # reproduced from the log alone without guessing what riscv-dv produced.
+        {
+            echo "riscv_dv_test   = $RISCV_DV_TEST"
+            echo "randomization   = $RV_SEED_DESC"
+            echo "reproduce_with  = make sim TEST=random_instruction_stress_test PROGRAM=$RISCV_DV_TEST RV_SEED=${RV_SEED} RISCV_DV_REGEN=1"
+            echo "program_source  = $PROGRAM_SOURCE"
+            echo "out_dir         = $RV_OUT_DIR"
+        } > "$RESULTS_RUN_DIR/riscv_dv_seed.txt" 2>/dev/null || true
+        cp "$PROGRAM_SOURCE" "$RESULTS_RUN_DIR/" 2>/dev/null || true
+        print_info "SEED RECORD: ${RV_SEED_DESC} -> $RESULTS_RUN_DIR/riscv_dv_seed.txt"
 
 
     # Case 6: Custom ELF/BIN
