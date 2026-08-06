@@ -505,8 +505,9 @@ not scattered across per-fix docs.
 
 ### OBS-015 (REF-MODEL BUG + RTL QUIRK) — SIMT-divergent CSR access: SimX serializes lanes over per-warp `fcsr`; RTL reads-broadcast / writes lane 0 unconditionally
 - **Class:** REF-MODEL (golden-model correctness bug) **+** RTL quirk (unmasked lane-0
-  write) · **Disposition:** OPEN — root-caused, fix proposed, not yet applied ·
-  **Found:** `sfu_masks` @1CL per-instruction lockstep (2026-08-06).
+  write) · **Disposition:** REF-MODEL bug **FIXED** (read-once/write-once, lowest ACTIVE
+  lane); RTL quirk left OPEN and deliberately VISIBLE (not mirrored into the reference) ·
+  **Found:** `sfu_masks` @1CL per-instruction lockstep (2026-08-06) · **Fixed:** same day.
 - **What we saw:** `sfu_masks` lockstep at 1CL/1C/4W/4T reports **109 `data`
   field-mismatches, 0 PC / 0 rd / 0 orphan** (matched 3129). Every divergence is on an
   FP-CSR access under a *peeled/divergent* thread mask, e.g.
@@ -546,5 +547,17 @@ not scattered across per-fix docs.
   question to settle first: whether the write should take lane 0 unconditionally (bit-
   matches the RTL, but bakes an RTL quirk into the reference) or the lowest **active**
   lane (architecturally cleaner — and any residual divergence would then be a genuine
-  RTL finding, i.e. the quirk above). NOT applied yet — changing the golden model needs
-  sign-off, and the two choices differ exactly on the quirk.
+  RTL finding, i.e. the quirk above).
+- **APPLIED (2026-08-06): lowest ACTIVE lane** (user-selected). `execute.cpp` CsrType
+  lambda is now two-phase: PHASE 1 reads every active lane BEFORE any write (kills the
+  aliasing; genuinely per-thread CSRs such as THREAD_ID stay per-lane), PHASE 2 applies
+  exactly ONE write sourced from the lowest ACTIVE lane (CSRRS/CSRRC skip it when the
+  source operand is 0, matching `csr_wr_enable` and the ISA). The RTL's unconditional
+  `rs1_data[0]` is deliberately NOT mirrored, so the reference stays independent and a
+  future lane-0-masked-off divergence is still reported rather than silently agreed with.
+- **Result:** `sfu_masks` @1CL RED→**GREEN** — `field_mismatch data` **109 → 0**, matched
+  3129→**3178**, 0 PC / 0 rd / 0 orphan, 0 UVM_ERROR. The residual after choosing
+  lowest-active-lane is **zero**, i.e. the RTL lane-0 quirk did not actually manifest in
+  this kernel — so the pass required no accommodation of it. Regression (all @1CL,
+  lockstep+loadfeed): vecadd_lite 1035, fpu_test 1675, tcu_test 785, diverge_fpu 2738 —
+  all `data` mismatch 0, 0 UVM_ERROR; both Gate-0 negative guards still DETECT.

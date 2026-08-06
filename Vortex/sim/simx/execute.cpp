@@ -1314,43 +1314,63 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
     [&](CsrType csr_type) {
       auto csrArgs = std::get<IntrCsrArgs>(instrArgs);
       uint32_t csr_addr = csrArgs.csr;
-      switch (csr_type) {
-      case CsrType::CSRRW: {
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          Word csr_value = this->get_csr(csr_addr, wid, t);
-          auto src_data = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-          this->set_csr(csr_addr, src_data, wid, t);
-          rd_data[t].i = csr_value;
-        }
-      } break;
-      case CsrType::CSRRS: {
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          Word csr_value = this->get_csr(csr_addr, wid, t);
-          auto src_data = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-          if (src_data != 0) {
-            this->set_csr(csr_addr, csr_value | src_data, wid, t);
-          }
-          rd_data[t].i = csr_value;
-        }
-      } break;
-      case CsrType::CSRRC: {
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          Word csr_value = this->get_csr(csr_addr, wid, t);
-          auto src_data = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-          if (src_data != 0) {
-            this->set_csr(csr_addr, csr_value & ~src_data, wid, t);
-          }
-          rd_data[t].i = csr_value;
-        }
-      } break;
-      default:
+      // OBS-015: a warp-wide CSR access must be READ-ONCE / WRITE-ONCE.
+      //
+      // The previous shape looped lanes doing get_csr -> set_csr -> return-old per
+      // lane. For a CSR whose storage is shared across the warp (fcsr/frm/fflags live
+      // in warp_t, emulator.h:61, indexed by wid only), lane t then read what lane t-1
+      // had just written — so the "old" value returned to each lane differed and the
+      // committed CSR ended up as the LAST active lane's value. That is an artifact of
+      // iterating lanes over shared state, not architectural behaviour: a warp-wide
+      // csrrw reads the CSR once. The DUT reads once and broadcasts the same old value
+      // to every lane (VX_csr_unit.sv:134) and writes once (VX_csr_unit.sv:142).
+      //
+      // PHASE 1 reads every active lane BEFORE any write (removes the aliasing, and
+      // keeps genuinely per-thread CSRs like THREAD_ID per-lane). PHASE 2 applies a
+      // single write, sourced from the LOWEST ACTIVE lane. Note the RTL sources the
+      // write from rs1_data[0] with NO tmask gating — so when lane 0 is masked off the
+      // two can legitimately differ; that is the RTL quirk recorded in OBS-015 and it
+      // is deliberately left VISIBLE here rather than mirrored, so lockstep can flag it.
+      if (csr_type != CsrType::CSRRW && csr_type != CsrType::CSRRS && csr_type != CsrType::CSRRC)
         std::abort();
+
+      bool     wr_valid    = false;   // at least one active lane -> one write
+      uint32_t wr_lane     = 0;       // lowest active lane
+      Word     wr_snapshot = 0;       // pre-write CSR value (for the S/C read-modify)
+      Word     wr_src      = 0;       // that lane's source operand
+
+      // PHASE 1 — read for all active lanes, no writes yet.
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        Word csr_value = this->get_csr(csr_addr, wid, t);
+        rd_data[t].i = csr_value;
+        if (!wr_valid) {
+          wr_valid    = true;
+          wr_lane     = t;
+          wr_snapshot = csr_value;
+          wr_src      = csrArgs.is_imm ? Word(csrArgs.imm) : Word(rs1_data[t].i);
+        }
+      }
+
+      // PHASE 2 — exactly one write per warp-instruction. CSRRS/CSRRC skip the write
+      // when the source operand is zero (matches the RTL's csr_wr_enable and the ISA).
+      if (wr_valid) {
+        switch (csr_type) {
+        case CsrType::CSRRW:
+          this->set_csr(csr_addr, wr_src, wid, wr_lane);
+          break;
+        case CsrType::CSRRS:
+          if (wr_src != 0)
+            this->set_csr(csr_addr, wr_snapshot | wr_src, wid, wr_lane);
+          break;
+        case CsrType::CSRRC:
+          if (wr_src != 0)
+            this->set_csr(csr_addr, wr_snapshot & ~wr_src, wid, wr_lane);
+          break;
+        default:
+          std::abort();
+        }
       }
       trace->fetch_stall = (csr_addr <= VX_CSR_FCSR);
       // Performance-monitor CSRs (mcycle/minstret/mhpmcounter* and their _h
