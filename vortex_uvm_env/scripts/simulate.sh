@@ -114,6 +114,13 @@ fi
 if [[ -n "${LOCKSTEP_LOADFEED:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADFEED"
 fi
+# A6 — dump the aligned DUT/SimX retirement streams for the OFFLINE Spike
+# independence audit (scripts/spike_audit.py). Observability only: it writes a
+# file and touches no verdict, so an armed run and a bare run reach the same
+# conclusion. OFF unless a path is given.
+if [[ -n "${LOCKSTEP_TRACE:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_TRACE=${LOCKSTEP_TRACE}"
+fi
 
 # Generic runtime plusarg passthrough — the sim-time counterpart of
 # EXTRA_RTL_DEFINES (compile time). Lets any TB/UVM plusarg be driven from the

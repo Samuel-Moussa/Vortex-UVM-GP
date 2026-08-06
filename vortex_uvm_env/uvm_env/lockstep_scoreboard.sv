@@ -145,6 +145,24 @@ class lockstep_scoreboard extends uvm_scoreboard;
     retire_t gold_fifo [int][$];
     retire_t dut_fifo  [int][$];
 
+    // ---------------------------------------------------------------------
+    // A6 — retirement trace dump (OPTIONAL, default OFF).
+    //
+    // Emits the aligned DUT and SimX retirement streams to a file so an
+    // OFFLINE comparator (scripts/spike_audit.py) can add a THIRD, independent
+    // model — Spike — to the base-ISA subset. SimX is written by the Vortex
+    // authors, so DUT==SimX is a self-consistency result, not independence
+    // (plan FW-2). Spike closes that axis for the scalar prefix only.
+    //
+    // Gated by +LOCKSTEP_TRACE=<path>, defaulting to OFF, so a normal run is
+    // byte-identical — same discipline as LOCKSTEP_LOADFEED and
+    // SIMX_FORCE_HALT. This writes a file and touches NO verdict variable:
+    // it can neither create nor mask a failure.
+    // ---------------------------------------------------------------------
+    bit    trace_en;
+    int    trace_fh;
+    string trace_path;
+
     // Taxonomy tallies.
     int unsigned n_matched;
     int unsigned n_dut_orphan;
@@ -207,6 +225,27 @@ class lockstep_scoreboard extends uvm_scoreboard;
         load_cmp_en = !$test$plusargs("NO_LOCKSTEP_LOADS");
         // RVVI load-bus two-pass feed (Phase A1(e)) — off unless requested.
         feed_en = $test$plusargs("LOCKSTEP_LOADFEED");
+        // A6 retirement trace — off unless a path is supplied.
+        trace_en = $value$plusargs("LOCKSTEP_TRACE=%s", trace_path);
+        if (trace_en) begin
+            trace_fh = $fopen(trace_path, "w");
+            if (trace_fh == 0) begin
+                `uvm_warning("LOCKSTEP", $sformatf(
+                    "LOCKSTEP_TRACE: cannot open '%s' — trace disabled (run is otherwise unaffected)",
+                    trace_path))
+                trace_en = 1'b0;
+            end else begin
+                // Self-describing header: the offline comparator keys off these
+                // names rather than column positions.
+                $fdisplay(trace_fh,
+                    "# vortex lockstep retirement trace v1");
+                $fdisplay(trace_fh,
+                    "# fields: key seq cid wid dut_pc dut_rd dut_d0 simx_pc simx_rd simx_d0 tmask flags");
+                $fdisplay(trace_fh,
+                    "# flags: L=load F=fp V=volatile(perf-CSR) Q=fsqrt");
+                `uvm_info("LOCKSTEP", $sformatf("A6 retirement trace -> %s", trace_path), UVM_LOW)
+            end
+        end
     endfunction
 
     // key helper
@@ -458,6 +497,21 @@ class lockstep_scoreboard extends uvm_scoreboard;
         bit    clean = 1'b1;
         string desc  = "";
         n_pairs++;
+        // A6 trace (observability only — no verdict effect). Lane 0 is dumped
+        // because Spike is scalar: it has no counterpart for lanes 1..N-1.
+        if (trace_en) begin
+            string flags = "";
+            if (g.is_load)     flags = {flags, "L"};
+            if (g.is_fp)       flags = {flags, "F"};
+            if (g.is_volatile) flags = {flags, "V"};
+            if (g.is_fsqrt)    flags = {flags, "Q"};
+            if (flags == "")   flags = "-";
+            $fdisplay(trace_fh, "%0h %0d %0d %0d %0h %0d %0h %0h %0d %0h %0h %s",
+                      key, seq, (key >> 16), (key & 16'hFFFF),
+                      d.pc, d.rd, (d.data.size() > 0 ? d.data[0] : 64'h0),
+                      g.pc, g.rd, (g.data.size() > 0 ? g.data[0] : 64'h0),
+                      d.tmask, flags);
+        end
         if (d.uuid != g.uuid) n_uuid_misaligned++;   // cross-check, not a failure
         if (d.pc != g.pc) begin
             n_mm_pc++; clean = 1'b0;
@@ -831,6 +885,13 @@ class lockstep_scoreboard extends uvm_scoreboard;
 
     function void report_phase(uvm_phase phase);
         super.report_phase(phase);
+        // Close the A6 trace before the early return, so the file is flushed even
+        // when lockstep is disabled and no pairs were ever emitted.
+        if (trace_en) begin
+            $fclose(trace_fh);
+            trace_en = 1'b0;
+            `uvm_info("LOCKSTEP", $sformatf("A6 retirement trace closed: %s", trace_path), UVM_LOW)
+        end
         if (cfg == null || !cfg.enable_lockstep) return;
         begin
             bit seen_cid [int];
