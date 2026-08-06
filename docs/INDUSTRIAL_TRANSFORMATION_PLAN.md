@@ -11,7 +11,7 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A COMPLETE except A3 (partial) and A6 (frozen).** A0 ✅ · A1(a–e) ✅ · A2 ✅ · A4 ✅ (2CL divergence now grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · **A3 PARTIAL** (OBS-008 fixed, both 2CL cases run; ~10 riscv-dv still abort — 69 `std::abort` in decode/execute remain) · A6 ❄️ FROZEN. **2CL sweep 5→12 of 15 verified.** TCU ✅ lane-exact @1CL+2CL · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 now buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). NEXT ACTION: (1) close out cache/L2-L3 thread — validate `cache_tier`, re-run L2/L3 sweep; (2) **Phase B — B2 scoreboard→mem_model**; (3) A3 abort-hardening. See ▶▶ block.**
+**CURRENT MILESTONE: Phase A COMPLETE except A6 (frozen).** A0 ✅ · A1(a–e) ✅ · A2 ✅ · **A3 ✅ CLOSED (2026-08-06)** — golden refusals are now NAMED halts (-4 GOLDEN_HALT) not anonymous crashes (-3); disassembler never aborts (33 sites); 39 semantic sites record pc/instr/sub-field; verified prefix preserved, truncated tail excluded. **MEASURED: the UNVERIFIABLE bucket is EMPTY** — all 10 retained riscv-dv re-run, zero SimX aborts, real byte-exact compares (15..1414 words); the "~10 still abort / 69 std::abort" claim was STALE. Non-vacuity proven via `SIMX_FORCE_HALT` (default OFF). · A4 ✅ (2CL divergence grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · A6 ❄️ FROZEN (**not a blocker for A3 — Spike has no SIMT model and cannot run a Vortex kernel; the bucket emptied without it**). **2CL sweep 5→12 of 15 verified.** TCU ✅ · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). **cache_tier VALIDATED @1CL** (460,769 cyc, 64,772 instr, 16,452 byte-exact words, 0 err). NEXT ACTION: (1) L2/L3 cache-tier coverage confirmation + 15-kernel L2/L3 sweep re-run; (2) **Phase B — B2 scoreboard→mem_model**. See ▶▶ block.
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
@@ -93,11 +93,18 @@ single result**; DUT≠SimX there is expected, not a bug.
 self-documents (prints faulting PC + instr word), and BOTH 2CL cases (`no_fence`,
 `full_interrupt`) now RUN to EBREAK instead of aborting. NOT done: **~10 riscv-dv / regression
 programs still abort** (SIGABRT → exit −3 → UNVERIFIABLE), and **69 `std::abort()` remain**
-across `decode.cpp` (46) and `execute.cpp` (23) — unknown-encoding default branches (RVC,
-exotic CSRs). Each needs either real handling or a graceful "unsupported → sentinel →
-UNVERIFIABLE" so one exotic instruction cannot kill the whole run. It is incremental C++;
-every fix shrinks the bucket. (Note: A6/Spike would independently decode RVC where SimX aborts,
-but A6 is frozen.)
+**SUPERSEDED 2026-08-06 — A3 IS CLOSED.** The count above was never re-measured and was
+stale twice over. (a) Most of the "69" lived in `op_string()`, the DISASSEMBLY pretty-printer
+— off the execution path entirely, so aborting there voided runs for a purely cosmetic reason
+(OBS-020). The real semantic surface was 39, not 69. (b) The "~10 riscv-dv still abort" claim
+was also stale: re-running all 10 retained tests gives **zero SimX aborts** and real byte-exact
+compares (15..1414 words each). Earlier SimX fixes had already retired the bucket.
+The RVC premise behind the A6 note was wrong too — RVC is excluded upstream at the toolchain
+level (`prepare.sh:321` `--target=rv32im`), so no compressed instruction is ever generated, and
+Spike (no SIMT model, cannot execute a Vortex kernel) could never have supplied the missing
+verdict anyway. What shipped instead: refusals are KEPT (a golden must refuse, not fabricate)
+but now RECORD pc/instr/sub-field → DPI returns **-4 GOLDEN_HALT** vs **-3 CRASH**, the verified
+prefix survives, and `SIMX_FORCE_HALT` proves the path non-vacuous. See OBS-020.
 
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-07-17)
 **2CL DIRECTED-SUITE LOCKSTEP SWEEP = DONE (this session).** Ran the 15 deterministic
