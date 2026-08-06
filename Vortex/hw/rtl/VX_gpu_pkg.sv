@@ -763,6 +763,22 @@ package VX_gpu_pkg;
     localparam LSU_NUM_REQS	        = `NUM_LSU_BLOCKS * `NUM_LSU_LANES;
     localparam LMEM_TAG_WIDTH       = LSU_TAG_WIDTH + `CLOG2(`NUM_LSU_BLOCKS);
 
+    ////////////////////// Cache geometry (exported) //////////////////////////
+    // Single source of truth for anything OUTSIDE the RTL that needs the cache
+    // geometry — notably the UVM testbench (vortex_config.sv), which previously
+    // duplicated these as `ifdef/`else fallbacks and silently drifted (its L3
+    // fallback said 1 MB while the RTL default is 2 MB, and the line size was
+    // hardcoded to 64). Exporting them here means the TB reads the SAME value the
+    // RTL elaborated with, so drift is impossible by construction rather than by
+    // manual sync. See docs/RTL_OBSERVATIONS.md OBS-019.
+    localparam ICACHE_SIZE_BYTES    = `ICACHE_SIZE;
+    localparam DCACHE_SIZE_BYTES    = `DCACHE_SIZE;
+    localparam L2_CACHE_SIZE_BYTES  = `L2_CACHE_SIZE;
+    localparam L3_CACHE_SIZE_BYTES  = `L3_CACHE_SIZE;
+    localparam CACHE_LINE_SIZE_BYTES= `MEM_BLOCK_SIZE;
+    localparam L2_IS_ENABLED        = `L2_ENABLED;
+    localparam L3_IS_ENABLED        = `L3_ENABLED;
+
     ////////////////////////// Icache Parameters //////////////////////////////
 
     // Word size in bytes

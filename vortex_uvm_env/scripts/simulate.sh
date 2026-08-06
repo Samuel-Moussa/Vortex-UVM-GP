@@ -115,6 +115,16 @@ if [[ -n "${LOCKSTEP_LOADFEED:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADFEED"
 fi
 
+# Generic runtime plusarg passthrough — the sim-time counterpart of
+# EXTRA_RTL_DEFINES (compile time). Lets any TB/UVM plusarg be driven from the
+# terminal without editing this script, e.g.
+#   EXTRA_PLUSARGS="+L2CACHE" make sim ...
+# Empty by default => byte-identical. Appended last so it can override.
+if [[ -n "${EXTRA_PLUSARGS:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS $EXTRA_PLUSARGS"
+    print_info "Extra plusargs: $EXTRA_PLUSARGS"
+fi
+
 
 print_info "Test:      $TEST_NAME"
 print_info "Config:    ${NUM_CLUSTERS}CL ${NUM_CORES}C ${NUM_WARPS}W ${NUM_THREADS}T"
