@@ -788,3 +788,113 @@ not scattered across per-fix docs.
   lockstep regression all `data`-mismatch 0 / `UVM_ERROR 0` — vecadd_lite **1035**,
   tcu_test **785**, fpu_test **1675**, sfu_masks **3178**; both Gate-0 negative guards
   still DETECT their injected faults.
+
+---
+
+### OBS-020 (REF-MODEL ROBUSTNESS — observability limit) — most of SimX's `std::abort()` surface is in the **disassembly pretty-printer**, not the decoder: a run can be classified UNVERIFIABLE because the golden could not *name* an instruction
+- **Class:** golden-model robustness / observability limit · **Disposition:** **FIXED (A3 closed)** ·
+  **Found:** 2026-08-06, while scoping how much of A3 remains and whether it depends on A6/Spike.
+- **What we found.** The abort surface was being counted as one undifferentiated bucket
+  ("69 `std::abort` in decode/execute"). Reading the source shows it is **two populations
+  with completely different verification value**:
+
+  | Site | Count | What it means | Verification value of aborting |
+  |---|---|---|---|
+  | `decode.cpp:53-496` `op_string()` | **~34** | `default:` over an enum sub-field of an **already-decoded** instruction, reached only when a trace line is formatted | **None** |
+  | `decode.cpp:523-1146` `Emulator::decode()` — `DECODE_ABORT()` | **13** | genuinely cannot decode the encoding | Legitimate (a golden must refuse, not fabricate) |
+  | `execute.cpp` | **22** | `default:` over funct3/funct7/rm of an already-decoded op — real semantic gap | Legitimate |
+  | `emulator.cpp` | **5** | infrastructure (`size != 1` @:425; CSR @:588/593/640) | Mixed |
+
+- **Evidence that the `op_string()` population is disassembly-only:** `op_string` is
+  `static` (`decode.cpp:53`) and its **only** consumer is
+  `operator<<(std::ostream&, const Instr&)` at `decode.cpp:500`. It is not on the
+  execution path — it cannot affect an architectural result. Yet it calls `std::abort()`,
+  so an instruction that *executed correctly* can still kill the process, and the harness
+  maps SIGABRT → exit `-3` → **UNVERIFIABLE**. A whole program then yields **no verdict**
+  for a cosmetic reason.
+- **Why this matters for A3.** A3 ("retire the UNVERIFIABLE bucket") was sized at ~69
+  sites. The real *semantic* surface is **13 decode + 22 execute + ~4 emulator ≈ 39**;
+  the ~34 disassembly sites are a one-line fix each (return `"UNKNOWN"` / the raw hex
+  instead of aborting) and remove a failure mode that has **zero** correctness value.
+- **Fix direction (not yet applied):** (1) `op_string()` → never abort; emit
+  `{"UNKNOWN.<hex>", ""}` so a trace stays readable and the run survives. (2) the 13
+  `DECODE_ABORT()` + 22 `execute.cpp` sites → either implement the encoding, or return a
+  graceful *unsupported* sentinel that marks **that instruction** UNVERIFIABLE while the
+  rest of the run still produces a verdict. Principle: **one exotic instruction must not
+  void an entire program's result.**
+- **A3 does NOT depend on A6/Spike.** Spike is a *scalar* base-RISC-V ISS with no SIMT
+  model (no `wspawn/tmc/split/join/bar`, no warps/tmask) — plan §A.3 — so it cannot execute
+  a Vortex kernel and can never be the golden that produces the missing verdict; it is
+  scoped as a per-thread base-ISA cross-check only (plan A6, line 425). The one class where
+  "Spike decodes it, SimX aborts" is literally true is **RVC**, and RVC is already excluded
+  upstream at the toolchain level (`prepare.sh:321` `--target=rv32im`, `:492`
+  `-march=rv32im_zicsr_zifencei`) — no compressed instruction is ever generated. A6's value
+  is **independence** (SimX shares authorship, hence blind spots, with the DUT), which is an
+  orthogonal axis to A3's "the golden must not crash".
+
+- **FIX APPLIED (2026-08-06) — three tiers.**
+  1. **Disassembler never aborts (33 sites).** Every `default:` in `op_string()` now
+     returns `UNKNOWN(<sub-field>=<value>)`. A run can no longer be voided because the
+     golden could not spell an instruction. Transformed with brace-depth tracking, not
+     textual matching — a sibling inner `switch` sits closer to an outer `default:` than
+     its own `switch` does, so naive matching mislabels it (verified at `decode.cpp:199-203`,
+     where the inner default correctly got `brArgs.offset` and the outer got `br_type`).
+  2. **Semantic refusals are RECORDED, not silent (39 sites).** New `golden_halt.h` holds a
+     process-wide first-refusal record. `DECODE_ABORT()` (13), `EXEC_UNSUPPORTED()` (22,
+     `execute.cpp`) and `EMU_HALT()` (4, `emulator.cpp` — the CSR/console-MMIO gaps that
+     historically killed riscv-dv runs) all fill it before aborting. **The abort is kept
+     deliberately**: a golden model that guessed a writeback here would corrupt every later
+     comparison while still reporting "pass". The DPI reads the record after its existing
+     `siglongjmp` and returns **-4 GOLDEN_HALT** (refused at a named point) instead of
+     **-3 CRASH** (unknown). Keeping -3 alive and distinct is what prevents an unconverted
+     site from masquerading as a clean halt.
+  3. **The verified prefix is no longer thrown away.** Previously one exotic instruction at
+     cycle 88,000 voided all 88,000 good retirements. Now the scoreboard names the gap and
+     the lockstep verdict **excludes the truncated tail** (orphans after the halt have no
+     golden to compare against) while still failing on any real field mismatch *before* it.
+  Sites were classified, not lumped: `execute.cpp:1415` is an **IPDOM stack overflow**
+  (a model CAPACITY limit, fixable by raising `ipdom_size_`), `:448` and `:1439` are model
+  **invariant** violations — none of them are missing encodings, and each now says so.
+- **MEASURED RESULT — the UNVERIFIABLE bucket is EMPTY.** The plan's standing claim of
+  "~10 riscv-dv programs still abort" is **STALE**. All 10 retained riscv-dv tests were
+  re-run: **zero SimX aborts**, and the passes are real byte-exact DUT-vs-SimX compares,
+  not liveness — `data_compared` = 15 / 436 / 490 / 880 / 1414 / 18 / 19 / 574. 8/10 pass;
+  the 2 failures (`riscv_non_compressed_instr_test`, `riscv_rand_jump_test`) are **RTL
+  assertion errors** on random-jump programs (the OBS-012/OBS-013 class), i.e. DUT-side and
+  not golden-model aborts. Earlier SimX fixes had already retired the bucket; nobody had
+  re-measured it.
+- **NON-VACUITY PROVEN (a path never seen to fire is worth nothing).** Because nothing in
+  the suite makes the golden refuse any more, the GOLDEN_HALT path would otherwise have
+  shipped completely unexercised. `SIMX_FORCE_HALT=<n>` (env var, **default OFF**) makes the
+  golden refuse at the n-th decoded instruction — same discipline as the Gate-0
+  `+INJECT_FAULT` / `+DROP_STORE` guards. Armed run on `vecadd_lite`:
+  `GOLDEN_HALT … 'unrecognized instruction encoding' at PC=0x80003550 instr=0x00363713
+  (wid=2, decode.cpp:597)`; **273 pairs verified before the halt**, 762 tail orphans
+  excluded, **UVM_ERROR 0**, classified `UNVERIFIABLE (END-STATE)` with *"The DUT is NOT
+  implicated"*. Default (unset) run is byte-identical: 1035/1035.
+- **REGRESSION-CLEAN:** vecadd_lite 1035/1035 · tcu_test 785/785 · fpu_test 1675/1675 ·
+  sfu_masks 3178/3178 — all `data`/`LOAD` mismatch 0, `UVM_ERROR` 0; both Gate-0 negative
+  guards still DETECT their injected faults.
+- **A6/Spike remains unnecessary for this**, as argued above — and the measured result
+  settles it: the bucket emptied without Spike ever being involved.
+
+---
+
+### OBS-021 (TB BUILD-INTEGRITY hazard) — `prepare.sh` silently SKIPS building the SimX DPI when `sim/simx/obj` is missing, leaving every DPI import a null pointer
+- **Class:** TB/infrastructure · **Disposition:** **OPEN (low severity — fails loud, but for the wrong reason)** ·
+  **Found:** 2026-08-06, after a `make clean` in `Vortex/sim/simx` during A3 work.
+- **What happens:** `prepare.sh:98-100` tests for `$VORTEX_HOME/sim/simx/obj` and, if absent,
+  prints `⚠ WARNING: SimX not built` and **continues** — it never builds the DPI, never sets
+  `SIMX_ENABLED`, and the run proceeds. vsim then reports
+  `Failed to find user specified function 'simx_init' …` for every import and dies with
+  `Null foreign function pointer encountered`. The diagnostic points at `simx_pkg.sv:13`,
+  which is the innocent party; nothing in the output says "your golden model was never built".
+- **Why it is worth fixing:** the recovery command is already known to the script — it is the
+  very `make -C sim/simx CONFIGS="$ARCH_FLAGS"` invocation ten lines below. Warning-and-
+  continuing when the REFERENCE MODEL is absent is the wrong default for a verification flow:
+  a run with no golden can only produce a vacuous or confusing result. It should either build
+  it or hard-fail naming the command.
+- **Note (ruled out during the same investigation):** the sibling worry — that a bare
+  `make` in `sim/simx` (without `CONFIGS`) silently poisons `obj/` with wrong-config objects —
+  is **NOT** a real hazard. `sim/simx/Makefile:101` keys a `CONFIG_FILE` stamp off the full
+  `CXXFLAGS` and rewrites it whenever they change, forcing a rebuild. Verified directly.

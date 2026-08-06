@@ -19,6 +19,8 @@
 #include <util.h>
 
 #include "emulator.h"
+#include "golden_halt.h"
+#include <cstdio>
 #include "instr_trace.h"
 #include "instr.h"
 #include "dcrs.h"
@@ -29,6 +31,22 @@
 #include "local_mem.h"
 
 using namespace vortex;
+
+// ── A3 / OBS-020: emulator-side refusal, RECORDED ────────────────────────────
+// Third and last counterpart of DECODE_ABORT() / EXEC_UNSUPPORTED(). These sites
+// are the CSR and console-MMIO gaps — historically the most common reason a
+// riscv-dv program ended UNVERIFIABLE, since an exotic CSR address killed the
+// whole run. Converting them means the -3 sentinel now really does mean "crashed
+// for an unknown reason" and nothing else.
+#define EMU_HALT(wid_, ...) do {                                                \
+    char _d[96];                                                                \
+    std::snprintf(_d, sizeof(_d), __VA_ARGS__);                                 \
+    vortex::golden_halt_set("emulator", _d, __LINE__,                           \
+                            warps_.at(wid_).PC, 0u, (uint32_t)(wid_));          \
+    std::cerr << "[SimX-GOLDEN-HALT] emulator: " << _d                          \
+              << " (emulator.cpp:" << __LINE__ << ")" << std::endl;             \
+    std::abort();                                                               \
+  } while (0)
 
 warp_t::warp_t(uint32_t num_threads)
   : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads))
@@ -423,7 +441,7 @@ bool Emulator::dcache_amo_check(uint64_t addr) {
 
 void Emulator::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
   if (size != 1)
-    std::abort();
+    EMU_HALT(0, "console MMIO write of %u bytes; only 1-byte writes are modelled", size);
   uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
   auto& ss_buf = print_bufs_[tid];
   char c = *(char*)data;
@@ -585,12 +603,12 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
       } break;
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
-        std::abort();
+        EMU_HALT(wid, "invalid MPM perf CLASS=%u", (unsigned)perf_class);
         break;
       }
     } else {
       std::cerr << "Error: invalid CSR read addr=0x"<< std::hex << addr << std::dec << std::endl;
-      std::abort();
+      EMU_HALT(wid, "invalid CSR READ addr=0x%x", (unsigned)addr);
     }
   }
   return 0;
@@ -637,7 +655,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
         return; // silently ignore unimplemented machine-mode / hw-id CSR writes
       std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
       std::flush(std::cout);
-      std::abort();
+      EMU_HALT(wid, "invalid CSR WRITE addr=0x%x value=0x%llx", (unsigned)addr, (unsigned long long)value);
     }
   }
 }

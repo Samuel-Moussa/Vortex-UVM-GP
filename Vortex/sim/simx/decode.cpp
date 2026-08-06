@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <iomanip>
+#include <cstdio>
 #include <vector>
 #include <unordered_map>
 #include <util.h>
@@ -25,12 +26,56 @@
 #include "emulator.h"
 #include "arch.h"
 #include "instr.h"
+#include "golden_halt.h"
 
 #ifdef EXT_TCU_ENABLE
 #include "tensor_cfg.h"
 #endif
 
 using namespace vortex;
+
+// ── golden-halt record definition (shared with execute.cpp via golden_halt.h) ─
+namespace vortex {
+
+golden_halt_t& golden_halt_record() {
+  static golden_halt_t rec{};
+  return rec;
+}
+
+void golden_halt_clear() {
+  golden_halt_record() = golden_halt_t{};
+}
+
+void golden_halt_set(const char* where, const char* detail, int line,
+                     uint64_t pc, uint32_t code, uint32_t wid) {
+  auto& r = golden_halt_record();
+  if (r.valid)
+    return;                       // keep the FIRST refusal: it stopped the run
+  r.valid = 1;
+  r.pc    = pc;
+  r.code  = code;
+  r.wid   = wid;
+  r.line  = line;
+  std::snprintf(r.where,  sizeof(r.where),  "%s", where  ? where  : "?");
+  std::snprintf(r.detail, sizeof(r.detail), "%s", detail ? detail : "?");
+}
+
+bool golden_halt_force_pending() {
+  static long threshold = -2;   // -2 = env not read yet, -1 = disabled
+  static long decoded   = 0;
+  if (threshold == -2) {
+    const char* e = std::getenv("SIMX_FORCE_HALT");
+    threshold = (e && *e) ? std::atol(e) : -1;
+    if (threshold >= 0)
+      std::cerr << "[SimX-GOLDEN-HALT] injection ARMED: will refuse at decoded "
+                << "instruction #" << threshold << " (SIMX_FORCE_HALT)" << std::endl;
+  }
+  if (threshold < 0)
+    return false;               // default path: no counter, no behaviour change
+  return (++decoded >= threshold);
+}
+
+} // namespace vortex
 
 // ── Decode-failure diagnostic ────────────────────────────────────────────────
 // SimX's decoder aborts (default: std::abort()) on any instruction word it does
@@ -41,7 +86,13 @@ using namespace vortex;
 // jump vs a genuinely-unimplemented RISC-V instruction). Used ONLY inside
 // Emulator::decode() where `code`/`wid` and `warps_` are in scope; the abort is
 // intentionally NOT silenced (a golden model must refuse, not fabricate, a result).
+//
+// A3: it now also RECORDS the refusal (golden_halt.h) before aborting, so the DPI
+// can return -4 (GOLDEN_HALT, known point) instead of -3 (CRASH, unknown) and the
+// scoreboard can keep the instructions verified before this one.
 #define DECODE_ABORT() do {                                                     \
+    vortex::golden_halt_set("decode", "unrecognized instruction encoding",      \
+                            __LINE__, warps_.at(wid).PC, (code), (wid));        \
     std::cerr << "[SimX-DECODE-ABORT] cannot decode instr=0x" << std::hex       \
               << std::setw(8) << std::setfill('0') << (code)                    \
               << " at PC=0x" << warps_.at(wid).PC << std::dec                   \
@@ -49,6 +100,24 @@ using namespace vortex;
               << std::endl;                                                     \
     std::abort();                                                               \
   } while (0)
+
+// ── A3 / OBS-020: the DISASSEMBLER must never abort ──────────────────────────
+// op_string() below is pure formatting: it is `static`, its only consumer is
+// operator<<(ostream&, const Instr&) at the bottom of this file, and it runs on
+// an instruction that has ALREADY decoded and executed correctly. Its `default:`
+// labels are sub-field cases (funct3/rounding-mode/enum) it cannot NAME.
+// Aborting there killed the process, the DPI crash-guard mapped SIGABRT to the
+// -3 sentinel, and an otherwise fully-verified run was thrown away because the
+// golden could not spell an instruction. There is no verification value in that:
+// a mnemonic is never compared against anything. So every such case now yields a
+// printable placeholder naming the sub-field and its value, and the run survives.
+// (This is NOT the same as fabricating a RESULT — see Emulator::decode(), where
+// refusing is correct and the abort is deliberately kept.)
+static inline op_string_t unknown_op(const char *sub, long long v) {
+  std::ostringstream ss;
+  ss << "UNKNOWN(" << sub << "=" << v << ")";
+  return {ss.str(), ""};
+}
 
 static op_string_t op_string(const Instr &instr) {
   auto op_type = instr.getOpType();
@@ -131,7 +200,7 @@ static op_string_t op_string(const Instr &instr) {
       }
       case AluType::CZERO: return {aluArgs.imm ? "CZERO.NEZ":"CZERO.EQZ", ""};
       default:
-        std::abort();
+        return unknown_op("alu_type", (long long)(alu_type));
       }
     },
     [&](VoteType vote_type)-> op_string_t {
@@ -141,7 +210,7 @@ static op_string_t op_string(const Instr &instr) {
       case VoteType::UNI: return {"VOTE.UNI", ""};
       case VoteType::BAL: return {"VOTE.BAL", ""};
       default:
-        std::abort();
+        return unknown_op("vote_type", (long long)(vote_type));
       }
     },
     [&](ShflType shfl_type)-> op_string_t {
@@ -151,7 +220,7 @@ static op_string_t op_string(const Instr &instr) {
       case ShflType::BFLY: return {"SHFL.BFLY", ""};
       case ShflType::IDX:  return {"SHFL.IDX", ""};
       default:
-        std::abort();
+        return unknown_op("shfl_type", (long long)(shfl_type));
       }
     },
     [&](BrType br_type)-> op_string_t {
@@ -166,7 +235,7 @@ static op_string_t op_string(const Instr &instr) {
         case 6: return {"BLTU", to_hex_str(brArgs.offset)};
         case 7: return {"BGEU", to_hex_str(brArgs.offset)};
         default:
-          std::abort();
+          return unknown_op("brArgs.cmp", (long long)(brArgs.cmp));
         }
       }
       case BrType::JAL:  return {"JAL", to_hex_str(brArgs.offset)};
@@ -179,10 +248,10 @@ static op_string_t op_string(const Instr &instr) {
         case 0x102: return {"SRET", ""};
         case 0x302: return {"MRET", ""};
         default:
-          std::abort();
+          return unknown_op("brArgs.offset", (long long)(brArgs.offset));
         }
       default:
-        std::abort();
+        return unknown_op("br_type", (long long)(br_type));
       }
     },
     [&](MdvType mdv_type)-> op_string_t {
@@ -197,7 +266,7 @@ static op_string_t op_string(const Instr &instr) {
       case MdvType::REM:    return {mdvArgs.is_w ? "REMW":"REM", ""};
       case MdvType::REMU:   return {mdvArgs.is_w ? "REMUW":"REMU", ""};
       default:
-        std::abort();
+        return unknown_op("mdv_type", (long long)(mdv_type));
       }
     },
     [&](FpuType fpu_type)-> op_string_t {
@@ -219,7 +288,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {fpuArgs.is_f64 ? "FCVT.L.D":"FCVT.L.S", ""};
         case 3: return {fpuArgs.is_f64 ? "FCVT.LU.D":"FCVT.LU.S", ""};
         default:
-          std::abort();
+          return unknown_op("fpuArgs.cvt", (long long)(fpuArgs.cvt));
         }
       }
       case FpuType::I2F: {
@@ -229,7 +298,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {fpuArgs.is_f64 ? "FCVT.D.L":"FCVT.S.L", ""};
         case 3: return {fpuArgs.is_f64 ? "FCVT.D.LU":"FCVT.S.LU", ""};
         default:
-          std::abort();
+          return unknown_op("fpuArgs.cvt", (long long)(fpuArgs.cvt));
         }
       }
       case FpuType::F2F: return {fpuArgs.is_f64 ? "FCVT.D.S":"FCVT.S.D", ""};
@@ -239,7 +308,7 @@ static op_string_t op_string(const Instr &instr) {
         case 1: return {fpuArgs.is_f64 ? "FLT.D":"FLT.S", ""};
         case 2: return {fpuArgs.is_f64 ? "FEQ.D":"FEQ.S", ""};
         default:
-          std::abort();
+          return unknown_op("fpuArgs.frm", (long long)(fpuArgs.frm));
         }
       }
       case FpuType::FSGNJ: {
@@ -248,7 +317,7 @@ static op_string_t op_string(const Instr &instr) {
         case 1: return {fpuArgs.is_f64 ? "FSGNJN.D":"FSGNJN.S", ""};
         case 2: return {fpuArgs.is_f64 ? "FSGNJX.D":"FSGNJX.S", ""};
         default:
-          std::abort();
+          return unknown_op("fpuArgs.frm", (long long)(fpuArgs.frm));
         }
       }
       case FpuType::FCLASS: return {fpuArgs.is_f64 ? "FCLASS.D":"FCLASS.S", ""};
@@ -259,11 +328,11 @@ static op_string_t op_string(const Instr &instr) {
         case 0: return {fpuArgs.is_f64 ? "FMIN.D":"FMIN.S", ""};
         case 1: return {fpuArgs.is_f64 ? "FMAX.D":"FMAX.S", ""};
         default:
-          std::abort();
+          return unknown_op("fpuArgs.frm", (long long)(fpuArgs.frm));
         }
       }
       default:
-        std::abort();
+        return unknown_op("fpu_type", (long long)(fpu_type));
       }
     },
     [&](LsuType lsu_type)-> op_string_t {
@@ -275,7 +344,7 @@ static op_string_t op_string(const Instr &instr) {
           case 2: return {"FLW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FLD", to_hex_str(lsuArgs.offset)};
           default:
-            std::abort();
+            return unknown_op("lsuArgs.width", (long long)(lsuArgs.width));
           }
         } else {
           switch (lsuArgs.width) {
@@ -287,7 +356,7 @@ static op_string_t op_string(const Instr &instr) {
           case 5: return {"LHU", to_hex_str(lsuArgs.offset)};
           case 6: return {"LWU", to_hex_str(lsuArgs.offset)};
           default:
-            std::abort();
+            return unknown_op("lsuArgs.width", (long long)(lsuArgs.width));
           }
         }
       }
@@ -298,7 +367,7 @@ static op_string_t op_string(const Instr &instr) {
           case 2: return {"FSW", to_hex_str(lsuArgs.offset)};
           case 3: return {"FSD", to_hex_str(lsuArgs.offset)};
           default:
-            std::abort();
+            return unknown_op("lsuArgs.width", (long long)(lsuArgs.width));
           }
         } else {
           switch (lsuArgs.width) {
@@ -307,13 +376,13 @@ static op_string_t op_string(const Instr &instr) {
           case 2: return {"SW", to_hex_str(lsuArgs.offset)};
           case 3: return {"SD", to_hex_str(lsuArgs.offset)};
           default:
-            std::abort();
+            return unknown_op("lsuArgs.width", (long long)(lsuArgs.width));
           }
         }
       }
       case LsuType::FENCE: return {"FENCE", ""};
       default:
-        std::abort();
+        return unknown_op("lsu_type", (long long)(lsu_type));
       }
     },
     [&](AmoType amo_type)-> op_string_t {
@@ -333,7 +402,7 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMINU: return {"AMOMINU.W", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.W", ""};
         default:
-          std::abort();
+          return unknown_op("amo_type", (long long)(amo_type));
         }
       }
       case 3: {
@@ -350,11 +419,11 @@ static op_string_t op_string(const Instr &instr) {
         case AmoType::AMOMINU: return {"AMOMINU.D", ""};
         case AmoType::AMOMAXU: return {"AMOMAXU.D", ""};
         default:
-          std::abort();
+          return unknown_op("amo_type", (long long)(amo_type));
         }
       }
       default:
-        std::abort();
+        return unknown_op("amoArgs.width", (long long)(amoArgs.width));
       }
     },
     [&](CsrType csr_type)-> op_string_t {
@@ -365,7 +434,7 @@ static op_string_t op_string(const Instr &instr) {
         case CsrType::CSRRS: return {"CSRRSI", to_hex_str(csrArgs.imm) + ", " + to_hex_str(csrArgs.csr)};
         case CsrType::CSRRC: return {"CSRRCI", to_hex_str(csrArgs.imm) + ", " + to_hex_str(csrArgs.csr)};
         default:
-          std::abort();
+          return unknown_op("csr_type", (long long)(csr_type));
         }
       } else {
         switch (csr_type) {
@@ -373,7 +442,7 @@ static op_string_t op_string(const Instr &instr) {
         case CsrType::CSRRS: return {"CSRRS", to_hex_str(csrArgs.csr)};
         case CsrType::CSRRC: return {"CSRRC", to_hex_str(csrArgs.csr)};
         default:
-          std::abort();
+          return unknown_op("csr_type", (long long)(csr_type));
         }
       }
     },
@@ -387,7 +456,7 @@ static op_string_t op_string(const Instr &instr) {
       case WctlType::BAR:    return {"BAR", ""};
       case WctlType::PRED:   return {wctlArgs.is_neg ? "PRED.N":"PRED", ""};
       default:
-        std::abort();
+        return unknown_op("wctl_type", (long long)(wctl_type));
       }
     }
   #ifdef EXT_V_ENABLE
@@ -398,7 +467,7 @@ static op_string_t op_string(const Instr &instr) {
       case VsetType::VSETIVLI: return {"VSETIVLI", vsetArgs.to_string(vset_type)};
       case VsetType::VSETVL:   return {"VSETVL", vsetArgs.to_string(vset_type)};
       default:
-        std::abort();
+        return unknown_op("vset_type", (long long)(vset_type));
       }
     },
     [&](VlsType vls_type)-> op_string_t {
@@ -411,7 +480,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {"VL32", vlsArgs.to_string(vls_type)};
         case 3: return {"VL64", vlsArgs.to_string(vls_type)};
         default:
-          std::abort();
+          return unknown_op("vlsArgs.width", (long long)(vlsArgs.width));
         }
       }
       case VlsType::VLS: {
@@ -421,7 +490,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {"VLS32", vlsArgs.to_string(vls_type)};
         case 3: return {"VLS64", vlsArgs.to_string(vls_type)};
         default:
-          std::abort();
+          return unknown_op("vlsArgs.width", (long long)(vlsArgs.width));
         }
       }
       case VlsType::VLX: {
@@ -431,7 +500,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {"VLX32", vlsArgs.to_string(vls_type)};
         case 3: return {"VLX64", vlsArgs.to_string(vls_type)};
         default:
-          std::abort();
+          return unknown_op("vlsArgs.width", (long long)(vlsArgs.width));
         }
       }
       case VlsType::VS: {
@@ -441,7 +510,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {"VS32", vlsArgs.to_string(vls_type)};
         case 3: return {"VS64", vlsArgs.to_string(vls_type)};
         default:
-          std::abort();
+          return unknown_op("vlsArgs.width", (long long)(vlsArgs.width));
         }
       }
 
@@ -452,7 +521,7 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {"VSS32", vlsArgs.to_string(vls_type)};
         case 3: return {"VSS64", vlsArgs.to_string(vls_type)};
         default:
-          std::abort();
+          return unknown_op("vlsArgs.width", (long long)(vlsArgs.width));
         }
       }
 
@@ -463,11 +532,11 @@ static op_string_t op_string(const Instr &instr) {
         case 2: return {"VSX32", vlsArgs.to_string(vls_type)};
         case 3: return {"VSX64", vlsArgs.to_string(vls_type)};
         default:
-          std::abort();
+          return unknown_op("vlsArgs.width", (long long)(vlsArgs.width));
         }
       }
       default:
-        std::abort();
+        return unknown_op("vls_type", (long long)(vls_type));
       }
     },
     [&](VopType vop_type)-> op_string_t {
@@ -481,7 +550,7 @@ static op_string_t op_string(const Instr &instr) {
       case VopType::OPFVF: return {"OPFVF", vopArgs.to_string(vop_type)};
       case VopType::OPMVX: return {"OPMVX", vopArgs.to_string(vop_type)};
       default:
-        std::abort();
+        return unknown_op("vop_type", (long long)(vop_type));
       }
     }
   #endif // EXT_V_ENABLE
@@ -521,6 +590,12 @@ std::ostream &operator<<(std::ostream &os, const Instr &instr) {
 }
 
 void Emulator::decode(uint32_t code, uint32_t wid, uint64_t uuid) {
+  // A3 non-vacuity injection — default OFF (see golden_halt.h). Placed at the
+  // decoder entry because that is where a genuinely unknown encoding would be
+  // met, so the injected halt exercises the SAME path a real one would.
+  if (vortex::golden_halt_force_pending())
+    DECODE_ABORT();
+
   // get instruction buffer
   auto& ibuffer = warps_.at(wid).ibuffer;
 

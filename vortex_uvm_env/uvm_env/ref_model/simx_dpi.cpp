@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <cstring>
 #include <sstream>
+#include <iomanip>
 #include <map>
 #include <csetjmp>
 #include <csignal>
@@ -18,6 +19,7 @@
 #include <VX_types.h>
 #include "simx_cosim_record.h"
 #include "cosim_loadfeed.h"
+#include "golden_halt.h"
 
 using namespace vortex;
 
@@ -717,6 +719,9 @@ int simx_run() {
         //     so a model decode failure CANNOT take down vsim. On crash we
         //     siglongjmp back here, restore stdout, and return sentinel -3.
         g_simx_crashed = 0;
+        // A3: clear any record from a previous run, so a stale halt can never
+        // relabel a fresh CRASH (-3) as a tidy GOLDEN_HALT (-4).
+        vortex::golden_halt_clear();
         struct sigaction sa, old_abrt, old_segv;
         sa.sa_handler = simx_crash_handler;
         sigemptyset(&sa.sa_mask);
@@ -740,16 +745,42 @@ int simx_run() {
         std::cout << _cap.str();                                // echo program output
 
         if (g_simx_crashed) {
-            // SimX model aborted mid-run (e.g. Emulator::decode). Do NOT touch
-            // the processor again (its state is undefined). Return a distinct
-            // sentinel; the scoreboard classifies this UNVERIFIABLE, not a DUT
-            // failure, and skips the (now-meaningless) memory comparison.
-            run_status = -3;
+            // SimX model aborted mid-run. Do NOT touch the processor again (its
+            // state is undefined). Return a sentinel; either way the END-STATE
+            // memory compare must be skipped, because SimX never reached a valid
+            // final image.
+            //
+            // A3 splits what used to be one bucket:
+            //   -4 GOLDEN_HALT — the model REFUSED at a recorded instruction
+            //                    (golden_halt.h). We know the PC, the encoding and
+            //                    the sub-field, so the gap is nameable and every
+            //                    instruction lockstep-verified BEFORE it still
+            //                    counts as real verification.
+            //   -3 CRASH       — nothing recorded: SIGSEGV, or an abort site not
+            //                    yet converted. Genuinely unknown, stays fully
+            //                    UNVERIFIABLE. Keeping -3 distinct is what stops
+            //                    an unconverted site from masquerading as a clean
+            //                    halt.
+            const vortex::golden_halt_t& gh = vortex::golden_halt_record();
+            run_status = gh.valid ? -4 : -3;
             g_done     = false;
             g_exitcode = run_status;
-            std::cerr << "[SimX-DPI] WARNING: SimX aborted/crashed after " << cycles_run
-                      << " cycles (model decode/memory fault). Caught so vsim survives; "
-                      << "this run is UNVERIFIABLE." << std::endl;
+            if (gh.valid) {
+                std::cerr << "[SimX-DPI] GOLDEN_HALT after " << cycles_run
+                          << " cycles: " << gh.where << " refused '" << gh.detail
+                          << "' at PC=0x" << std::hex << gh.pc;
+                if (gh.code)
+                    std::cerr << " instr=0x" << std::setw(8) << std::setfill('0') << gh.code;
+                std::cerr << std::dec << " (wid=" << gh.wid << ", " << gh.where
+                          << ".cpp:" << gh.line << "). Instructions verified BEFORE this "
+                          << "point remain valid; the end-state compare is skipped."
+                          << std::endl;
+            } else {
+                std::cerr << "[SimX-DPI] WARNING: SimX crashed after " << cycles_run
+                          << " cycles with NO recorded halt reason (segfault, or an abort "
+                          << "site not yet converted). Caught so vsim survives; "
+                          << "this run is UNVERIFIABLE." << std::endl;
+            }
             std::cout << "[SimX-DPI] ========================================" << std::endl;
             return g_exitcode;
         }
@@ -983,6 +1014,17 @@ void simx_cosim_load_feed_push(
 // matched at a load retirement. consumed==pushed ⇒ DUT and SimX uuids aligned.
 unsigned simx_cosim_load_feed_pushed()   { return vortex::loadfeed_pushed(); }
 unsigned simx_cosim_load_feed_consumed() { return vortex::loadfeed_consumed(); }
+
+// --- A3 GOLDEN_HALT accessors -----------------------------------------------
+// Valid only after simx_run() returned -4. They let the scoreboard NAME the
+// instruction that stopped the golden instead of reporting a bare sentinel.
+int      simx_golden_halt_valid()  { return vortex::golden_halt_record().valid; }
+uint64_t simx_golden_halt_pc()     { return vortex::golden_halt_record().pc;    }
+unsigned simx_golden_halt_code()   { return vortex::golden_halt_record().code;  }
+unsigned simx_golden_halt_wid()    { return vortex::golden_halt_record().wid;   }
+int      simx_golden_halt_line()   { return vortex::golden_halt_record().line;  }
+const char* simx_golden_halt_where()  { return vortex::golden_halt_record().where;  }
+const char* simx_golden_halt_detail() { return vortex::golden_halt_record().detail; }
 
 // --- COMPUTE-writeback feed (OBS-014 sqrt reconvergence) — same contract as the
 // load feed, applied at the FSQRT writeback (execute.cpp FPU lambda).
