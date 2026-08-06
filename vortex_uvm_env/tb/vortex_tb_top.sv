@@ -1007,6 +1007,41 @@ module vortex_tb_top;
         .data (result_if.data)
     );
 
+    // FW-6 / gap G1: passive CACHE-EVENT coverage probe, bound into every
+    // VX_cache_bank (the stage where hit/miss is actually resolved). One instance
+    // per bank per cache, so L1 I$/D$, L2 and L3 land as SEPARATE covergroup
+    // instances in the UCDB hierarchy.
+    //
+    // CONFIG-AWARE BY CONSTRUCTION: VX_cache_wrap.sv:160 instantiates VX_cache —
+    // and hence VX_cache_bank — only when `PASSTHRU == 0`. With L2/L3 disabled
+    // those levels are pure bypass, no bank exists, so this bind creates NO
+    // instance and adds NO bins. That means the default (L2/L3-off) build keeps
+    // its coverage denominator untouched and there is no unreachable 0% block to
+    // waive — the failure mode that made the TCU covergroup a dead ~195-bin block
+    // before it was gated. Cache geometry is passed through from the bank's own
+    // parameters, never restated here (the OBS-019 single-source-of-truth rule).
+    bind VX_cache_bank vx_cache_probe #(
+        .INSTANCE_ID(INSTANCE_ID),
+        .BANK_ID    (BANK_ID),
+        .CACHE_SIZE (CACHE_SIZE),
+        .NUM_WAYS   (NUM_WAYS),
+        .WRITEBACK  (WRITEBACK)
+    ) u_cache_probe (
+        .clk            (clk),
+        .reset          (reset),
+        .valid_st1      (valid_st1),
+        .is_creq_st1    (is_creq_st1),
+        .is_fill_st1    (is_fill_st1),
+        .is_flush_st1   (is_flush_st1),
+        .is_replay_st1  (is_replay_st1),
+        .is_hit_st1     (is_hit_st1),
+        .rw_st1         (rw_st1),
+        .is_dirty_st1   (is_dirty_st1),
+        .perf_read_miss (perf_read_miss),
+        .perf_write_miss(perf_write_miss),
+        .perf_mshr_stall(perf_mshr_stall)
+    );
+
 
     //==========================================================================
     // SIMULATION COMPLETION
