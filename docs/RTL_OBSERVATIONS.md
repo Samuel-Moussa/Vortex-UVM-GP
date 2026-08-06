@@ -481,12 +481,21 @@ not scattered across per-fix docs.
      is the ONLY deviation. FP-dest loads are excluded from the (integer-only) load
      feed so they reconverge through the sqrt feed's store→flw, not an unboxed
      override.
-  - **Result:** `fpu_test` GREEN (pass-2 residual 0, matched 1675). `fpu_mt` lockstep
-    GREEN (pass-2 residual 0, 4 sqrt reconvergences) — its remaining 2 UVM_ERRORs are
-    a SEPARATE end-state-gate gap ("no functional verification performed": fpu_mt emits
-    no checkable mem region/console), not this FPU issue. Gated on `+LOCKSTEP_LOADFEED`
-    (arms both feeds); default single-pass is byte-identical and shows the tolerated
-    direct sqrt only.
+  - **Result:** `fpu_test` GREEN (pass-2 residual 0, matched 1675). `fpu_mt` GREEN
+    (pass-2 residual 0, 4 sqrt reconvergences). Gated on `+LOCKSTEP_LOADFEED` (arms
+    both feeds); default single-pass is byte-identical and shows the tolerated direct
+    sqrt only.
+  - **Follow-on bug found + fixed (same session):** `fpu_mt` initially still reported 2
+    UVM_ERRORs ("no functional verification performed"). Root cause was NOT a missing
+    checker — it was a **phase-ordering false verdict** in the non-vacuity gate
+    (`kernel_launch_test.check_results()`, run_phase): under `+LOCKSTEP_LOADFEED` the
+    end-state MEM compare is deliberately deferred to the scoreboard's report_phase
+    (post-feed SimX, `endstate_feed_mode`), and lockstep compares in check_phase — so
+    both counters are legitimately 0 when the gate reads them. `fpu_mt` in fact performs
+    **68** end-state comparisons + **1412** lockstep pairs. Fixed by deferring the
+    non-vacuity verdict to the test's `report_phase` (after both). Non-vacuity is NOT
+    weakened: a run where both are 0 still FAILS. Both Gate-0 negative guards re-verified
+    green (`negative_result_test`, `negative_dropped_store_test` both still DETECT).
   - **The RTL itself is unchanged and still deviates** — this is a verification-side
     accommodation of a cited hardware limitation, not a fix. A bit-accurate reference
     sqrt matching cvfpu was rejected (it would degrade SoftFloat's independent IEEE
