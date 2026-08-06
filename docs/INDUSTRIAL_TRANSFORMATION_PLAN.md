@@ -11,9 +11,93 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A → A0 ✅ · A1(a) ✅ · A1(b) ✅ · A1(c) RVVI MONITOR ✅ · A1(d) PINPOINTED ✅ · SimX fetch bug FIXED ✅ · OBS-002 CLOSED ✅ · OBS-009 VERIFIED (no_fence@2CL, non-waiver) ✅ · A1(e) RVVI LOAD-BUS ✅ · END-STATE uses real `mem_model` ✅ · OBS-010 (full_interrupt@2CL) = end-state VERIFIED, instruction-granularity residual = interrupt-timing (proven keying-independent, NOT a DUT bug) ✅. Phase-A lockstep sub-milestones (a–e) ALL DONE. A5 (RTL-assert gate) ✅. INV-4 (riscv-dv jalr derail) ✅. **2CL directed-suite lockstep sweep ✅** (findings below). A6 (Spike audit) FROZEN by user. layer-4 multi-register WMMA retirement ✅ (tcu_test/tcu_mt lane-exact). **fpu_test + fpu_mt ✅ CLOSED via OBS-014 (fsqrt 1-ULP tolerance + two-pass sqrt reconvergence feed, commit `483a655`).** NEXT ACTION: sfu_masks frm-CSR divergence classification, then Phase B (B2 scoreboard→mem_model) — see ▶▶ block.**
+**CURRENT MILESTONE: Phase A COMPLETE except A3 (partial) and A6 (frozen).** A0 ✅ · A1(a–e) ✅ · A2 ✅ · A4 ✅ (2CL divergence now grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · **A3 PARTIAL** (OBS-008 fixed, both 2CL cases run; ~10 riscv-dv still abort — 69 `std::abort` in decode/execute remain) · A6 ❄️ FROZEN. **2CL sweep 5→12 of 15 verified.** TCU ✅ lane-exact @1CL+2CL · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 now buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). NEXT ACTION: (1) close out cache/L2-L3 thread — validate `cache_tier`, re-run L2/L3 sweep; (2) **Phase B — B2 scoreboard→mem_model**; (3) A3 abort-hardening. See ▶▶ block.**
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
+
+### ▶▶ NEXT ACTION (exact, resumable — 2026-08-06)
+
+**SESSION 2026-08-06 — per-instruction closure (TCU/FPU/SFU) + cache-config integrity.**
+16 commits: `24818e3` `2ca64d0` `8cc455a` `483a655` `250765c` `11e0e48` `76d4360` `ce68a4e`
+`e5f1cd8` `cc55469` `a915788` `14a3692` `5e636e7` `1ae1864` `96fc7e0` `81b104e` `fa31cbb`.
+
+**CLOSED THIS SESSION**
+- **TCU ✅ lane-exact @1CL AND @2CL** (tcu_test 785/785 · 2789/2789; tcu_mt 1179/1179 · 3399/3399).
+  Four COMPARATOR representation layers fixed (DUT proven correct throughout): FP rd-index
+  (unified 32+n vs local+is_fp), FP writeback NaN-box, FP **load** NaN-box, and WMMA
+  multi-register retirement (instruction-grouped alignment; `po_base`/`po_order` fold the
+  tile sub-index in uuid[31:28]).
+- **FPU ✅ CLOSED — OBS-014 is a REAL RTL BUG.** DUT hardware `fsqrt.s` is **1 ULP off** the
+  IEEE-correct SoftFloat result. End-state's FP tolerance had been HIDING it; per-instruction
+  lockstep exposed it. Handled two-layer, sqrt-ONLY: bounded 1-ULP tolerance (logged+tallied,
+  `+ - * / fma cvt` stay bit-exact) + **two-pass sqrt reconvergence feed** (`compfeed_*`)
+  that forces the certified DUT sqrt into SimX's FP regfile so downstream ops are re-checked
+  bit-exact. fpu_test 1675 ✅, fpu_mt ✅.
+- **SFU ✅ CLOSED — OBS-015 (ref-model bug).** SimX's CSR ops looped lanes sequentially over
+  the shared per-warp `fcsr`, so lane t read what lane t-1 wrote. Fixed to read-once/write-once
+  (lowest ACTIVE lane). sfu_masks data-mismatch **109 → 0** (3178 matched). The RTL's
+  unconditional `rs1_data[0]` write is deliberately NOT mirrored → stays visible.
+- **Non-vacuity gate phase-ordering bug** (`11e0e48`): the gate read its counters in run_phase,
+  but under `+LOCKSTEP_LOADFEED` the end-state compare is deferred to report_phase and lockstep
+  compares in check_phase ⇒ false "no functional verification performed". fpu_mt actually does
+  68 end-state comparisons + 1412 lockstep pairs. Verdict moved to report_phase.
+
+**2CL SWEEP: 5 → 12 of 15 verified** — 7 lane-exact (vecadd_lite, tcu_test, tcu_mt, vote_shfl,
+div_edge, spawn_tmc_sweep, bar_masks) · 5 race-explained residual=0 (diverge_deep/peel/uni3,
+fpu_test, sfu_masks) · **3 inconclusive** (diverge_lite 372, diverge_fpu 328, fpu_mt 81).
+⚠️ The 3 are **feed NON-CONVERGENCE** (ENH-2: fed loads steer control flow ⇒ SimX walks a new
+path and meets fresh unfed races), **NOT evidence of a DUT bug** — all are lane-exact at 1CL.
+
+**OBS-009 NOW ARCHITECTURALLY GROUNDED (not inference):** MICRO'21 §4.1.4 — *"Flush operations
+among caches are provided as a means of providing **weak coherent memory space**"*; §3.1 uses
+the RISC-V `fence`. RTL confirms: **zero** hits for `snoop|coheren|invalidat|MESI|probe_req`
+across `hw/rtl/cache/*.sv`; only `flush` exists. L1 dcache is per-SOCKET (`VX_socket.sv:135-138`),
+L2 per-cluster, L3 per-GPU. ⇒ a fenceless cross-cluster kernel has **no architecturally-defined
+single result**; DUT≠SimX there is expected, not a bug.
+
+**CACHE-CONFIG INTEGRITY (unplanned but prerequisite — dead config was hiding real bugs)**
+- **OBS-016** — L2/L3 were **UNBUILDABLE**: `vortex_config.sv` expanded RTL *presence* guards as
+  if they had values (``l2_enable = `L2_ENABLE;`` → ``= ;``). So those two cache levels had
+  **never been exercised**, and the L2/L3 coverage waivers were unreachable-by-TB-construction.
+- **OBS-017** — fixing the build immediately exposed a real RTL guard bug: `VX_mem_scheduler.sv`
+  hardcoded a **~1000-cycle** response timeout (TIME units, shadowing the configurable global) →
+  22,187 FALSE timeouts on runs that completed correctly. Promotes **OBS-011** (`1 ** N ≡ 1`,
+  the scaling that never scaled) from latent to CONFIRMED. Fixed via `STALL_TIMEOUT_SCALE`.
+  ⚠️ The two guards are in DIFFERENT units (cycles vs `$time` ps) — do NOT merge them.
+- **OBS-018** — enabling L2+L3 does **NOT** remove the cross-cluster races: results bit-identical
+  on all 15 kernels while cycles moved **+80%** (tcu_test 12,215 → 21,968), i.e. timing changed
+  a lot and architectural outcome not at all ⇒ the divergences are structural, not timing flukes.
+- **OBS-019** — `vortex_config.sv` duplicated the RTL cache geometry as hand-written fallbacks
+  that were ALWAYS used (UVM compile never includes `VX_config.vh`) and had **drifted**
+  (L3 said 1 MB, RTL is 2 MB; line size hardcoded 64). Fixed: `VX_gpu_pkg` now EXPORTS the
+  elaborated geometry and the TB reads it ⇒ drift impossible by construction. Also gated the
+  **structural-plusarg hazard** (`+L2CACHE`/`+L3CACHE`/`+XLEN_64` used to OVERRIDE at runtime,
+  making the TB believe hardware that isn't there) — now I2-style asserts, **proven non-vacuous**
+  (both abort rc=2 with an explanatory message naming the rebuild command).
+
+**TERMINAL CONTROL (no hardcoding):** `make sim ... L2=1 L3=1 ICACHE=0 DCACHE=0`
+(Makefile → `--l2/--l3/--icache/--dcache` → `+define+`), plus `EXTRA_RTL_DEFINES` (compile) and
+`EXTRA_PLUSARGS` (sim) escape hatches. Defaults mirror RTL ⇒ default build byte-identical.
+
+**▶ OPEN / NEXT (in order)**
+1. **Close the cache thread:** `cache_tier` kernel is BUILT + fully parametrized but **NOT
+   VALIDATED** (`Vortex/tests/kernel/cache_tier/`, phases default OFF; run
+   `make CT_P1=1 CT_P2=1` then `make sim ... L2=1`). Then confirm from the coverage DB that
+   L2/L3 **hit-path** bins actually moved. Also **re-run the 15-kernel L2/L3 sweep** — only
+   `tcu_test` has been re-checked since the OBS-017 fix.
+2. **Phase B — B2 scoreboard → single `mem_model`** (the designated plan next-action).
+3. **A3 abort hardening** — see below.
+
+**WHY A3 IS "PARTIAL":** A3 = *retire the UNVERIFIABLE bucket* by hardening SimX's
+`std::abort()` paths. Done so far: OBS-008 (misaligned fetch) fixed, `DECODE_ABORT()` now
+self-documents (prints faulting PC + instr word), and BOTH 2CL cases (`no_fence`,
+`full_interrupt`) now RUN to EBREAK instead of aborting. NOT done: **~10 riscv-dv / regression
+programs still abort** (SIGABRT → exit −3 → UNVERIFIABLE), and **69 `std::abort()` remain**
+across `decode.cpp` (46) and `execute.cpp` (23) — unknown-encoding default branches (RVC,
+exotic CSRs). Each needs either real handling or a graceful "unsupported → sentinel →
+UNVERIFIABLE" so one exotic instruction cannot kill the whole run. It is incremental C++;
+every fix shrinks the bucket. (Note: A6/Spike would independently decode RVC where SimX aborts,
+but A6 is frozen.)
 
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-07-17)
 **2CL DIRECTED-SUITE LOCKSTEP SWEEP = DONE (this session).** Ran the 15 deterministic
