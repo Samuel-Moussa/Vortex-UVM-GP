@@ -675,6 +675,13 @@ not scattered across per-fix docs.
   database: `vcover report -recursive <ucdb>` lists **`l2cache`** and **`l3cache`** instances
   alongside `dcache`/`icache`. (Grepping the sim log for the names is NOT sufficient evidence —
   `dcache` does not appear there either.)
+- **L2/L3 measurably CHANGED TIMING — so the null result is not "the flags did nothing".**
+  Same kernel, same 2CL config, `tcu_test`: **12,215 cycles** with L2/L3 passthru
+  (`results/20260806/run_184629_*`) vs **21,968 cycles** with L2+L3 enabled
+  (`run_191734_*`) — **+80% runtime**. (Extra levels add lookup/miss-traversal latency;
+  these small directed kernels have too little reuse to earn hits back. This is also why
+  the OBS-017 1,000-cycle response guard blows.) So memory timing shifted substantially
+  while the architectural outcome did not move at all — see next point.
 - **RESULT: bit-identical to the PASSTHRU baseline on all 15 kernels** (mechanically diffed:
   `compared=`, `matched=`, and `mm[PC,rd,data,LOAD]` all equal). 7 lane-exact
   (vecadd_lite, tcu_test, tcu_mt, vote_shfl, div_edge, spawn_tmc_sweep, bar_masks); the same 8
@@ -686,6 +693,12 @@ not scattered across per-fix docs.
   *misses*, but a core whose L1 already holds a line still hits stale data. Additionally, at
   `SOCKET_SIZE=MIN(4,NUM_CORES)=2` both cores of a cluster already share ONE L1
   (`VX_socket.sv:135-138`), so intra-cluster traffic was never the issue.
+- **The strongest form of the result:** timing changed by **+80%** yet **not one bit** of the
+  architectural outcome moved. That rules out the "these are timing flukes / jitter" reading:
+  whether a core reads stale data is decided by *whether its L1 already holds the line* — a
+  property of the program's access pattern, not of latency. Adding levels changes WHEN things
+  happen, not WHETHER a stale line is hit. The divergences are therefore structural, and
+  reproduce deterministically.
 - **Significance:** this is direct experimental confirmation that the OBS-009 divergences are the
   **published weak-coherence memory model** (MICRO'21 §4.1.4: *"Flush operations among caches are
   provided as a means of providing weak coherent memory space"*; §3.1 uses the RISC-V `fence` for
