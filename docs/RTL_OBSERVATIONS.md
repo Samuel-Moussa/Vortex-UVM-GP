@@ -762,3 +762,29 @@ not scattered across per-fix docs.
   consulted `l3_cache_size`/`cache_line_size`. Nothing in the current checkers keys off
   them (they are informational/randomization bounds), so no past result is invalidated —
   but the mismatch would have silently mis-shaped any future cache-aware stimulus.
+- **RELATED HAZARD FOUND IN THE SAME AUDIT — runtime plusargs overriding STRUCTURAL config
+  (FIXED).** `apply_plusargs()` let `+L2CACHE`/`+L3CACHE` do ``l2_enable = 1`` and
+  `+XLEN_64` do ``xlen = 64`` **at runtime**. These are all fixed at ELABORATION
+  (`VX_cache_wrap.sv:160` instantiates `VX_cache` only when `PASSTHRU==0`; XLEN and the
+  AXI wrapper are compile-time), so such a plusarg cannot reconfigure hardware — it can
+  only make the TB *believe* something the DUT does not implement, after which every
+  downstream check is measured against a fiction. The project already had the right
+  pattern for topology (I2 elaboration asserts); it simply was not applied to the rest.
+  **Fix:** the I2 gate in `vortex_tb_top.sv` now also covers XLEN, L2, L3 and the memory
+  interface, and `vortex_config.sv` turns the cache plusargs from an OVERRIDE into a
+  CHECK. Each failure names the fix, e.g.
+  `+L2CACHE requested but the RTL was elaborated WITHOUT L2 (PASSTHRU/bypass) -- rebuild with make sim ... L2=1`.
+  Two different remedies, chosen deliberately: **sizes/geometry → single source of truth**
+  (drift impossible by construction, no assert needed), **enables/topology → assert**
+  (legitimately terminal-settable, so verify the request matches the build).
+- **GUARDS PROVEN NON-VACUOUS (an assert never seen to fire is worthless):**
+  `EXTRA_PLUSARGS="+L2CACHE"` on an L2-less build → **rc=2**, `[I2-ASSERT] +L2CACHE
+  requested but the RTL was elaborated WITHOUT L2 …`; `EXTRA_PLUSARGS="+XLEN_64"` on the
+  RV32 build → **rc=2**, `[I2-ASSERT] +XLEN_64 requested but the RTL was compiled XLEN_32 …`.
+  (`EXTRA_PLUSARGS` was added to `simulate.sh` as the sim-time counterpart of
+  `EXTRA_RTL_DEFINES`; empty by default ⇒ byte-identical.)
+- **VALIDATION of the whole change:** clean 1CL rebuild, **0 compile errors**; new gate line
+  `[I2-ASSERT] Structural config OK: XLEN=32 L2=0 L3=0 icache=1 dcache=1 (RTL == UVM)`;
+  lockstep regression all `data`-mismatch 0 / `UVM_ERROR 0` — vecadd_lite **1035**,
+  tcu_test **785**, fpu_test **1675**, sfu_masks **3178**; both Gate-0 negative guards
+  still DETECT their injected faults.
