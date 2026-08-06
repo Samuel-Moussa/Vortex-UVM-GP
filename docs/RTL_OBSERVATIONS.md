@@ -588,3 +588,41 @@ not scattered across per-fix docs.
   this kernel — so the pass required no accommodation of it. Regression (all @1CL,
   lockstep+loadfeed): vecadd_lite 1035, fpu_test 1675, tcu_test 785, diverge_fpu 2738 —
   all `data` mismatch 0, 0 UVM_ERROR; both Gate-0 negative guards still DETECT.
+
+---
+
+### OBS-016 (TB BUG — blocking) — the optional cache levels (L2/L3) were impossible to build: TB expands RTL *presence* guards as if they had values
+- **Class:** TB/infrastructure bug (not RTL) · **Disposition:** **FIXED** ·
+  **Found:** 2026-08-06, first attempt to build with `L2_ENABLE`/`L3_ENABLE` on.
+- **What we saw:** rebuilding at 2CL with `+define+L2_ENABLE +define+L3_ENABLE` broke the
+  build — `vortex_config.sv(571)/(577): near ";": syntax error, unexpected ';'`, and every
+  subsequent run died at elaboration with
+  `vortex_dcr_if.sv(106): (vopt-2730) Undefined variable: 'VX_DCR_BASE_STARTUP_ADDR0'`
+  (a *downstream* symptom: the config package failed to compile, so everything that
+  depended on it was undefined).
+- **ROOT CAUSE:** in the Vortex RTL these are **presence guards defined with NO value** —
+  `VX_config.vh:533` ``define ICACHE_ENABLE``, `:588` ``define DCACHE_ENABLE``, and L2/L3
+  are consumed as ``ifdef L2_ENABLE -> `define L2_ENABLED 1`` (`:845-856`). The TB's
+  `vortex_config.sv` instead expanded them **as if they carried a value**:
+  ``l2_enable = `L2_ENABLE;`` → expands to ``l2_enable = ;`` → syntax error. The bug is
+  latent while the macros are undefined (the `else` branches supply 0/1), so it never fired
+  in any previous build — but it made the optional cache levels **unbuildable**.
+- **Impact:** L2 and L3 are `PASSTHRU` by default (`VX_cluster.sv:107`, `Vortex.sv:96`;
+  `VX_cache_wrap.sv:160` instantiates the real `VX_cache` storage only when `PASSTHRU==0`),
+  so **those two cache levels have never been exercised or verified in this project** — and
+  could not have been, because turning them on did not compile. The existing L2/L3
+  "structural passthru" coverage waivers were therefore load-bearing in a way we had not
+  realised: they waived RTL that was unreachable *by construction of the TB*, not only by
+  configuration choice.
+- **FIX:** mirror the RTL's presence semantics in `vortex_config.sv` (assign `1` inside the
+  ``ifdef``, keep the existing `else` defaults). Tolerates an explicit `=1` form too.
+  Default builds (macros undefined) are byte-identical — only the `else` branches run.
+- **Also added:** `EXTRA_RTL_DEFINES` passthrough in `scripts/compile.sh` (empty by default
+  ⇒ byte-identical) so non-default RTL configs can be built without editing the script:
+  `EXTRA_RTL_DEFINES="+define+L2_ENABLE +define+L3_ENABLE" make sim ...`
+- **Follow-up:** with the build fixed, re-run the 2CL lockstep sweep **with L2+L3 enabled**
+  to (a) exercise the two previously-dead cache levels for the first time and (b) test
+  whether the OBS-009 cross-cluster race class changes. Prediction on file BEFORE the run:
+  it should **not** change — the staleness lives in the per-socket L1 dcaches, which have no
+  invalidation (no `snoop|coheren|invalidat|MESI` anywhere in `hw/rtl/cache/*.sv`); L2/L3
+  only back *misses*, and at `SOCKET_SIZE=2` both cores of a cluster already share one L1.

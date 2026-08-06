@@ -555,26 +555,33 @@ class vortex_config extends uvm_object;
         else                   flen = 0;
 
         // --- Cache ---
+        // NOTE: in the Vortex RTL these four are PRESENCE guards defined with NO value
+        // (`VX_config.vh:533` ``define ICACHE_ENABLE``, `:588` ``define DCACHE_ENABLE``;
+        // L2/L3 are tested via ``ifdef L2_ENABLE -> `define L2_ENABLED 1`` at `:845-856`).
+        // Expanding them as if they carried a value (``x = `L2_ENABLE;``) yields ``x = ;``
+        // — a syntax error the moment anyone actually defines them, which made the TB
+        // impossible to build with the optional cache levels turned on. Mirror the RTL's
+        // presence semantics instead; this also tolerates an explicit ``=1`` form.
         `ifdef ICACHE_ENABLE
-            icache_enable = `ICACHE_ENABLE;
+            icache_enable = 1;
         `else
             icache_enable = 1;
         `endif
 
         `ifdef DCACHE_ENABLE
-            dcache_enable = `DCACHE_ENABLE;
+            dcache_enable = 1;
         `else
             dcache_enable = 1;
         `endif
 
         `ifdef L2_ENABLE
-            l2_enable = `L2_ENABLE;
+            l2_enable = 1;
         `else
             l2_enable = 0;
         `endif
 
         `ifdef L3_ENABLE
-            l3_enable = `L3_ENABLE;
+            l3_enable = 1;
         `else
             l3_enable = 0;
         `endif
