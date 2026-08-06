@@ -898,3 +898,31 @@ not scattered across per-fix docs.
   `make` in `sim/simx` (without `CONFIGS`) silently poisons `obj/` with wrong-config objects —
   is **NOT** a real hazard. `sim/simx/Makefile:101` keys a `CONFIG_FILE` stamp off the full
   `CXXFLAGS` and rewrites it whenever they change, forcing a rebuild. Verified directly.
+
+---
+
+### OBS-022 (VERIFICATION OBSERVABILITY LIMIT) — per-instruction lockstep compares the **writeback domain only**: branches, stores and `jalr x0` are never directly checked
+- **Class:** observability limit (testbench, not RTL) · **Disposition:** **OPEN — bounded and quantified; accepted for now**
+- **What we saw:** during the A6 Spike audit, the DUT/SimX retirement stream for
+  `riscv_arithmetic_basic_test_0.elf` contained **11,076** records while Spike retired
+  **11,487** instructions from the same entry PC. The 411-instruction difference is not a
+  divergence: every missing instruction is one with **no register writeback** — `nop`
+  (`0x00000013`), `beq` (`0x00628263` @ `0x80000008`), `jalr x0,s6,0` (`0x000b0067`
+  @ `0x80000014`).
+- **Evidence / mechanism:** this is by construction and already documented in-tree —
+  `vortex_uvm_env/uvm_env/lockstep_scoreboard.sv:16` states *"DOMAIN: writeback retirements
+  only (wb==1). Non-wb instructions (stores, branches…)"*, and the filter is enforced at
+  `vortex_uvm_env/tb/vx_commit_probe.sv:99` (`retire_fire && commit_arb_if[i].data.wb`) and
+  again on the golden side at `lockstep_scoreboard.sv:311` (`if (wb == 0) continue;`).
+  Filtering Spike identically made the streams **exactly equal in length (11,076 = 11,076)**.
+- **Why it matters:** a control-transfer instruction is never compared *as an instruction*.
+  A branch that resolves the wrong way is caught only **indirectly**, via the PC of the next
+  writeback retirement — so it is detected, but the reported first-divergence PC points at the
+  *successor*, not at the faulty branch. **Stores are not covered by lockstep at all**; they
+  are covered by the separate end-state memory compare. This bounds what "per-instruction
+  lockstep" may be claimed to mean.
+- **Not a defect:** the DUT and SimX agree with an independent model (Spike) on both the
+  count and the values of every architectural writeback. Nothing here suggests an RTL bug.
+- **Enhancement if closed:** extend the commit probe to capture non-wb retirements
+  (`wb==0`) with their PC only, giving direct branch/store-order comparison. Cost is a wider
+  probe and a larger trace; benefit is exact first-divergence attribution on control flow.
