@@ -37,7 +37,7 @@ banked configurations (1 cluster / 1 core and 2 clusters / 2 cores, both 4 warps
 | F16 | System-level state transitions | TB observability | `system_cg` | `tb/vortex_if.sv` |
 | F17 | Performance / stall correlation | Vortex microarchitecture | `status_performance_cg` | collector |
 
-18 covergroup types in total (F14 contributes two).
+19 covergroup types in total (F14 contributes two; `cache_event_cg` added 2026-08-07 — see G1).
 
 ---
 
@@ -64,10 +64,10 @@ configuration. They are out of scope by configuration, not untested.
 
 **Before:** *"100% functional coverage."*
 
-**After, and defensible:** *"100% of a coverage model spanning 17 design features
-(instruction classes, SIMT control, memory interface, host/DCR, scheduling). The model does not
-currently observe cache-level events, exception behaviour, or double-precision FP; those are
-named gaps, not passing results."*
+**After, and defensible (updated 2026-08-07, G1 now closed):** *"100% of a coverage model
+spanning 18 design features (instruction classes, SIMT control, cache events at every level,
+memory interface, host/DCR, scheduling). The model does not currently observe exception
+behaviour or double-precision FP; those are named gaps, not passing results."*
 
 The second statement is strictly more useful, and it is the one that survives review. A reviewer
 who discovers G1 unaided concludes the number was oversold; a reviewer who is handed G1 concludes
@@ -75,10 +75,10 @@ the analysis was thorough.
 
 ## D. Recommended closure order
 
-1. **G1 (cache events)** — highest value. Add hit/miss/eviction/writeback/MSHR coverpoints per
-   cache level, keyed on the `VX_cache` interfaces. This is also what would let us answer
-   "did the L2/L3 hit path actually get exercised?" from *functional* coverage rather than by
-   inferring it from code coverage, which is the only instrument available today.
+1. ~~**G1 (cache events)**~~ — **DONE 2026-08-07** (`tb/vx_cache_probe.sv`, commit `f017814`).
+   Per-level hit/miss/fill/writeback/flush/replay/MSHR-stall, 8 instances @2CL L2+L3. The
+   L2/L3 hit-path question is now answerable from *functional* coverage with per-level
+   attribution, instead of being inferred from aggregated code coverage.
 2. **G3 (D-precision)** — cheapest decision: either add a D-precision kernel, or drop
    `EXT_D_ENABLE` from the build so the coverage denominator stops including logic no stimulus
    can reach.
