@@ -500,3 +500,51 @@ not scattered across per-fix docs.
     accommodation of a cited hardware limitation, not a fix. A bit-accurate reference
     sqrt matching cvfpu was rejected (it would degrade SoftFloat's independent IEEE
     correctness). FLEN=64 `fsqrt.d` is future work.
+
+---
+
+### OBS-015 (REF-MODEL BUG + RTL QUIRK) — SIMT-divergent CSR access: SimX serializes lanes over per-warp `fcsr`; RTL reads-broadcast / writes lane 0 unconditionally
+- **Class:** REF-MODEL (golden-model correctness bug) **+** RTL quirk (unmasked lane-0
+  write) · **Disposition:** OPEN — root-caused, fix proposed, not yet applied ·
+  **Found:** `sfu_masks` @1CL per-instruction lockstep (2026-08-06).
+- **What we saw:** `sfu_masks` lockstep at 1CL/1C/4W/4T reports **109 `data`
+  field-mismatches, 0 PC / 0 rd / 0 orphan** (matched 3129). Every divergence is on an
+  FP-CSR access under a *peeled/divergent* thread mask, e.g.
+  `PC=0x800000c0 fsrm a3,a3` → lane1 `DUT=0 vs SimX=1`, lane3 `DUT=0 vs SimX=3`; and
+  `PC=0x800000ec fsrm a5,a5` → lane0/1 `DUT=1 vs SimX=2`
+  (`Vortex/tests/kernel/sfu_masks/sfu_masks.dump:61,72`; `fsrm` = `csrrw rd, frm, rs1`,
+  which must return the **OLD** CSR value).
+- **Both sides agree the CSR is PER-WARP:** RTL `reg [`NUM_WARPS-1:0][...] fcsr`
+  (`VX_csr_data.sv:81`, read/written by `read_wid`/`write_wid`); SimX `Byte fcsr` inside
+  `struct warp_t` (`emulator.h:61`), read via `warps_.at(wid).fcsr`
+  (`emulator.cpp:476-478`). So a per-LANE-varying result cannot be architectural state.
+- **ROOT CAUSE (ref-model):** SimX's CSR ops loop lanes **sequentially over that shared
+  per-warp state** (`execute.cpp:1318-1326` CSRRW, and the same shape for CSRRS/CSRRC):
+  each active lane does `get_csr` → `set_csr` → return-old. Because the storage is
+  per-warp, lane *t* reads **what lane *t−1* just wrote** — so the returned "old" value
+  differs per lane and the committed CSR ends up as the **LAST active lane's** value.
+  That is a simulation artifact of iterating lanes over shared state, not a defensible
+  semantics: a warp-wide `csrrw` reads the CSR once.
+- **RTL behaviour (self-consistent, and the sane SIMT semantics):**
+  `csr_read_data = {NUM_LANES{csr_read_data_ro | csr_read_data_rw}}`
+  (`VX_csr_unit.sv:134`) — the old value is read once and **broadcast to every lane**
+  (matches the observed `DUT=0` on all lanes); the write happens once per warp.
+- **RTL QUIRK (separate, real):** the written value is
+  `csr_req_data = ... ? csr_imm : rs1_data[0]` (`VX_csr_unit.sv:142`) — **hardwired to
+  lane 0 with NO tmask qualification**. If lane 0 is *inactive* under a divergent mask,
+  the per-warp CSR is still written with lane 0's (stale//inactive) `rs1` value rather
+  than a value from an active lane. `sfu_masks` exercises exactly this (peeled masks
+  around `vx_split`, `sfu_masks.dump:69-72`). Not ISA-illegal (RISC-V does not define
+  SIMT-divergent CSR writes) but it is a surprising, undocumented choice worth citing.
+- **Why end-state missed it:** `sfu_masks` deliberately folds its CSR results to 0
+  before storing (so `out_buf` ⊥ `fcsr`) — it was written as a *coverage* kernel for
+  `cross_sfu_threads`. End-state therefore PASSES; only per-instruction lockstep sees
+  the divergent `rd` writeback. Same payoff class as OBS-014.
+- **Proposed fix (ref-model side, NOT the RTL):** make SimX model warp-wide CSR access
+  the way the machine actually works — snapshot the CSR **once** before the lane loop,
+  return that snapshot to **all** active lanes, and apply a **single** write. Deliberate
+  question to settle first: whether the write should take lane 0 unconditionally (bit-
+  matches the RTL, but bakes an RTL quirk into the reference) or the lowest **active**
+  lane (architecturally cleaner — and any residual divergence would then be a genuine
+  RTL finding, i.e. the quirk above). NOT applied yet — changing the golden model needs
+  sign-off, and the two choices differ exactly on the quirk.
