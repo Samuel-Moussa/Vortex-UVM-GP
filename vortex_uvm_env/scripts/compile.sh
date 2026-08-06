@@ -72,6 +72,18 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MREQ_SIZE=16"
     COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MREQ_SIZE=16"
 
+    # Escape hatch for extra RTL compile defines, e.g. enabling the optional cache
+    # levels that are PASSTHRU by default (VX_cluster.sv:107 / Vortex.sv:96 pass
+    # PASSTHRU=!L{2,3}_ENABLED, and VX_cache_wrap.sv:160 only instantiates the real
+    # VX_cache storage when PASSTHRU==0):
+    #   EXTRA_RTL_DEFINES="+define+L2_ENABLE +define+L3_ENABLE" make sim ...
+    # Empty by default => byte-identical to a normal build. Config-generic: whatever
+    # is passed is appended verbatim after the topology defines, so it can override.
+    if [[ -n "${EXTRA_RTL_DEFINES:-}" ]]; then
+        COMPILE_OPTS="$COMPILE_OPTS $EXTRA_RTL_DEFINES"
+        print_info "Extra RTL defines: $EXTRA_RTL_DEFINES"
+    fi
+
 
     if [[ "$MEMORY_INTERFACE" == "axi" ]]; then
         COMPILE_OPTS="$COMPILE_OPTS +define+USE_AXI_WRAPPER"
