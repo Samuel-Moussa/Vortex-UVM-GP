@@ -171,6 +171,33 @@ not scattered across per-fix docs.
 
 ### OBS-009 (RESOLVED — not a DUT bug) — no_fence@2CL divergence is single-hart-test-in-multihart race
 - **Class:** REF-MODEL/methodology (single-hart random test on N shared-memory cores) · **Disposition:** resolved — real-fix options pending (see investigation doc) · **Found:** Phase A1(d) (2026-07-15)
+- **ARCHITECTURAL GROUNDING (2026-08-06) — this class is the PUBLISHED memory model, not an
+  unexplained failure.** Verified from the Vortex paper AND the RTL source, so the "race"
+  classification rests on cited architecture rather than inference:
+  1. **Paper (MICRO'21, "Vortex: Extending the RISC-V ISA for GPGPU and 3D-Graphics", §4.1.4):**
+     *"Cores can be grouped into a cluster that can optionally be attached to a shared L2 cache.
+     Clusters can share an optional L3 cache. **Flush operations among caches are provided as a
+     means of providing weak coherent memory space.**"* And §3.1: *"For memory synchronization, we
+     leveraged the RISC-V **fence** instruction."* ⇒ Vortex is a **weak coherent** space; coherence
+     is the program's job via fence/flush, NOT a hardware protocol.
+  2. **RTL — no coherence protocol exists.** A full scan of `hw/rtl/cache/*.sv` for
+     `snoop|coheren|invalidat|MESI|MOESI|probe_req` returns **zero hits**. The only cross-cache
+     mechanism is `flush` (`VX_cache.sv:118-137`) — exactly what the paper describes.
+  3. **RTL — where the caches actually sit.** L1 dcache is instantiated **per SOCKET**, shared by
+     `SOCKET_SIZE` cores (`VX_socket.sv:135-138`, `NUM_UNITS=NUM_DCACHES`, `NUM_INPUTS=SOCKET_SIZE`).
+     L2 is per-cluster (`VX_cluster.sv:86`) and L3 per-GPU (`Vortex.sv:75`), each a `VX_cache_wrap`
+     with `PASSTHRU = !L2_ENABLED` / `!L3_ENABLED` (`VX_cluster.sv:107`, `Vortex.sv:96`).
+     `VX_cache_wrap.sv:160` instantiates the actual `VX_cache` storage **only** `if (PASSTHRU == 0)`.
+  4. **Our build has NO L2/L3 storage.** `L2_ENABLED`/`L3_ENABLED` default 0 (`VX_config.vh:846-856`)
+     and the compile emits **no** `+define+L2_ENABLE`/`L3_ENABLE` ⇒ both levels are pure bypass.
+     `DCACHE_WRITEBACK=0` ⇒ write-through (`VX_config.vh:638`). At 2CL/2C:
+     `SOCKET_SIZE=MIN(4,2)=2`, `NUM_DCACHES=UP(2/4)=1` ⇒ **2 cores share one L1 dcache per cluster,
+     and the two clusters' L1s have no coherence point except main memory.**
+  ⇒ Writes reach memory (write-through) but a remote L1 line is **never invalidated**, so a
+  fenceless cross-cluster read can legitimately return stale data. This is precisely the observed
+  fingerprint (cluster-0 cores match SimX exactly; cluster-1 cores diverge): the divergence sits
+  exactly on the coherence boundary the architecture defines. A fenceless multi-core program has
+  **no architecturally-defined single result**, so DUT≠SimX there is not a DUT bug.
 - **EXTENDED (2026-07-16, INV-4): `riscv_rand_jump_test`@2CL is the same class, with a NEW
   method-boundary flavor.** Post-jalr-patch regen, plain 2CL run → 7 end-state MEM MISMATCHes.
   Load-feed classification: pass-1 = 45 racy in-region loads / 95 cascade / 3 warps; pass-2
