@@ -604,7 +604,13 @@ verified" or "we stressed the design"** — neither is currently supportable (se
 - **FW-6 — Spec-traced coverage model. ✅ MATRIX DONE (2026-08-07), gaps now named:
   `docs/COVERAGE_TRACEABILITY_MATRIX.md`.** Traces 17 design features → 18 covergroup types, and
   — the actual payoff — names the features **no covergroup observes at all**:
-  - **G1 (biggest): NO cache-event coverage at any level.** Zero coverpoints matching
+  - **G1 — ✅ CLOSED 2026-08-07** (`tb/vx_cache_probe.sv`, commit `f017814`): `cache_event_cg`
+    bound into `VX_cache_bank` gives hit/miss, fill, writeback, flush, MSHR replay and MSHR
+    back-pressure **per cache level**, validated @2CL L2+L3 with 8 instances (L1 I$/D$ x2
+    clusters, L2 x2 clusters, L3 x2 banks). Config-aware by construction: no bank exists when a
+    level is PASSTHRU, so the default build gains no bins and needs no waiver. This is now the
+    proper instrument for the L2/L3 hit-path question. ORIGINAL GAP TEXT:
+    **NO cache-event coverage at any level.** Zero coverpoints matching
     `hit|miss|evict|writeback|mshr|flush` exist; the only cache-adjacent points (`cp_id_route`,
     `cross_type_route`) sample **routing tag bits**, not cache events. So the cache hierarchy —
     a prime location for real bugs — is covered only by code coverage plus end-state/lockstep
