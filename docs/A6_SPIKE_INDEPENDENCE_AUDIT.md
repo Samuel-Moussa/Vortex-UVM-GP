@@ -116,6 +116,31 @@ A green checker is worthless until shown capable of failing. Both directions wer
   ```
   The audit named the exact record, register and PC, and distinguished which model disagreed.
 
+## Regression — the trace hook is inert when unarmed (measured, not assumed)
+
+The "default OFF ⇒ armed and bare runs agree" claim was verified rather than argued from the
+code. The same ELF was re-run with `LOCKSTEP=1` and **no** `LOCKSTEP_TRACE`:
+
+| | armed | bare |
+|---|---|---|
+| lockstep pairs matched | 11,076 | **11,076** |
+| sim end time | 886025000 | **886025000** |
+| UVM errors | 0 | **0** |
+| verdict | TEST PASSED | **TEST PASSED** |
+| `A6 retirement trace` log line | present | **absent** |
+
+Identical down to the simulation end-time, and the hook emits nothing when unarmed.
+
+**Gate-0 guards re-run after the change (CLAUDE.md rule 5):**
+
+- `negative_result_test` (vecadd_lite) — *"checker DETECTED the injected fault at
+  addr=0x800075d8 (it matched before injection, mismatched after). Verdicts are not vacuous."*
+- `negative_dropped_store_test` (vecadd_lite) — PASSED.
+
+Both still catch their injected faults, so neither Gate-0 guard was weakened. This is expected
+— the change is confined to `lockstep_scoreboard.sv` and `simulate.sh` and does not touch the
+end-state scoreboard — but it was checked rather than assumed.
+
 ## Files
 
 | File | Role |
