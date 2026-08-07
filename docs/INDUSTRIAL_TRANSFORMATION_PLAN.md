@@ -18,7 +18,50 @@
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
-### ▶▶ NEXT ACTION (exact, resumable — 2026-08-06)
+### ▶▶ NEXT ACTION (exact, resumable — 2026-08-07)
+
+**PHASE A IS COMPLETE. NEXT: Phase B — B2.**
+
+**B2 (start here):** collapse the end-state scoreboard to a **single `mem_model`-vs-SimX
+compare** and delete `shadow_memory` / `shadow_valid` from
+`vortex_uvm_env/uvm_env/vortex_scoreboard.sv`. **Gate (non-negotiable, CLAUDE.md rule 5):**
+the full suite green **and BOTH negative tests still RED on injection** —
+`negative_result_test` (wrong value) and `negative_dropped_store_test` (dropped store).
+The reverse/bidirectional pass added in `fe10b83` is what catches dropped stores; whatever
+replaces it must keep that property or the dropped-store guard silently dies.
+
+**CLOSED 2026-08-07 (session: L2/L3 + cache coverage + A6):**
+- **A6 ✅ Spike independence audit** — Spike/SimX/DUT all retire **exactly 11,076** writebacks
+  on `riscv_arithmetic_basic_test_0.elf`, **0 mismatches**, all 11,076 value-compared,
+  non-vacuity proven by injecting at record 5000 (named exactly, exit 1). New: `+LOCKSTEP_TRACE=<path>`
+  (default OFF) in `lockstep_scoreboard.sv`, `LOCKSTEP_TRACE` env in `simulate.sh`,
+  `scripts/spike_audit.py`. Commit `8e1a3b2`. Doc: [`docs/A6_SPIKE_INDEPENDENCE_AUDIT.md`](A6_SPIKE_INDEPENDENCE_AUDIT.md).
+- **cache_tier @2CL L2+L3** — 57,379 lockstep pairs all matched, 16,620 byte-exact end-state
+  words, 0 errors, **0 memsched response timeouts** (OBS-017 guard holding).
+- **15-kernel L2/L3 sweep @2CL** — **12/15 residual 0, identical to the pre-L2/L3 baseline**
+  ⇒ enabling the shared caches changes timing but **no architectural outcome** (corroborates
+  OBS-018). Non-zero: `diverge_lite` 372 (raw 58) and `diverge_fpu` 328 (raw 254) — residual
+  **larger** than raw ⇒ ENH-2 feed non-convergence ⇒ **INCONCLUSIVE, not a DUT bug**;
+  `fpu_mt` 89→81 is a genuine partial residual.
+- **Gap G1 closed** — `tb/vx_cache_probe.sv` (`cache_event_cg`) bound into `VX_cache_bank`;
+  8 instances @2CL L2+L3. Config-aware **by construction**: `VX_cache_wrap.sv:160` builds
+  `VX_cache` only when `PASSTHRU==0`, so L2/L3-off creates no instance and no bins to waive.
+
+**⚠ THREE THINGS A FRESH SESSION MUST NOT RE-DERIVE**
+1. **`lockstep_sweep_2cl.sh:84` calls `run_one "$k" 0`** — a bare tier1 sweep runs **without**
+   `+LOCKSTEP_LOADFEED` and reports 8/15 "failing". Those are raw pass-1 divergences and are
+   **NOT comparable** to the feed-armed 12/15. Always state which mode a number came from.
+2. **Lockstep is writeback-domain only** (OBS-022): `lockstep_scoreboard.sv:16`,
+   `vx_commit_probe.sv:99`, `lockstep_scoreboard.sv:311`. Branches/`jalr x0`/`nop` never enter
+   the stream (a wrong branch is caught only indirectly, via the successor's PC), and **stores
+   are outside lockstep entirely** — they are covered by the end-state compare. This bounds
+   what "per-instruction lockstep" may be claimed to mean, and it matters directly for B2.
+3. **A6 does not cover SIMT.** Spike is scalar: warp0/lane0/base-ISA, stopping at the first
+   Vortex custom op. Never let A6 be quoted as "independently verified the design".
+
+---
+
+### ▶▶ PRIOR NEXT ACTION (2026-08-06)
 
 **SESSION 2026-08-06 — per-instruction closure (TCU/FPU/SFU) + cache-config integrity.**
 16 commits: `24818e3` `2ca64d0` `8cc455a` `483a655` `250765c` `11e0e48` `76d4360` `ce68a4e`
@@ -583,11 +626,21 @@ verified" or "we stressed the design"** — neither is currently supportable (se
   failing program byte-identically; ≥100-seed sweep runs green or yields triaged failures.
   Supersedes/absorbs the older, thinner **D4**.
 
-- **FW-2 — Reference-model independence (unfreeze A6/Spike).** SimX is written by the Vortex
-  team ⇒ shared assumptions ⇒ **shared blind spots**: the bug class where DUT and golden are
-  wrong in the SAME way is structurally invisible, regardless of how many instructions match.
-  This is a hard ceiling on every lockstep claim. Note this was never an A3 blocker (A3 closed
-  without it, 2026-08-06) — it is a *quality-of-claim* item, not a coverage item.
+- **FW-2 — Reference-model independence. ✅ PARTLY CLOSED 2026-08-07 (A6 done) — scalar axis
+  closed, SIMT axis still fully open.** SimX is written by the Vortex team ⇒ shared assumptions
+  ⇒ **shared blind spots**: the bug class where DUT and golden are wrong in the SAME way is
+  structurally invisible, regardless of how many instructions match.
+  **What A6 closed:** on `riscv_arithmetic_basic_test_0.elf`, Spike (independent) / SimX / DUT
+  all retire **exactly 11,076** architectural writebacks and agree on every PC, destination
+  register and value — **0 mismatches**, all 11,076 value-compared, non-vacuity proven by
+  injection. So for the **scalar RV32IM subset** the shared-blind-spot ceiling is lifted.
+  **What remains open — do not overstate A6:** Spike is a scalar ISS with no SIMT model, so
+  warps, divergence, reconvergence, lanes 1..N-1 and every Vortex custom op still have **no
+  independent reference at all**. That is the larger half of the design and it remains
+  SimX-only. Extending Spike to SIMT was considered and **rejected**: it would produce a second
+  Vortex-specific model and recreate the very dependence this item exists to remove.
+  Closing the SIMT half needs a genuinely independent SIMT model, which does not exist today.
+  See [`docs/A6_SPIKE_INDEPENDENCE_AUDIT.md`](A6_SPIKE_INDEPENDENCE_AUDIT.md) and **OBS-022**.
 
 - **FW-3 — Config-matrix breadth.** Two points sampled (1CL/1C/4W/4T, 2CL/2C/4W/4T) of
   clusters × cores × warps × threads × L1/L2/L3 × XLEN × extensions; coverage cannot be blended
