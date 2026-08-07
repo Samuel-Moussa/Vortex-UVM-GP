@@ -114,9 +114,9 @@ rather than letting the candidate set quietly widen.
 
 ## Full-suite gate
 
-`scripts/run_suite.sh` @1CL/1C/4W/4T: **44 staged, 1 failed.** The single failure is `text_big`,
-and it is **proven not to be B2** by direct A/B — the pre-B2 scoreboard was restored from backup
-and the same program run at the same 400,000-cycle budget:
+`scripts/run_suite.sh` @1CL/1C/4W/4T: **44 staged, 1 failed → now 45/45 after a budget fix.**
+The single failure was `text_big`, and it was **proven not to be B2** by direct A/B — the pre-B2
+scoreboard was restored from backup and the same program run at the same 400,000-cycle budget:
 
 | | pre-B2 | post-B2 |
 |---|---|---|
@@ -131,6 +131,19 @@ i.e. **forward progress, not a hang** — the INV-1 signature. `assert_busy_even
 as a *consequence* of the timeout truncating the run, not as a cause. The `data_compared` field
 is absent because completion never fired, so the end-state compare (the only thing B2 changed)
 never executed at all.
+
+**Root cause and fix (measured, not guessed):** given 4,000,000 cycles the kernel **completes and
+passes** — `Total Cycles: 490468`, `Instructions: 56537`, `data_compared=64`, 0 errors. It needed
+490,468 cycles against a 400,000 budget, i.e. it was **23% short**. `scripts/run_suite.sh` now
+budgets 800,000, re-verified at exactly that value: PASS with the UCDB staged, so the suite is
+**45/45**. Why it used to fit is not re-derived here, but this kernel is the most
+cache-configuration-sensitive test in the suite, and the L2/L3 + cache-geometry work (OBS-016..019)
+landed between the last passing run and this one.
+
+That completion also **empirically confirms OBS-024**: the run ended via
+`EXECUTION COMPLETE via sustained busy=0 fallback (100 cyc) — ebreak not decoded`. The kernel
+exits through `tmc x0` → `busy` deassert, never through `ebreak`, exactly as the RTL and
+`vx_start.S` say it should.
 
 Merged covergroup bins 398/407 (97.78% raw). The 9 residual are `mem_usage_cp` /
 `system_mem_cross` (documented weight-0: idle MEM interface on AXI runs) and `cp_occ` on one

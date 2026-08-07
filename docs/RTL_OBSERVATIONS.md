@@ -1004,3 +1004,12 @@ not scattered across per-fix docs.
 - **Enhancement if closed:** make `tmc`-driven `busy` deassertion the PRIMARY completion trigger
   for kernel ELFs and demote `ebreak` to the riscv-dv/fault path, so the normal case stops
   emitting a warning and a real `_sbrk` fault stops being indistinguishable from a clean exit.
+
+**OBS-024 UPDATE (2026-08-07) — confirmed empirically, not just by code reading.** `text_big`
+run to completion at an adequate cycle budget ended with
+`EXECUTION COMPLETE via sustained busy=0 fallback (100 cyc) — ebreak not decoded`
+(490,468 cycles, 56,537 instructions, `data_compared=64`, 0 errors, TEST PASSED). The kernel
+exits through `tmc x0` → `active_warps=0` → `busy` deassert and **never decodes an `ebreak`**,
+exactly as `vx_start.S:69-75` and `VX_schedule.sv:139/390` predict. The `** Warning:` on the
+architecturally-correct path is therefore emitted on a fully passing run — which is the concrete
+cost of the inverted hierarchy described above.
