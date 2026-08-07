@@ -80,7 +80,14 @@ for k in vecadd_lite diverge_lite diverge_deep diverge_peel diverge_fpu fpu_test
 done
 # text_big: large resident .text so executed PC crosses into cp_pc_region.text_high
 # (fills cross_pc_cycles <text_high,med>/<text_high,short>). Bigger timeout for the sweep.
-runk sim-only text_big 400000
+# BUDGET: measured 490,468 cycles / 56,537 instructions to completion (2026-08-07). The old
+# 400000 was 23% short, so the run was truncated mid-execution and reported as a TIMEOUT +
+# assert_busy_eventually_idles failure — NOT a hang: retired instructions and mem ops were
+# still climbing monotonically with busy=1 at cycle 399,999 (the INV-1 signature). This kernel
+# is fetch-bound by design (232KB resident .text, 600 noinline fns, runtime-indexed reverse
+# sweep) and retires at ~0.12 IPC, so it is the most cache-configuration-sensitive test we
+# have — keep generous headroom rather than trimming to the measured value.
+runk sim-only text_big 800000
 # mem_stress: co-activates memory-request backpressure with med/low-IPC windows and
 # a dependent IDIV chain -> fills cross_ipc_stalls <med_ipc,*,mem-stalled> /
 # <med_ipc,fetch-stalled,*>. Completes ~290k cycles; 400k timeout for headroom.
