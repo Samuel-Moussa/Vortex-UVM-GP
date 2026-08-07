@@ -926,3 +926,39 @@ not scattered across per-fix docs.
 - **Enhancement if closed:** extend the commit probe to capture non-wb retirements
   (`wb==0`) with their PC only, giving direct branch/store-order comparison. Cost is a wider
   probe and a larger trace; benefit is exact first-divergence attribution on control flow.
+
+---
+
+### OBS-023 (VERIFICATION OBSERVABILITY LIMIT) — a dropped **sub-word** store into a partially-written dword is invisible to the end-state compare
+
+- **Class:** observability limit of the testbench (**not** an RTL defect). Found while tracing
+  the B2 scoreboard refactor; the gap is **pre-existing**, not introduced by it.
+- **What we saw:** the end-state DUT-vs-SimX compare has two passes, and a specific case falls
+  between them:
+  - The **forward** pass iterates the DUT write-set and, for each dword, zeroes the lanes the
+    DUT did not write **on both sides** before comparing
+    (`vortex_uvm_env/uvm_env/vortex_scoreboard.sv`, byte-valid gate in `compare_all_written`).
+    So unwritten lanes inside a written dword are never compared.
+  - The **reverse** (dropped-store) pass deliberately skips any dword the DUT wrote at least
+    one byte of (`if (dut_write_mask.exists(waddr)) continue;` — "forward handled it").
+  - Therefore: if the DUT correctly stores byte 0 of a dword but **drops** a store to byte 4 of
+    that *same* dword, the forward pass masks byte 4 away and the reverse pass declines to look
+    at that address at all. The lost store is silently uncompared.
+- **Why the mask exists anyway (do not just delete it):** it makes the SimX-poison gate
+  byte-granular. SimX fills untouched memory with `BAADF00D`; without masking first, a dword
+  where the DUT wrote bytes 0..3 and SimX left poison in 4..7 is discarded **whole** as
+  "SimX uninitialised", losing the four lanes that *are* valid and comparable. The mask trades
+  the OBS-023 blind spot for that coverage — a deliberate trade, now written down.
+- **Scope in practice:** requires a dropped store that is (a) sub-dword and (b) lands in a dword
+  the DUT otherwise wrote. Full-dword drops **are** caught — proven live by
+  `negative_dropped_store_test`, which still reports `DROPPED STORE addr=0x800075d8` after the
+  B2 refactor. Measured `skipped_poison=0` on every 1CL run inspected, so the poison gate is
+  not currently firing on these programs; the mask's protective value here is structural
+  rather than presently active.
+- **Disposition:** OPEN, bounded and quantified. Not fixed in B2 — closing it changes verdict
+  semantics (which lanes are authoritative) and needs its own non-vacuity proof, i.e. a
+  negative test that drops exactly one sub-word store into a partially-written dword.
+- **Enhancement if closed:** make the poison gate byte-granular directly (test each lane's
+  containing 32-bit half for `BAADF00D`) instead of using the write-mask as a proxy, then
+  compare **all** lanes of a written dword. That removes the blind spot without losing the
+  poison protection the mask was introduced for.
