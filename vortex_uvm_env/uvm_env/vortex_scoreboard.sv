@@ -5,8 +5,11 @@
 // Phase 1 Implementation (Post-Mortem Memory Comparison):
 //   - Mirrors all DUT memory writes into SimX RAM via simx_write_mem()
 //   - Mirrors all DCR writes into SimX via simx_dcr_write()
-//   - On EBREAK: loads program via simx_load_bin(), runs simx_run(),
-//     then compares result memory region between SimX RAM and RTL shadow memory
+//   - On EBREAK: loads program via simx_load_bin(), runs simx_run(), then
+//     compares the result memory region between SimX RAM and the DUT's real
+//     backing store (mem_model). B2 (2026-08-07) removed the parallel "shadow
+//     memory" reconstruction: mem_model is the single source of DUT values, and
+//     dut_write_mask records only WHICH bytes the DUT wrote.
 //   - Tracks pending MEM/AXI read transactions and compares responses
 //
 // Author: Vortex UVM Team
@@ -50,17 +53,30 @@ class vortex_scoreboard extends uvm_scoreboard;
   axi_transaction axi_pending_q[$];
 
   //==========================================================================
-  // Shadow memory — tracks every 8-byte word the DUT wrote.
-  // Key = byte-aligned 32-bit address, Value = 64-bit data word.
+  // DUT WRITE-SET (B2) — which bytes the DUT actually stored.
+  //
+  // Key = byte-aligned 32-bit dword address. Bit[lane]=1 iff the DUT wrote that
+  // byte. This is a SET, not a data shadow: it records WHICH locations to check,
+  // never WHAT they hold. The value side is `dut_mem` (mem_model), which is the
+  // DUT's real backing store — preloaded with the program image at
+  // vortex_tb_top.sv:185 and then written byte-accurately by the AXI/mem
+  // responders (axi_driver.sv:218, mem_driver.sv:129). The end-state check is
+  // therefore real-DUT-memory vs real-SimX-memory with a single source of truth.
+  //
+  // The former `shadow_memory` (a parallel 64-bit reconstruction assembled from
+  // snooped write transactions) was deleted: it could drift from the real memory
+  // it was meant to mirror, and its value role was already superseded by dut_mem.
+  //
+  // The mask itself is load-bearing and must NOT be deleted with it:
+  //   (1) it makes the SimX-poison gate BYTE-granular. A slot where the DUT wrote
+  //       bytes 0..3 (sb/sh) and SimX left BAADF00D in bytes 4..7 is still fully
+  //       compared on the written lanes; without the mask the poison gate would
+  //       discard the whole slot and silently lose a real check.
+  //   (2) it is what separates "DUT wrote here, compare it" (forward pass) from
+  //       "DUT never wrote here" (reverse/dropped-store pass, see below).
+  // For full 8-byte writes the mask is 0xFF and the compare is unrestricted.
   //==========================================================================
-  bit [63:0] shadow_memory [bit [31:0]];
-  // Per-slot byte-valid mask, keyed identically to shadow_memory. Bit[lane]=1
-  // iff the DUT actually wrote that byte. Lets compare_all_written restrict the
-  // DUT-vs-SimX compare to bytes the DUT really stored — sub-word stores (sb/sh)
-  // into preinitialized .data otherwise read back as 0 in the sparse shadow while
-  // SimX returns the merge of store + .data init, a false mismatch. For full
-  // 8-byte writes the mask is 0xFF and the compare is byte-identical to before.
-  bit [7:0]  shadow_valid  [bit [31:0]];
+  bit [7:0]  dut_write_mask [bit [31:0]];
   localparam bit [31:0] RAM_BASE   = 32'h8000_0000;  // program / data / heap start
   localparam bit [31:0] DATA_LIMIT = 32'h8800_0000;  // upper bound of output region (excludes stack @0xfffd_xxxx+ and MMIO)
   localparam bit [31:0] POISON     = 32'hBAAD_F00D;  // SimX uninitialized-memory fill
@@ -176,10 +192,14 @@ class vortex_scoreboard extends uvm_scoreboard;
     if (!uvm_config_db #(vortex_config)::get(this, "", "cfg", cfg))
       `uvm_fatal("SCOREBOARD", "Failed to get vortex_config from uvm_config_db")
 
-    // DUT real-memory handle for the SB-DIR reverse pass (optional: absent -> reverse
-    // pass is skipped, forward pass unaffected).
+    // DUT real-memory handle. B2 made this MANDATORY: it is now the single source
+    // of truth for every DUT value the end-state compare reads (both the forward
+    // and the reverse/dropped-store pass). Without it there is no DUT side to
+    // compare, so failing loud here is correct — silently degrading would leave a
+    // green run that checked nothing.
     if (!uvm_config_db #(mem_model)::get(this, "", "mem_model", dut_mem))
-      `uvm_info("SCOREBOARD", "mem_model not in config_db — reverse (dropped-store) pass disabled", UVM_MEDIUM)
+      `uvm_fatal("SCOREBOARD",
+        "mem_model not in config_db — the end-state DUT-vs-SimX compare has no DUT side. Check vortex_tb_top.sv sets it.")
 
     mem_export    = new("mem_export",    this);
     axi_export    = new("axi_export",    this);
@@ -297,7 +317,6 @@ class vortex_scoreboard extends uvm_scoreboard;
             bit [63:0] byte_addr = base_byte_addr + i;
             bit [63:0] waddr     = {byte_addr[63:3], 3'b000};
             bit [2:0]  lane      = byte_addr[2:0];
-            bit [63:0] wdata;
 
             // IO_COUT console snoop
             if (byte_addr >= IO_COUT_ADDR && byte_addr < (IO_COUT_ADDR + IO_COUT_SIZE)) begin
@@ -305,27 +324,25 @@ class vortex_scoreboard extends uvm_scoreboard;
               if (ch != 0) dut_console = {dut_console, string'(ch)};
             end
 
-            // R-M-W into byte-addressed 8-byte shadow slot
-            if (shadow_memory.exists(waddr[31:0])) wdata = shadow_memory[waddr[31:0]];
-            else                                    wdata = '0;
-            wdata[lane*8 +: 8] = tr.data[i*8 +: 8];
-            shadow_memory[waddr[31:0]] = wdata;
-            shadow_valid[waddr[31:0]][lane] = 1'b1;
+            // Record the write-set only. The DATA lands in dut_mem via the mem
+            // responder (mem_driver.sv:129) from this same byteen, so keeping a
+            // second copy here would only create a second thing that can drift.
+            dut_write_mask[waddr[31:0]][lane] = 1'b1;
 
             if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes))
               `uvm_info("SCOREBOARD", $sformatf(
-                "MEM WR shadow  byte[%0d]  addr=0x%08h  data=0x%016h  byteen=0x%016h",
-                i, waddr[31:0], wdata, tr.byteen), UVM_MEDIUM)
+                "MEM WR  byte[%0d]  addr=0x%08h  lane=%0d  data=0x%02h  byteen=0x%016h",
+                i, waddr[31:0], lane, tr.data[i*8 +: 8], tr.byteen), UVM_MEDIUM)
           end
         end
       end
     end else begin
       // Read on the custom-mem path: tr.rsp_data is a full 512-bit cache line,
-      // which is structurally incompatible with shadow_memory's 64-bit slot
-      // (truncation in `shadow_memory[tr.addr] = tr.data` makes per-read
-      // shadow compare false-positive on any write/read of a line with data
-      // above the low 64 bits). The end-state shadow gate plus the
-      // test-level sentinel at RESULT_ADDR together verify correctness, so
+      // which was structurally incompatible with the old 64-bit shadow slot
+      // (truncation made the per-read compare false-positive on any write/read
+      // of a line carrying data above the low 64 bits). The end-state
+      // dut_mem-vs-SimX compare plus the test-level sentinel at RESULT_ADDR
+      // together verify correctness, so
       // per-read live compare is dropped here. AXI reads still go through
       // compare_axi_transaction in write_axi, which handles 8-byte slots
       // correctly.
@@ -351,27 +368,21 @@ class vortex_scoreboard extends uvm_scoreboard;
             bit [63:0] byte_addr = baddr + i;
             bit [63:0] waddr     = {byte_addr[63:3], 3'b000};
             bit [2:0]  lane      = byte_addr[2:0];
-            bit [63:0] wdata;
-            
+
             // Fix #3: assemble DUT console from IO_COUT writes
             if (byte_addr >= IO_COUT_ADDR && byte_addr < (IO_COUT_ADDR + IO_COUT_SIZE)) begin
               byte ch = beat_data[i*8 +: 8];
               if (ch != 0) dut_console = {dut_console, string'(ch)};
             end
 
-            if (shadow_memory.exists(waddr[31:0]))
-              wdata = shadow_memory[waddr[31:0]];
-            else
-              wdata = '0;
-
-            wdata[lane*8 +: 8] = beat_data[i*8 +: 8];
-            shadow_memory[waddr[31:0]] = wdata;
-            shadow_valid[waddr[31:0]][lane] = 1'b1;
+            // Write-set only — the data itself lands in dut_mem via the AXI
+            // responder (axi_driver.sv:218) off this same WSTRB.
+            dut_write_mask[waddr[31:0]][lane] = 1'b1;
 
             if ((waddr >= cfg.result_base_addr) && (waddr < cfg.result_base_addr + cfg.result_size_bytes)) begin
               `uvm_info("SCOREBOARD",
-                $sformatf("AXI WR shadow  beat[%0d] byte[%0d]  addr=0x%08h  data=0x%016h  wstrb=0x%016h",
-                          beat, i, waddr[31:0], wdata, beat_wstrb), UVM_MEDIUM)
+                $sformatf("AXI WR  beat[%0d] byte[%0d]  addr=0x%08h  lane=%0d  data=0x%02h  wstrb=0x%016h",
+                          beat, i, waddr[31:0], lane, beat_data[i*8 +: 8], beat_wstrb), UVM_MEDIUM)
             end
           end
         end
@@ -478,59 +489,6 @@ class vortex_scoreboard extends uvm_scoreboard;
     compare_console();       // console output — every program
   endfunction
 
-  //==========================================================================
-  // compare_result_region
-  //==========================================================================
-  local function void compare_result_region(bit [31:0] base_addr, int size_bytes);
-    byte simx_bytes[]; 
-    bit [63:0] simx_base; // DECLARATION FIRST
-    
-    // STATEMENTS SECOND
-    // Treat base address as an unsigned 32-bit physical address and zero-extend
-    simx_base = 64'(base_addr);
-    simx_bytes = new[size_bytes];
-    simx_read_mem(simx_base, size_bytes, simx_bytes);
-
-    for (int offset = 0; offset < size_bytes; offset += 8) begin
-      int chunk_bytes = (size_bytes - offset < 8) ? (size_bytes - offset) : 8;
-      bit [31:0] waddr = base_addr + offset;
-      bit [63:0] simx_word, dut_word;
-      simx_word = '0;
-      dut_word   = '0;
-      
-      // Build SimX word byte-by-byte from the read buffer
-      for (int i = 0; i < chunk_bytes; i++) begin
-        simx_word[i*8 +: 8] = simx_bytes[offset + i];
-      end
-      
-      // Get DUT word directly from shadow memory (already 64-bit)
-      if (shadow_memory.exists(waddr)) begin
-        dut_word = shadow_memory[waddr];
-      end else begin
-        dut_word = '0;
-      end
-      
-      num_comparisons++;
-      if (!shadow_memory.exists(waddr)) begin
-        `uvm_warning("SCOREBOARD",
-          $sformatf("Result addr 0x%08h not written by DUT — skipping", waddr))
-        num_skipped++;
-        num_comparisons--;
-        continue;
-      end
-      if (dut_word === simx_word) begin
-        num_mem_passed++;
-        `uvm_info("SCOREBOARD",
-          $sformatf("RESULT PASS  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
-                    waddr, dut_word, simx_word), UVM_MEDIUM)
-      end else begin
-        num_mem_failed++;
-        `uvm_error("SCOREBOARD",
-          $sformatf("RESULT FAIL  addr=0x%08h  DUT=0x%016h  SimX=0x%016h",
-                    waddr, dut_word, simx_word))
-      end
-    end
-  endfunction : compare_result_region
 
   //==========================================================================
   // compare_mem_transaction
@@ -557,8 +515,10 @@ class vortex_scoreboard extends uvm_scoreboard;
       simx_read_mem(simx_addr, 8, rd);
       expected = '0;
       for (i = 0; i < 8; i++) expected[i*8 +: 8] = rd[i];
-    end else if (shadow_memory.exists(tr.addr)) begin
-      expected = shadow_memory[tr.addr];
+    end else if (dut_write_mask.exists(tr.addr) && dut_mem != null) begin
+      // SimX disabled: fall back to the DUT's own backing store. This only
+      // re-checks the read path against what was stored, never architecture.
+      expected = dut_mem.read_dword(64'(tr.addr));
     end else begin
       `uvm_warning("SCOREBOARD",
         $sformatf("MEM RD 0x%08h — no reference, skipping", tr.addr))
@@ -602,8 +562,9 @@ class vortex_scoreboard extends uvm_scoreboard;
         simx_read_mem(simx_addr, 8, rd);
         expected = '0;
         for (int i = 0; i < 8; i++) expected[i*8 +: 8] = rd[i];
-      end else if (shadow_memory.exists(baddr[31:0])) begin
-        expected = shadow_memory[baddr[31:0]];
+      end else if (dut_write_mask.exists(baddr[31:0]) && dut_mem != null) begin
+        // SimX disabled: see compare_mem_transaction — read-path check only.
+        expected = dut_mem.read_dword(64'(baddr[31:0]));
       end else begin
         `uvm_warning("SCOREBOARD",
           $sformatf("AXI RD beat[%0d] 0x%08h — no reference, skipping", beat, baddr[31:0]))
@@ -668,7 +629,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     // result-scope word that currently MATCHES SimX and is non-zero, so the resulting
     // reverse mismatch is unambiguous.
     if (drop_store && !store_dropped && dut_mem != null) begin
-      foreach (shadow_memory[a]) begin
+      foreach (dut_write_mask[a]) begin
         bit in_res = (cfg.result_size_bytes > 0)
                    ? (a >= cfg.result_base_addr && a < cfg.result_base_addr + cfg.result_size_bytes)
                    : (a >= RAM_BASE && a < DATA_LIMIT);
@@ -678,10 +639,14 @@ class vortex_scoreboard extends uvm_scoreboard;
         for (int i = 0; i < 8; i++) simx_word[i*8 +: 8] = simx_bytes[i];
         if (simx_word[31:0] == POISON || simx_word[63:32] == POISON) continue;
         if (simx_word == 0)                        continue;   // need non-zero for a clean mismatch
-        if (shadow_memory[a] !== simx_word)        continue;   // must currently match
+        // Fully-written slot only: on a partially-written slot the forward pass
+        // masks the unwritten lanes, so "matches SimX" would not mean the same
+        // thing there. Restricting to mask==0xFF keeps the injected scenario
+        // unambiguous and picks the same candidate the pre-B2 shadow did.
+        if (dut_write_mask[a] !== 8'hFF)                     continue;
+        if (dut_mem.read_dword(64'(a)) !== simx_word)        continue;   // must currently match
         drop_addr = a;
-        shadow_memory.delete(a);
-        shadow_valid.delete(a);
+        dut_write_mask.delete(a);
         for (int b = 0; b < 8; b++) dut_mem.write_byte(64'(a) + b, 8'h00);  // DUT mem := load value
         store_dropped = 1;
         `uvm_info("SCOREBOARD",
@@ -691,7 +656,7 @@ class vortex_scoreboard extends uvm_scoreboard;
       end
     end
 
-    foreach (shadow_memory[addr]) begin
+    foreach (dut_write_mask[addr]) begin
       // ---- Gate 1: choose the comparison scope ----
       //  * Regression harness staged an explicit result window
       //    (result_size_bytes > 0): compare ONLY that window — precise, avoids
@@ -711,15 +676,12 @@ class vortex_scoreboard extends uvm_scoreboard;
         continue;
       end
 
-      // DUT VALUE source = the real backing store (mem_model / dut_mem), which is
-      // ground truth for the DUT's final memory. shadow_memory is a reconstruction
-      // from snooped write transactions and can drift (missed/mis-parsed write);
-      // shadow_valid still supplies the WRITE-SET (which addrs/bytes to compare)
-      // below. This makes the end-state compare real-DUT-mem vs real-SimX-mem. The
-      // reverse (dropped-store) pass already trusts dut_mem the same way. Fall back
-      // to shadow only if mem_model was not provided to this scoreboard.
-      dut_word  = (dut_mem != null) ? dut_mem.read_dword(64'(addr))
-                                    : shadow_memory[addr];
+      // B2: SINGLE source of truth for the DUT value — the real backing store
+      // (mem_model / dut_mem). dut_write_mask supplies only the WRITE-SET (which
+      // addresses and which bytes to compare). There is no second reconstruction
+      // to drift out of step with it. The reverse (dropped-store) pass below
+      // reads the same store, so both directions now agree by construction.
+      dut_word  = dut_mem.read_dword(64'(addr));
       simx_base = 64'(addr);
       simx_read_mem(simx_base, 8, simx_bytes);
       simx_word = '0;
@@ -734,9 +696,9 @@ class vortex_scoreboard extends uvm_scoreboard;
       //      first zeros the unwritten lanes on BOTH sides so the POISON test
       //      only sees the lanes we actually care about. Full 8-byte writes
       //      have mask 0xFF and this is a no-op. ----
-      if (shadow_valid.exists(addr)) begin
+      if (dut_write_mask.exists(addr)) begin
         for (int b = 0; b < 8; b++)
-          if (!shadow_valid[addr][b]) begin
+          if (!dut_write_mask[addr][b]) begin
             dut_word [b*8 +: 8] = 8'h00;
             simx_word[b*8 +: 8] = 8'h00;
           end
@@ -796,7 +758,7 @@ class vortex_scoreboard extends uvm_scoreboard;
     end
 
     // ============= SB-DIR reverse pass: DROPPED-STORE detection =============
-    // The forward loop only inspects addresses the DUT WROTE (shadow_memory), so a
+    // The forward loop only inspects addresses the DUT WROTE (dut_write_mask), so a
     // store the DUT dropped entirely is never compared (silent data loss). Walk the
     // DUT's real memory footprint (mem_model — bounded to touched/preloaded bytes) and,
     // for each result-scope dword the DUT did NOT write, compare DUT memory vs SimX. A
@@ -816,7 +778,7 @@ class vortex_scoreboard extends uvm_scoreboard;
         else
           in_res = (waddr >= RAM_BASE) && (waddr < DATA_LIMIT);
         if (!in_res)                    continue;
-        if (shadow_valid.exists(waddr)) continue;   // DUT wrote >=1 byte -> forward handled it
+        if (dut_write_mask.exists(waddr)) continue; // DUT wrote >=1 byte -> forward handled it
 
         dut_word = dut_mem.read_dword(64'(waddr));
         simx_read_mem(64'(waddr), 8, simx_bytes);

@@ -11,7 +11,25 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A COMPLETE — A6 CLOSED 2026-08-07, nothing in Phase A remains open. NEXT: Phase B / B2.**
+**CURRENT MILESTONE: Phase A COMPLETE · B2 CLOSED 2026-08-07. NEXT: Phase B / B1 (RAL).**
+
+**B2 ✅ (2026-08-07) — end-state scoreboard collapsed to a single source of truth.**
+`shadow_memory` (a parallel 64-bit reconstruction assembled from snooped write transactions)
+is **deleted**; the DUT value now comes only from `dut_mem` (`mem_model`), which is preloaded
+with the program image (`vortex_tb_top.sv:185`) and written byte-accurately by both responders
+(`axi_driver.sv:218`, `mem_driver.sv:129`). Dead `compare_result_region` (53 lines, never
+called) deleted. `mem_model` is now **mandatory** — absent ⇒ `uvm_fatal`, because a missing DUT
+side would otherwise yield a green run that checked nothing.
+**⚠ `shadow_valid` was NOT deleted** despite the original plan text saying so — it is renamed
+`dut_write_mask` and is load-bearing: it makes the SimX-poison gate byte-granular, and it is
+what separates the forward pass from the reverse dropped-store pass. Deleting it would have
+silently lost checks. **Do not "finish the job" by removing it.**
+**Validated by differential, not by assertion — 18,749 word comparisons reproduced EXACTLY:**
+cache_tier 16,452 · riscv-dv 1,414/490/436/15 · sfu_masks 124 · vecadd_lite 84 · tcu_test 76 ·
+fpu_test 8 — every one bit-identical to its pre-B2 baseline, with `skipped_*` counts identical
+too. **Both Gate-0 guards still RED on injection at the same address `0x800075d8`**
+(`negative_result_test`, `negative_dropped_store_test`). New: **OBS-023** (a dropped *sub-word*
+store into a partially-written dword is invisible — pre-existing, bounded, OPEN).
 **A6 ✅ (2026-08-07):** Spike independence audit done — DUT/SimX/Spike all retire **exactly 11,076** writebacks on `riscv_arithmetic_basic_test_0.elf` and agree on every PC/rd/value (**0 mismatches**); non-vacuity proven by injection. Scope is warp0/lane0/base-ISA only — **SIMT still has no independent reference**. New trace hook `+LOCKSTEP_TRACE=<path>` (default OFF) + `scripts/spike_audit.py`. See [`docs/A6_SPIKE_INDEPENDENCE_AUDIT.md`](A6_SPIKE_INDEPENDENCE_AUDIT.md) and **OBS-022** (lockstep is writeback-domain only: branches/stores not directly compared).
 
 **PRIOR MILESTONE LINE (superseded by the A6 close above):** A0 ✅ · A1(a–e) ✅ · A2 ✅ · **A3 ✅ CLOSED (2026-08-06)** — golden refusals are now NAMED halts (-4 GOLDEN_HALT) not anonymous crashes (-3); disassembler never aborts (33 sites); 39 semantic sites record pc/instr/sub-field; verified prefix preserved, truncated tail excluded. **MEASURED: the UNVERIFIABLE bucket is EMPTY** — all 10 retained riscv-dv re-run, zero SimX aborts, real byte-exact compares (15..1414 words); the "~10 still abort / 69 std::abort" claim was STALE. Non-vacuity proven via `SIMX_FORCE_HALT` (default OFF). · A4 ✅ (2CL divergence grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · A6 ❄️ FROZEN (**not a blocker for A3 — Spike has no SIMT model and cannot run a Vortex kernel; the bucket emptied without it**). **2CL sweep 5→12 of 15 verified.** TCU ✅ · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). **cache_tier VALIDATED @1CL** (460,769 cyc, 64,772 instr, 16,452 byte-exact words, 0 err). NEXT ACTION: (1) L2/L3 cache-tier coverage confirmation + 15-kernel L2/L3 sweep re-run; (2) **Phase B — B2 scoreboard→mem_model**. See ▶▶ block. **⚠ Before making any "we verified / we stressed it" claim, read the 🎯 VERIFICATION-MATURITY ASSESSMENT & FUTURE WORK section (FW-1..FW-7) — FW-1 (no seed control ⇒ random results not reproducible) is the top gap.**
@@ -20,17 +38,28 @@
 
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-08-07)
 
-**PHASE A IS COMPLETE. NEXT: Phase B — B2.**
+**PHASE A IS COMPLETE. B2 IS CLOSED. NEXT: Phase B — B1 (RAL).**
 
-**B2 (start here):** collapse the end-state scoreboard to a **single `mem_model`-vs-SimX
-compare** and delete `shadow_memory` / `shadow_valid` from
-`vortex_uvm_env/uvm_env/vortex_scoreboard.sv`. **Gate (non-negotiable, CLAUDE.md rule 5):**
-the full suite green **and BOTH negative tests still RED on injection** —
-`negative_result_test` (wrong value) and `negative_dropped_store_test` (dropped store).
-The reverse/bidirectional pass added in `fe10b83` is what catches dropped stores; whatever
-replaces it must keep that property or the dropped-store guard silently dies.
+**B2 ✅ CLOSED — do not re-open it, and specifically do not "finish" it by deleting the write
+mask.** What actually landed (see the milestone block above for the full result table):
+- `shadow_memory` deleted; `dut_mem` (`mem_model`) is the **single** DUT value source.
+- `shadow_valid` → `dut_write_mask`, **kept deliberately**. It is a write-SET, not a data
+  shadow. It supplies (a) byte-granular SimX-poison filtering and (b) the forward/reverse
+  discrimination that keeps the `fe10b83` dropped-store guard alive. The plan's original
+  "delete both" wording was wrong and is corrected here.
+- Dead `compare_result_region` (never called) deleted; `mem_model` now mandatory (`uvm_fatal`).
+- **Differential validation:** 11 tests re-run against stored pre-B2 baselines, **18,749 word
+  comparisons reproduced exactly**, both negative tests still RED at the same address.
+- **OBS-023** logged: dropped *sub-word* store into a partially-written dword is invisible
+  (pre-existing, bounded, OPEN — closing it needs its own non-vacuity proof).
 
-**CLOSED 2026-08-07 (session: L2/L3 + cache coverage + A6):**
+**B1 (start here):** UVM RAL model for the DCR register space. Preconditions are already met —
+the DCR agent is active and `write_dcr` mirrors into SimX (`vortex_scoreboard.sv`
+`simx_dcr_write`), so a RAL frontdoor has a working path. Gate: DCR-driven tests unchanged and
+`host_coverage_test` still green.
+
+**CLOSED 2026-08-07 (session: L2/L3 + cache coverage + A6 + B2):**
+- **B2 ✅ scoreboard → single `mem_model`** (above).
 - **A6 ✅ Spike independence audit** — Spike/SimX/DUT all retire **exactly 11,076** writebacks
   on `riscv_arithmetic_basic_test_0.elf`, **0 mismatches**, all 11,076 value-compared,
   non-vacuity proven by injecting at record 5000 (named exactly, exit 1). New: `+LOCKSTEP_TRACE=<path>`
@@ -485,7 +514,8 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 ## Phase B — Verification structure
 
 - **B1 — RAL for DCR/CSR.** `uvm_reg_block` modeling DCR (STARTUP_ADDR0/1, ARGV_PTR0/1, MPM) + CSR mirror. Note DCR is **write-only** ([vortex_dcr_if.sv](../vortex_uvm_env/tb/vortex_dcr_if.sv)) → RAL gives abstraction + predicted mirror + reg coverage, **not** read-back checking (documented limitation). CSR side can use readback if a path exists. *Accept: DCR sequences issue through the reg model; reg coverage collected.*
-- **B2 — Scoreboard → single `mem_model`.** *Detailed spec (from `vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md` §Phase 3):* collapse `compare_all_written` to ONE `mem_model`-vs-SimX end-state compare (inherently bidirectional; `mem_model` holds real init bytes → the sub-word byte-mask hack becomes unnecessary). Migrate `.got`/POISON/FP-tolerance/inject-fault/drop-store logic into the single pass; **delete `shadow_memory`+`shadow_valid`**. **Validation gate:** full 35-run suite + BOTH negative tests (`negative_result_test`, `negative_dropped_store_test`) green, zero regression, before deleting the legacy path.
+- **B2 — Scoreboard → single `mem_model`. ✅ DONE (2026-08-07).** `compare_all_written` now reads the DUT value **only** from `mem_model`; `shadow_memory` deleted; `.got`/POISON/FP-tolerance/inject-fault/drop-store logic all retained in the one pass. Validation gate met by **differential** against stored pre-B2 baselines (18,749 word comparisons bit-identical) + both negative tests still RED.
+  **CORRECTION to the original spec above:** it predicted "`mem_model` holds real init bytes → the sub-word byte-mask hack becomes unnecessary". That is **half right**. The mask's *original* purpose (the sparse shadow reading back 0 on unwritten lanes) does dissolve once the value comes from `mem_model` — but the mask acquired a *second*, still-live purpose: it makes the SimX-`BAADF00D` poison gate **byte-granular**, and it is the forward/reverse discriminator for dropped-store detection. So `shadow_valid` was **kept** (renamed `dut_write_mask`), and only `shadow_memory` was deleted. Removing the mask would silently drop checks — see **OBS-023** for the residual blind spot and the clean way to close it.
 - **B3 — SVA protocol layer.** Assertions on internal elastic handshakes + the cache arbiter/MSHR + AXI. Formalizes the "reachable-but-not-hit" bins (e.g. `b_valid_stable`, `r_data_stable`).
 - **B4 — Formal on control blocks.** Questa formal / JasperGold on the cache arbiter (priority: replay>mem-rsp>flush>core, [VX_cache_bank.sv](../Vortex/hw/rtl/cache/VX_cache_bank.sv) lines 204-207) and MSHR allocator. Formal unreachability > our current structural waiver argument. *Accept: waived bins proven unreachable formally, or a reachable path found.*
 - **B5 — Layered / virtual sequences.** Promote ad-hoc test control to a virtual-sequencer orchestrating host+dcr+axi/mem agents.
