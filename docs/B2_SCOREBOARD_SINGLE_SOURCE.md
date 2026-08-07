@@ -112,6 +112,30 @@ against SimX, and a partially-written slot had zeros in its unwritten lanes, so 
 match — the constraint was implicit. Making it explicit keeps the negative test deterministic
 rather than letting the candidate set quietly widen.
 
+## Full-suite gate
+
+`scripts/run_suite.sh` @1CL/1C/4W/4T: **44 staged, 1 failed.** The single failure is `text_big`,
+and it is **proven not to be B2** by direct A/B — the pre-B2 scoreboard was restored from backup
+and the same program run at the same 400,000-cycle budget:
+
+| | pre-B2 | post-B2 |
+|---|---|---|
+| verdict | TIMEOUT @400000 | TIMEOUT @400000 |
+| Total Cycles | 399,999 | 399,999 |
+| Instructions | **46,151** | **46,151** |
+
+Identical to the digit. `text_big` is a fetch-bound kernel (232KB resident `.text`, 600
+`noinline` functions in a runtime-indexed reverse sweep) retiring at ~0.12 IPC; the log shows
+memory ops and retired instructions still climbing monotonically at cycle 399,999 with `busy=1`,
+i.e. **forward progress, not a hang** — the INV-1 signature. `assert_busy_eventually_idles` fired
+as a *consequence* of the timeout truncating the run, not as a cause. The `data_compared` field
+is absent because completion never fired, so the end-state compare (the only thing B2 changed)
+never executed at all.
+
+Merged covergroup bins 398/407 (97.78% raw). The 9 residual are `mem_usage_cp` /
+`system_mem_cross` (documented weight-0: idle MEM interface on AXI runs) and `cp_occ` on one
+cache-probe instance from the G1 work. B2 defines no covergroups, so this is not a B2 metric.
+
 ## Known residual gap — OBS-023
 
 Keeping the mask preserves the poison-granularity check but leaves one blind spot, now logged:
