@@ -962,3 +962,45 @@ not scattered across per-fix docs.
   containing 32-bit half for `BAADF00D`) instead of using the write-mask as a proxy, then
   compare **all** lanes of a written dword. That removes the blind spot without losing the
   poison protection the mask was introduced for.
+
+---
+
+### OBS-024 (TB/ARCHITECTURE MISMATCH + golden-vs-DUT asymmetry) — `ebreak` is **not** Vortex's termination mechanism; the RTL decodes it and does nothing, while SimX halts on it
+
+- **Class:** testbench design mismatch (**not** an RTL defect) + a real DUT-vs-golden behavioural
+  asymmetry. Found while root-causing the `text_big` suite timeout.
+- **What Vortex actually does.** A kernel ends in `_Exit`
+  (`Vortex/kernel/src/vx_start.S:69-75`): store the exit code to `IO_MPM_EXITCODE`, `fence`,
+  then `.insn r RISCV_CUSTOM0, 0, 0, x0, x0, x0` — i.e. **`tmc x0`**. That zeroes the thread
+  mask, which clears `active_warps` (`hw/rtl/core/VX_schedule.sv:139`
+  `active_warps_n[wid] = (tmc.tmask != 0)`), which deasserts `busy`
+  (`VX_schedule.sv:390` `busy = (active_warps != 0 || ~no_pending_instr)`).
+  **`busy` deassertion IS the architectural end-of-program signal.**
+- **The RTL never executes `ebreak`.** `INST_BR_EBREAK` occurs in exactly three places in all of
+  `hw/rtl/`: the decoder (`core/VX_decode.sv:119`), the package constant
+  (`VX_gpu_pkg.sv:238`) and the trace printer (`VX_trace_pkg.sv:141`). There is **no
+  execute-side consumer** — in hardware it is effectively a no-op.
+- **SimX DOES halt on it.** `Emulator::trigger_ebreak()` (`sim/simx/emulator.cpp:682`) calls
+  `active_warps_.reset()`, and `Emulator::running()` (`:242`) is `active_warps_.any()`. The
+  in-tree comment is explicit that this is a testing convenience: *"For now, we need these
+  instructions to trap for testing the riscv-vector isa"*. `trigger_ecall()` is identical.
+- **In the Vortex runtime `ebreak` signals a FAULT, not completion** — its only occurrence is
+  `_sbrk` (`kernel/src/vx_syscalls.c:38`), i.e. heap exhaustion. riscv-dv programs reach an
+  `ebreak` only because `prepare.sh` rewrites `ecall`→`ebreak` for this bench.
+- **Consequences for our TB.** `vortex_tb_top.sv:479` makes decoded `ebreak` the PRIMARY
+  completion trigger, and comments the sustained-`busy=0` path (`:486-493`) as *"should not
+  happen in a correct run"*, emitting `** Warning:`. For **every real Vortex kernel this is
+  inverted**: `ebreak` never fires, and the warned-about "fallback" is the architecturally
+  correct signal. This is why the busy=0 warning has always been "expected" for kernel ELFs
+  (see CLAUDE.md C3 note) — the run is correct and the warning is noise.
+- **Asymmetry that matters for equivalence:** on a riscv-dv program the golden STOPS at the
+  `ebreak` while the DUT keeps fetching past it; only the TB probe ends the run. The two models
+  therefore terminate for *different reasons* on the same program. Nothing has mis-compared
+  because of this (the end-state compare runs after the TB stops the DUT), but any future
+  claim of the form "both models ran the same program to the same end" must account for it.
+- **Disposition:** OPEN (documented, not yet changed). Deliberately NOT fixed inside B2 —
+  reordering the completion hierarchy changes when every test ends and would invalidate the
+  differential baselines B2 was validated against.
+- **Enhancement if closed:** make `tmc`-driven `busy` deassertion the PRIMARY completion trigger
+  for kernel ELFs and demote `ebreak` to the riscv-dv/fault path, so the normal case stops
+  emitting a warning and a real `_sbrk` fault stops being indistinguishable from a clean exit.
