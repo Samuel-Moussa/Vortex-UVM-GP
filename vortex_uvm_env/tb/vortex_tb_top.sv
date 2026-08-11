@@ -996,6 +996,22 @@ module vortex_tb_top;
         .commit_arb_if(commit_arb_if)
     );
 
+    // B1-bind: passive per-core DCR register observer. VX_core.sv:82 instantiates
+    // VX_dcr_data once per core, so this creates exactly one probe per core the
+    // config actually built — config-aware by construction, no path enumeration.
+    // Supplies the READ side the write-only VX_dcr_bus_if cannot, turning the RAL
+    // mirror into a real check. PEEK ONLY: it never drives, so the DCR waveform
+    // (and therefore the SimX feed at vortex_scoreboard.sv:403) is unchanged.
+    // Note the connection to `dcrs`, the module's INTERNAL storage register.
+    bind VX_dcr_data vx_dcr_probe u_dcr_probe (
+        .clk         (clk),
+        .reset       (reset),
+        .write_valid (dcr_bus_if.write_valid),
+        .write_addr  (dcr_bus_if.write_addr),
+        .write_data  (dcr_bus_if.write_data),
+        .dcrs        (dcrs)
+    );
+
     // A1(d)-bind: passive LOAD-writeback probe into every VX_lsu_slice. Captures
     // the final aligned per-lane load DATA (result_if) — invisible at the commit
     // tap (OBS-002) — so lockstep can DATA-compare loads. +LOCKSTEP-gated, passive.
