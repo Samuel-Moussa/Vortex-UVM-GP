@@ -272,6 +272,19 @@ class vortex_env extends uvm_env;
       `uvm_info("VORTEX_ENV", "DCR RAL predictor attached to dcr monitor", UVM_MEDIUM)
     end
 
+    // Tell the backdoor checker how many probe instances the RTL elaborated, so
+    // it can verify that EVERY core reported and not merely that the ones which
+    // did report were correct. vx_dcr_probe is bound into VX_dcr_data, whose only
+    // instantiation is VX_core.sv:82 (one per core); sockets subdivide cores
+    // rather than multiplying them (VX_gpu_pkg.sv:99), so the count is exactly
+    // NUM_CLUSTERS * NUM_CORES and needs no new config knob.
+    if (m_dcr_ral_checker != null && cfg != null) begin
+      m_dcr_ral_checker.expected_instances = cfg.num_clusters * cfg.num_cores;
+      `uvm_info("VORTEX_ENV", $sformatf(
+          "DCR RAL per-core completeness armed: expecting %0d probe instance(s) (%0d cluster(s) x %0d core(s))",
+          cfg.num_clusters * cfg.num_cores, cfg.num_clusters, cfg.num_cores), UVM_MEDIUM)
+    end
+
     if (m_host_agent != null &&
         m_host_agent.get_is_active() == UVM_ACTIVE &&
         m_host_agent.m_sequencer != null)
