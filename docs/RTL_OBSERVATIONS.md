@@ -64,7 +64,7 @@ not scattered across per-fix docs.
   **Why a raw compare is unsound:** loads of **uninitialised / stack / lmem** memory
   legitimately differ (DUT reads 0, SimX reads its own init pattern) — e.g. vecadd_lite
   uuid 0x57 `DUT=0 vs SimX=0x64355e8a` while the END-STATE **passes** (252/252). That is
-  exactly the class `compare_all_written` skips (`vortex_scoreboard.sv:647-656`: region
+  exactly the class `compare_all_written` skips (`vortex_scoreboard.svh:647-656`: region
   gate `[RAM_BASE, DATA_LIMIT=0x8800_0000)` excluding stack `0xffff_xxxx`/MMIO/lmem, plus
   a POISON `0xbaadf00d` check). A naive load-compare therefore FALSE-POSITIVES on clean
   programs (vecadd: 429 false LOAD mismatches).
@@ -79,7 +79,7 @@ not scattered across per-fix docs.
 - **CLOSED 2026-07-15 (`97c4e30`).** Done exactly as planned: `simx_cosim_record.h`
   gains `mem_addr[SIMX_COSIM_MAX_THREADS]`; `core.cpp` fills it from
   `LsuTraceData::mem_addrs` for LSU traces; `simx_dpi.cpp`/`simx_pkg.sv` add a
-  `mem_addr[]` open-array out-param; `lockstep_scoreboard.sv` pops it and compares a
+  `mem_addr[]` open-array out-param; `lockstep_scoreboard.svh` pops it and compares a
   load lane ONLY when the SimX effective address is in `[RAM_BASE,DATA_LIMIT)` and the
   gold value != POISON, else defers to the end-state check. Load-compare is now sound
   and **ON by default** (`+NO_LOCKSTEP_LOADS` escapes). Validation: `vecadd_lite`
@@ -262,8 +262,8 @@ not scattered across per-fix docs.
   matches → **TEST PASSED, 0 UVM_ERROR**. So OBS-009 is not merely classified UNVERIFIABLE — the DUT
   is now POSITIVELY VERIFIED equivalent modulo the (architecturally-undefined) racy loads. Not
   suppression: any residual not explained by a fed racy load stays a hard error. Files:
-  `Vortex/sim/simx/cosim_loadfeed.h`, `emulator.cpp`, `execute.cpp`; `lockstep_scoreboard.sv`;
-  `vortex_scoreboard.sv` (deferred end-state). Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md`.
+  `Vortex/sim/simx/cosim_loadfeed.h`, `emulator.cpp`, `execute.cpp`; `lockstep_scoreboard.svh`;
+  `vortex_scoreboard.svh` (deferred end-state). Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md`.
   NOTE: the same feed only PARTIALLY collapses OBS-010 (`full_interrupt`) — 116→7 residual, a genuine
   interrupt-timing divergence (NOT fully verifiable this way); see OBS-010 closure below.
 
@@ -910,10 +910,10 @@ not scattered across per-fix docs.
   (`0x00000013`), `beq` (`0x00628263` @ `0x80000008`), `jalr x0,s6,0` (`0x000b0067`
   @ `0x80000014`).
 - **Evidence / mechanism:** this is by construction and already documented in-tree —
-  `vortex_uvm_env/uvm_env/lockstep_scoreboard.sv:16` states *"DOMAIN: writeback retirements
+  `vortex_uvm_env/uvm_env/lockstep_scoreboard.svh:16` states *"DOMAIN: writeback retirements
   only (wb==1). Non-wb instructions (stores, branches…)"*, and the filter is enforced at
   `vortex_uvm_env/tb/vx_commit_probe.sv:99` (`retire_fire && commit_arb_if[i].data.wb`) and
-  again on the golden side at `lockstep_scoreboard.sv:311` (`if (wb == 0) continue;`).
+  again on the golden side at `lockstep_scoreboard.svh:311` (`if (wb == 0) continue;`).
   Filtering Spike identically made the streams **exactly equal in length (11,076 = 11,076)**.
 - **Why it matters:** a control-transfer instruction is never compared *as an instruction*.
   A branch that resolves the wrong way is caught only **indirectly**, via the PC of the next
@@ -937,7 +937,7 @@ not scattered across per-fix docs.
   between them:
   - The **forward** pass iterates the DUT write-set and, for each dword, zeroes the lanes the
     DUT did not write **on both sides** before comparing
-    (`vortex_uvm_env/uvm_env/vortex_scoreboard.sv`, byte-valid gate in `compare_all_written`).
+    (`vortex_uvm_env/uvm_env/vortex_scoreboard.svh`, byte-valid gate in `compare_all_written`).
     So unwritten lanes inside a written dword are never compared.
   - The **reverse** (dropped-store) pass deliberately skips any dword the DUT wrote at least
     one byte of (`if (dut_write_mask.exists(waddr)) continue;` — "forward handled it").

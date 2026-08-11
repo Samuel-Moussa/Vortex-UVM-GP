@@ -41,7 +41,7 @@ was to investigate which side was right, not to loosen the check.
 `shadow_memory` (a parallel 64-bit reconstruction assembled from snooped write transactions)
 is **deleted**; the DUT value now comes only from `dut_mem` (`mem_model`), which is preloaded
 with the program image (`vortex_tb_top.sv:185`) and written byte-accurately by both responders
-(`axi_driver.sv:218`, `mem_driver.sv:129`). Dead `compare_result_region` (53 lines, never
+(`axi_driver.svh:218`, `mem_driver.svh:129`). Dead `compare_result_region` (53 lines, never
 called) deleted. `mem_model` is now **mandatory** — absent ⇒ `uvm_fatal`, because a missing DUT
 side would otherwise yield a green run that checked nothing.
 **⚠ `shadow_valid` was NOT deleted** despite the original plan text saying so — it is renamed
@@ -60,43 +60,60 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
-### ▶▶ NEXT ACTION (exact, resumable — 2026-08-07)
+### ▶▶ NEXT ACTION (exact, resumable — 2026-08-12)
 
-**PHASE A COMPLETE. B2 CLOSED. B1 CLOSED. NEXT, IN THIS ORDER:**
+**PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
+CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
-**(1) `.svh` convention fix (small, mechanical, own commit).** UVM 1.2 convention is: files that
-are **compiled** (packages, modules, interfaces, tb_top) stay `.sv`; files that are
-**`` `include ``-d** into a package/class scope are headers and should be `.svh`. The repo
-violates this — e.g. `uvm_env/vortex_env.sv` is `` `include ``-d at `vortex_env_pkg.sv:50`.
-Keep it a standalone commit: it rewrites every `` `include `` plus flist entries, and mixing it
-with functional work would bury the diff and complicate a bisect. Imported *packages* are
-compilation units and must NOT be renamed.
+**(3) RE-BANK 2CL coverage — THE ONLY OPEN STEP.** The banked 2CL numbers are from 2026-07-10
+(total 85.16%) and are **stale** — they predate L2/L3 enablement, the G1 cache probe, A3, A6, B2,
+B1, the icache waivers and the `.svh` change. Requires an RTL + SimX rebuild for the config:
+`CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 bash scripts/run_suite.sh`.
+**EXPECT 43/45, NOT 45/45** — `riscv_no_fence_test` and `riscv_full_interrupt_test` fail at 2CL by
+documented SimX cross-cluster divergence (`docs/investigations/SimX_2CL_no_fence_divergence.md`),
+NOT a DUT bug. `run_suite` stages only passing runs, so the bank stays clean either way; do not
+"fix" those two.
+**`7863b44` is required for this step to be valid** — `run_suite.sh` now exports
+`COV_NCL/NC/NW/NT` to the merge. Before it, `merge_coverage.sh` fell back to its 1/1/4/4 defaults
+(`merge_coverage.sh:48`) and would have banked 2CL with **1CL exclusions** — e.g. the single-core
+`is_global` barrier waiver applied to a build where that barrier IS reachable.
 
-**(2) RE-BANK 1CL coverage.** One `scripts/run_suite.sh` run, now **45/45** (the `text_big`
-budget was raised 400k→800k in `6627311` after measuring 490,468 cycles to completion). The
-current `cov/merged.ucdb` is a **44-run merge missing `text_big`** and must not be quoted as a
-clean bank. Fresh 1CL totals from that incomplete merge: total 90.90% · stmt 96.80% ·
-branch 91.02% · cond 76.03% · toggle 78.42% · assert 96.09% · directives 100% ·
-covergroup bins 398/407 (97.78%).
+**(1) ✅ DONE `59b7ea2` — `.svh` convention.** 53 `` `include ``-d class files renamed; all 53
+verified to contain only a class first. Packages/modules/interfaces/tb_top keep `.sv`.
+**It also exposed a real defect:** 27 of those files were BOTH `` `include ``-d into their agent
+package AND listed standalone in `uvm_env.flist`. Questa runs single-file-compilation-unit mode
+(no `-mfcu`, `compile.sh:109-140`), so each compiled a second time into its own `$unit` package
+("Compiling package axi_driver_sv_unit", vlog-13233) that under SFCU **nothing could reference**.
+Removed. Note `uvm_env.flist` is **CRLF** — path edits must be CRLF-aware or they silently match
+nothing.
 
-**(3) RE-BANK 2CL coverage.** The banked 2CL numbers are from 2026-07-10 (total 85.16%) and are
-**stale** — they predate L2/L3 enablement, the G1 cache probe, A3, A6, B2 and B1. Requires an
-RTL + SimX rebuild for the config. **This run also discharges a B1 gate item:** confirm the
-per-core DCR check reports **ZERO** mismatches at 2CL/2C before trusting it as an INV-2 race
-detector, otherwise "found the race" is indistinguishable from "armed too early" (OBS-025).
+**(2) ✅ DONE — 1CL RE-BANKED CLEAN, 45/45, 0 FAILED.** First bank that includes `text_big` and
+carries B2+B1+A3+A6+L2/L3+G1+icache waivers, from ONE consistent compile with staging cleared
+(`run_suite.sh:207` calls `--fresh` itself). **Total 91.08%** · stmt 96.82% · branch 91.06% ·
+cond 76.03% · toggle 78.42% · assert 96.09% · directives 100% · **covergroup bins 398/403 =
+98.75%** · 2,256 instances. Supersedes the 44-run merge (90.90%, 398/407) which must never be
+quoted.
 
-**(4) icache coverage — structural waivers are READY TO WRITE (analysis done 2026-08-11, not yet
-applied).** All 6 `cache_event_cg` misses are accounted for, with RTL citations:
-- **icache `cp_rw.wr`** and the two `cross_rw_hit <wr,*>` bins — **STRUCTURAL**: the icache is
-  instantiated `.WRITE_ENABLE (0)` (`Vortex/hw/rtl/VX_socket.sv:107`). Instruction fetch cannot
-  write.
-- **icache `cp_event.flush`** — **STRUCTURAL**: `MEM_REQ_FLAG_FLUSH` has exactly **one** producer
-  in all of `hw/rtl` — `core/VX_lsu_slice.sv:73` `= req_is_fence`, which drives the **dcache**.
-  `VX_fetch.sv` contains no flush logic at all, so the fetch path cannot request a flush.
-- **icache + dcache `cp_mshr_stall.stall`** — **NOT structural**, a genuine stimulus gap (the MSHR
-  never saturates). Leave honestly uncovered.
-Applying the 4 structural waivers takes covergroup bins 398/407 → **398/403 = 98.76%**, leaving
-only the two honest `mshr_stall` gaps. Do this as part of the re-bank so it is measured once.
+**(4) ✅ DONE `5c4b70f` — icache structural waivers, PREDICTION CONFIRMED.** Predicted 398/403;
+measured 398/403. The denominator fell 407→403 and **not one covered bin moved** — the signature
+of a correct structural waiver.
+- **icache `cp_rw.wr`** + the two `cross_rw_hit <wr,*>` bins — **STRUCTURAL**: icache is
+  instantiated `.WRITE_ENABLE (0)` at **`Vortex/hw/rtl/VX_socket.sv:106`** (NOTE: the old plan text
+  said `hw/rtl/core/VX_socket.sv:107` — **both the path and the line were wrong**; verified 106,
+  with the `.WRITE_ENABLE(1)` dcache at :152). `VX_cache_bank.sv:271`/`:590` are generate-gated on
+  it, so there is no write datapath at all.
+- **icache `cp_event.flush`** — **STRUCTURAL**: `MEM_REQ_FLAG_FLUSH` has exactly **one** producer,
+  `core/VX_lsu_slice.sv:73` `= req_is_fence`, driving the **dcache**; `VX_fetch.sv` has no flush
+  logic and `cache/VX_cache_init.sv:91` is the consumer.
+- **ONLY TWO `ignore_bins` WERE NEEDED.** Waiving `cp_rw.wr` removes `<wr,hit>`/`<wr,miss>` from
+  `cross_rw_hit` automatically — a cross is built from the coverpoint's REMAINING bins. Waiving
+  the cross bins separately would have been wrong.
+- `WRITE_ENABLE` is passed through the existing `bind` from the bank's own parameter, so the
+  waiver is per-instance and config-generic. Measured: dcache 15 bins, icache 11.
+- **icache + dcache `cp_mshr_stall.stall`** — **NOT structural**, a genuine stimulus gap. Left
+  honestly uncovered; they are 2 of the 5 residual misses. The other 3 are the long-documented
+  weight-0 red herrings (`mem_usage_cp`, `system_mem_cross`, `cp_occ`), which is why the weighted
+  covergroup metric reads 99.12% against 98.75% raw bins.
 
 **B2 ✅ CLOSED — do not re-open it, and specifically do not "finish" it by deleting the write
 mask.** What actually landed (see the milestone block above for the full result table):
@@ -112,7 +129,7 @@ mask.** What actually landed (see the milestone block above for the full result 
   (pre-existing, bounded, OPEN — closing it needs its own non-vacuity proof).
 
 **B1 (start here):** UVM RAL model for the DCR register space. Preconditions are already met —
-the DCR agent is active and `write_dcr` mirrors into SimX (`vortex_scoreboard.sv`
+the DCR agent is active and `write_dcr` mirrors into SimX (`vortex_scoreboard.svh`
 `simx_dcr_write`), so a RAL frontdoor has a working path. Gate: DCR-driven tests unchanged and
 `host_coverage_test` still green.
 
@@ -121,7 +138,7 @@ the DCR agent is active and `write_dcr` mirrors into SimX (`vortex_scoreboard.sv
 - **A6 ✅ Spike independence audit** — Spike/SimX/DUT all retire **exactly 11,076** writebacks
   on `riscv_arithmetic_basic_test_0.elf`, **0 mismatches**, all 11,076 value-compared,
   non-vacuity proven by injecting at record 5000 (named exactly, exit 1). New: `+LOCKSTEP_TRACE=<path>`
-  (default OFF) in `lockstep_scoreboard.sv`, `LOCKSTEP_TRACE` env in `simulate.sh`,
+  (default OFF) in `lockstep_scoreboard.svh`, `LOCKSTEP_TRACE` env in `simulate.sh`,
   `scripts/spike_audit.py`. Commit `8e1a3b2`. Doc: [`docs/A6_SPIKE_INDEPENDENCE_AUDIT.md`](A6_SPIKE_INDEPENDENCE_AUDIT.md).
 - **cache_tier @2CL L2+L3** — 57,379 lockstep pairs all matched, 16,620 byte-exact end-state
   words, 0 errors, **0 memsched response timeouts** (OBS-017 guard holding).
@@ -138,8 +155,8 @@ the DCR agent is active and `write_dcr` mirrors into SimX (`vortex_scoreboard.sv
 1. **`lockstep_sweep_2cl.sh:84` calls `run_one "$k" 0`** — a bare tier1 sweep runs **without**
    `+LOCKSTEP_LOADFEED` and reports 8/15 "failing". Those are raw pass-1 divergences and are
    **NOT comparable** to the feed-armed 12/15. Always state which mode a number came from.
-2. **Lockstep is writeback-domain only** (OBS-022): `lockstep_scoreboard.sv:16`,
-   `vx_commit_probe.sv:99`, `lockstep_scoreboard.sv:311`. Branches/`jalr x0`/`nop` never enter
+2. **Lockstep is writeback-domain only** (OBS-022): `lockstep_scoreboard.svh:16`,
+   `vx_commit_probe.sv:99`, `lockstep_scoreboard.svh:311`. Branches/`jalr x0`/`nop` never enter
    the stream (a wrong branch is caught only indirectly, via the successor's PC), and **stores
    are outside lockstep entirely** — they are covered by the end-state compare. This bounds
    what "per-instruction lockstep" may be claimed to mean, and it matters directly for B2.
@@ -257,12 +274,12 @@ artifacts from genuine differences. Findings:
   register retirement** — SimX exports one retire record per output-tile register (uuid high-nibble
   = tile index), the DUT merges its per-register commits by uuid into ONE record → the retire
   streams slip by ~N at the WMMA → the whole downstream PC/rd/data residual is that one cascade.
-- **FIXES 1–3 COMMITTED + VALIDATED** (`lockstep_scoreboard.sv`, all `g.is_fp`-guarded so integer
+- **FIXES 1–3 COMMITTED + VALIDATED** (`lockstep_scoreboard.svh`, all `g.is_fp`-guarded so integer
   kernels are provably unaffected; low-32/FLEN compare keeps the FP VALUE bit-exact — real fixes,
   NOT waivers): vecadd_lite 1035/1035 (no regression) · **diverge_fpu RED→GREEN 2738/2738** ·
   fpu_mt data-mismatch 907→4. New `scripts/lockstep_sweep_2cl.sh` (checking-depth sweep, no UCDB merge).
 - **LAYER 4 (multi-register WMMA retirement) = DONE for TCU, comparator-side (industrial choice —
-  golden model kept faithful).** Implemented in `lockstep_scoreboard.sv`: (a) `build_dut` keys the
+  golden model kept faithful).** Implemented in `lockstep_scoreboard.svh`: (a) `build_dut` keys the
   merge by (uuid,rd) so multi-register retires split per-register; (b) `run_compare` rewritten to
   **instruction-grouped alignment** — group the DUT stream by instruction, take gold's leading
   same-PC records as that instruction's register writes, match by rd, and count tile registers the
@@ -369,11 +386,11 @@ SimX=4 · ③ default run clean (no RVVI built) · ④ pinned no_fence@2CL feed:
 pass-2 residual 0 over 5432/5432, 936 load-cmp, pushed=consumed=20, PASSED. Monitor vif counts match
 bind topology (2 @1CL/1C, 8 @2CL/2C) = config-generic proven. Files: `tb/rvvi_if.sv` (new),
 `uvm_env/{rvvi_txn,rvvi_monitor}.sv` (new), `lockstep_pkg.sv` (queues deleted), both probes,
-`lockstep_scoreboard.sv`, `vortex_env{,_pkg}.sv`, `flists/uvm_env.flist`.
+`lockstep_scoreboard.svh`, `vortex_env{,_pkg}.sv`, `flists/uvm_env.flist`.
 **This closes the ENH-1 prerequisite** (streaming analysis path exists); ENH-1/2/3 stay PARKED.
 
 #### Prior (A1(e), same day — context)
-**A1(e) RVVI LOAD-BUS + mem_model end-state = DONE, both COMMITTED.** Real fix (option 1) as a sound **two-pass trace-replay**. Result on pinned no_fence@2CL: pass-1 **20** racy loads → **138** cascade; pass-2 **residual 0** over **5432/5432**; deferred end-state compare (real `dut_mem` vs post-feed SimX) → racy word matches → **TEST PASSED, 0 UVM_ERROR**. Commit `2dd48ea` (RVVI load-bus) + follow-on (end-state value source `shadow_memory`→`dut_mem`, keep `shadow_valid` for the write-set). Validated: vecadd_lite 1035/1035 (no-feed byte-identical) · negative fault-injection PASS (caught, non-vacuous) · negative dropped-store PASS (caught via reverse) · 2CL no_fence feed PASS. Files: `Vortex/sim/simx/{cosim_loadfeed.h,emulator.cpp,execute.cpp}`, `ref_model/{simx_dpi.cpp,simx_pkg.sv}`, `lockstep_scoreboard.sv`, `vortex_scoreboard.sv`, `scripts/simulate.sh`. Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "REAL FIX IMPLEMENTED".
+**A1(e) RVVI LOAD-BUS + mem_model end-state = DONE, both COMMITTED.** Real fix (option 1) as a sound **two-pass trace-replay**. Result on pinned no_fence@2CL: pass-1 **20** racy loads → **138** cascade; pass-2 **residual 0** over **5432/5432**; deferred end-state compare (real `dut_mem` vs post-feed SimX) → racy word matches → **TEST PASSED, 0 UVM_ERROR**. Commit `2dd48ea` (RVVI load-bus) + follow-on (end-state value source `shadow_memory`→`dut_mem`, keep `shadow_valid` for the write-set). Validated: vecadd_lite 1035/1035 (no-feed byte-identical) · negative fault-injection PASS (caught, non-vacuous) · negative dropped-store PASS (caught via reverse) · 2CL no_fence feed PASS. Files: `Vortex/sim/simx/{cosim_loadfeed.h,emulator.cpp,execute.cpp}`, `ref_model/{simx_dpi.cpp,simx_pkg.sv}`, `lockstep_scoreboard.svh`, `vortex_scoreboard.svh`, `scripts/simulate.sh`. Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "REAL FIX IMPLEMENTED".
 
 **`full_interrupt`@2CL feed = DONE, honest result (2026-07-16):** load-bus collapses **116 → 7
 residual** (data=1, load=6; consumed==pushed=82), does NOT reach 0. **Re-keyed the feed ordinal →
@@ -412,7 +429,7 @@ until the current milestone is done; full_interrupt end-state is already VERIFIE
 - **OBS-009 root-caused:** the `mulhsu` divergence is **LOAD-FED** (first divergence moves to a load at seq 742), not a compute/CSR bug.
 
 **A1(d) DONE (2026-07-15, commits `b029fe7` + this) — the original motivation, closed:**
-- Enhanced `lockstep_scoreboard.sv`: **first-divergence-per-(cid,wid) capture** + dedicated report block + per-key uvm_error spew cap (config-generic; true n_mm_* tallies unaffected). Committed `b029fe7`.
+- Enhanced `lockstep_scoreboard.svh`: **first-divergence-per-(cid,wid) capture** + dedicated report block + per-key uvm_error spew cap (config-generic; true n_mm_* tallies unaffected). Committed `b029fe7`.
 - **Pinned no_fence hex REPLAYED under lockstep** (`results/20260710/run_125857_.../riscv_no_fence_test_0.hex`, regen OFF, 2CL/2C/4W/4T): reproduced the documented end-state mismatch (`0x80013dd8 DUT=0x28af8c40 SimX=0x2fff8c40`) AND **pinpointed first divergence = `mulhu s0,s3,a3` @ PC 0x800004f4, seq 278, cluster-1 cores (cid 2,3) only; DUT s0=0x3d75a09d vs SimX 0x3d009f79.** cluster-0 (cid 0,1) = 0 divergences (byte-exact). 0 orphans, 118 data-mismatches, PC/rd exact. Confirms per-cluster fenceless-ordering verdict at instruction granularity (mulhu inputs already diverged ⇒ upstream shared-load; NOT a DUT/compute bug). Full writeup: `docs/investigations/SimX_2CL_no_fence_divergence.md` → "First divergence — PINPOINTED".
 - **REGENERATED no_fence@2CL is a DIFFERENT case:** SimX *aborts* (SIGABRT→exit −3, UNVERIFIABLE), lockstep proves DUT≡SimX byte-exact for all 17664 retires up to the crash. Non-vacuity proven by `+LOCKSTEP_INJECT` (17664→17663 matched, 1 caught DATA mismatch). See RTL_OBSERVATIONS OBS-007.
 - **Not yet done in A1(d):** `full_interrupt` pinpoint (same method, one replay) and naming the exact upstream shared-load (needs LSU-writeback/regfile probe per OBS-002).
@@ -427,8 +444,8 @@ until the current milestone is done; full_interrupt end-state is already VERIFIE
 **A0 RESULT (verified in sim, branch `industrial_transformations`):** per-instruction RVVI-style lockstep working on `vecadd_lite` 1CL/1C/4W/4T → **1035/1035 architectural writebacks matched, 0 orphans, 0 field mismatches, TEST PASSED, 0 UVM_ERROR.** Injection (`+LOCKSTEP_INJECT`) caught at exact uuid/PC/lane (`DUT=5 vs SimX=4`) = non-vacuous. Default (no `+LOCKSTEP`) path byte-identical (lockstep SB not built), PASSED. Loads (187) + perf-CSRs (62) correctly scoped out of the data compare.
 
 **What was built (12 files, all in main repo — Vortex/ is tracked, not an active submodule):**
-- **NEW:** `lockstep_pkg.sv` (RTL↔class hand-off: global `dut_retire_q[$]` + `lockstep_en`/`inject_en` gates, macro-free struct), `lockstep_scoreboard.sv` (`check_phase` comparator + 4-way taxonomy + report).
-- **MODIFY (env):** `vx_commit_probe.sv` (passive per-beat capture on `+LOCKSTEP`, `to_fullPC`, `+LOCKSTEP_INJECT` 1-bit flip; `LS_LANES` derived from signal width — `` `SIMD_WIDTH `` NOT visible in probe compile unit), `vortex_config.sv` (`rand bit enable_lockstep`, `+LOCKSTEP` forces `simx_enable`), `vortex_env.sv` (gated `m_lockstep_scoreboard`), `vortex_env_pkg.sv` (import+include), `flists/uvm_env.flist` (lockstep_pkg before probe), `scripts/simulate.sh` (`LOCKSTEP`/`LOCKSTEP_INJECT` env→plusarg).
+- **NEW:** `lockstep_pkg.sv` (RTL↔class hand-off: global `dut_retire_q[$]` + `lockstep_en`/`inject_en` gates, macro-free struct), `lockstep_scoreboard.svh` (`check_phase` comparator + 4-way taxonomy + report).
+- **MODIFY (env):** `vx_commit_probe.sv` (passive per-beat capture on `+LOCKSTEP`, `to_fullPC`, `+LOCKSTEP_INJECT` 1-bit flip; `LS_LANES` derived from signal width — `` `SIMD_WIDTH `` NOT visible in probe compile unit), `vortex_config.sv` (`rand bit enable_lockstep`, `+LOCKSTEP` forces `simx_enable`), `vortex_env.svh` (gated `m_lockstep_scoreboard`), `vortex_env_pkg.sv` (import+include), `flists/uvm_env.flist` (lockstep_pkg before probe), `scripts/simulate.sh` (`LOCKSTEP`/`LOCKSTEP_INJECT` env→plusarg).
 - **MODIFY (SimX golden export — the W1 record was extended, NOT reused as-is):** `Vortex/sim/simx/simx_cosim_record.h` (+`fu_type`,+`is_volatile`, repurposed pad bytes → zero ABI change), `core.cpp` (populate both), `execute.cpp` (set `volatile_result` for MPM CSR range `0xB00-B1F`/`0xB80-B9F`), `instr_trace.h` (+`volatile_result` field). Bridge: `ref_model/simx_dpi.cpp` + `simx_pkg.sv` (`simx_cosim_pop` gains `fu_type`,`is_volatile` outputs + `simx_retire_s` fields).
 
 **KEY DESIGN CORRECTIONS vs the original locked spec (all forced by real sim evidence — record these, they matter for A1):**
@@ -548,7 +565,7 @@ SimX's `Emulator` natively models Vortex's SIMT execution + the 6 custom ops (`w
 
 ### A.4 Milestones
 
-> **RECONCILED 2026-07-14 — W1 export is ALREADY BUILT** (committed `554080e` "changes in simx to verify microarch"). Present in-tree: `simx_retire_t` record ([simx_cosim_record.h](../Vortex/sim/simx/simx_cosim_record.h): uuid/cid/wid/pc/tmask/wb/is_fp/rd/sop/eop/result[32]); export hook at [core.cpp](../Vortex/sim/simx/core.cpp):229 (writeback instrs); queue in `processor_impl.h`; DPI exports `simx_cosim_pop/_pending/_clear` ([simx_dpi.cpp](../vortex_uvm_env/uvm_env/ref_model/simx_dpi.cpp):869); SV DPI **imports** + `simx_retire_s` mirror in `simx_pkg.sv:60-95`. **What's MISSING = the consumer** — nothing calls `simx_cosim_pop()`; `vortex_scoreboard.sv:83` marks lockstep "out of scope"; `vx_commit_probe` only counts (no publish path); the `simx_golden_model` component in `simx_pkg.sv` is a **dead stub** (never instantiated, `ap.write` commented out); the LIVE SimX driver is `vortex_scoreboard.sv` (`simx_init/load/dcr_write/run`). A0 is therefore *the DUT capture path + comparator + wiring*, not the export.
+> **RECONCILED 2026-07-14 — W1 export is ALREADY BUILT** (committed `554080e` "changes in simx to verify microarch"). Present in-tree: `simx_retire_t` record ([simx_cosim_record.h](../Vortex/sim/simx/simx_cosim_record.h): uuid/cid/wid/pc/tmask/wb/is_fp/rd/sop/eop/result[32]); export hook at [core.cpp](../Vortex/sim/simx/core.cpp):229 (writeback instrs); queue in `processor_impl.h`; DPI exports `simx_cosim_pop/_pending/_clear` ([simx_dpi.cpp](../vortex_uvm_env/uvm_env/ref_model/simx_dpi.cpp):869); SV DPI **imports** + `simx_retire_s` mirror in `simx_pkg.sv:60-95`. **What's MISSING = the consumer** — nothing calls `simx_cosim_pop()`; `vortex_scoreboard.svh:83` marks lockstep "out of scope"; `vx_commit_probe` only counts (no publish path); the `simx_golden_model` component in `simx_pkg.sv` is a **dead stub** (never instantiated, `ap.write` commented out); the LIVE SimX driver is `vortex_scoreboard.svh` (`simx_init/load/dcr_write/run`). A0 is therefore *the DUT capture path + comparator + wiring*, not the export.
 
 #### Phase-A locked design decisions (2026-07-14)
 - **D1 = b + c (compose):** repurpose the dead `simx_golden_model` stub → the **golden agent** (drains `simx_cosim_pop()` after the run, publishes golden retire txns on its `ap`); add a **dedicated `lockstep_scoreboard`** comparator. Producer/checker separation. Delete the dead-stub behaviour, keep the shell.
@@ -581,12 +598,14 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 > **read the RTL first and correct this text in place** — do not treat a forward-looking criterion
 > as a constraint.
 
-- **B1 — RAL for DCR. ✅ DONE (2026-08-11, `8ff86a4`).** `uvm_reg_block` over the DCR base registers, write frontdoor through the existing `dcr_agent`, read side via the `bind`-ed `vx_dcr_probe`. Measured 15/15 observations checked / 0 failed on `host_coverage_test`; non-vacuity proven via `+DCR_RAL_INJECT`. Remaining gate item: confirm ZERO per-core mismatches at 2CL/2C (see NEXT ACTION step 3).
+- **B1 — RAL for DCR. ✅ DONE (2026-08-11, `8ff86a4`).** `uvm_reg_block` over the DCR base registers, write frontdoor through the existing `dcr_agent`, read side via the `bind`-ed `vx_dcr_probe`. Measured 15/15 observations checked / 0 failed on `host_coverage_test`; non-vacuity proven via `+DCR_RAL_INJECT`. **GATE DISCHARGED 2026-08-12 (`3c622cd`): at 2CL/2C the check reports `observations=60 checked=60 failed=0 cores_observed=4` — exactly 15×4, every core observed every write, zero mismatches.** The event-driven arming therefore survives the DCR broadcast tree (the OBS-025 hazard) with no tree-latency false positives, so it is now trustworthy as an INV-2 race detector.
+  **`3c622cd` also added a COMPLETENESS check**, because the original checker validated every observation it *received* while nothing noticed observations that never *arrived* — a probe that silently failed to bind on a deep core produced a green result, and deep cores are exactly where OBS-025 lives. It now counts distinct probe `%m` paths against `NUM_CLUSTERS*NUM_CORES` (`VX_dcr_data` has one instantiation site, `VX_core.sv:82`; sockets subdivide cores rather than multiplying them, `VX_gpu_pkg.sv:99`), and `expected_instances==0` skips rather than guesses.
+  **Config-generic across NCL/NC by construction; NW/NT are not a dimension** — DCR storage is per-core only, with no per-warp or per-thread state. XLEN is handled too: `STARTUP_ADDR1`/`ARG1` are `` `ifdef XLEN_64 `` in RTL, so on RV32 the reg block does not create them and the probe reports them `unmapped` rather than inventing storage.
 
   > ⚠️ **The original text of this box was written ahead of the RTL investigation and was wrong in two directions. Both are corrected here (see the PROVISIONAL note at the top of this section).** The superseded wording claimed the RAL would give *"abstraction + predicted mirror + reg coverage, **not** read-back checking (documented limitation)"*, and that *"CSR side can use readback if a path exists"*.
 
   **CORRECTION (a) — read-back checking IS achieved, exceeding the stated limitation.** DCR is indeed write-only (`Vortex/hw/rtl/interfaces/VX_dcr_bus_if.sv:18-31` has only `write_valid`/`write_addr`/`write_data`), so no *frontdoor* read exists. But a **`bind`-based probe on `VX_dcr_data` with a custom `uvm_reg_backdoor`** gives a real peek at `dcrs`, so `mirror(UVM_CHECK)` becomes a genuine check that each DCR write landed in the RTL register — something **nothing in the bench verifies today**. Same construction principle as `vx_commit_probe`/`vx_cache_probe`: `bind` instantiates once per RTL instance, so it is **config-aware by construction** and per-core coverage is free (no hierarchical path enumeration, no `add_hdl_path_slice`).
-  **Peek only, never poke.** The scoreboard mirrors DCR writes into SimX off the monitored interface (`vortex_scoreboard.sv:403 simx_dcr_write`); a backdoor *write* would bypass that and silently desync the golden model. The frontdoor must remain the existing `dcr_agent` path so the waveform stays byte-identical.
+  **Peek only, never poke.** The scoreboard mirrors DCR writes into SimX off the monitored interface (`vortex_scoreboard.svh:403 simx_dcr_write`); a backdoor *write* would bypass that and silently desync the golden model. The frontdoor must remain the existing `dcr_agent` path so the waveform stays byte-identical.
 
   **CORRECTION (b) — CSR is OUT OF SCOPE, for two cited reasons. No B1b box is opened**, because an open box that can never honestly close is debt, not a decision.
   1. **No host-side bus.** There is no `VX_csr_bus_if` anywhere in `hw/rtl/`; `interfaces/` contains only `VX_commit_csr_if` and `VX_sched_csr_if`, both internal core plumbing. CSRs are architectural state reached by `csrr`/`csrw` **instructions**, so there is no protocol for a RAL frontdoor to model.
@@ -760,7 +779,7 @@ verified" or "we stressed the design"** — neither is currently supportable (se
 - **FW-4 — Error/exception axis (currently ABSENT).** AXI `bresp`/`rresp` were waived as
   *"TB always OKAY, no error-inject test"* — so there is **zero evidence** about behaviour when
   something goes wrong. Add a plusarg-gated slave error-injection mode (infrastructure already
-  exists from the throttle/flood modes in `axi_driver.sv`), un-waive those coverpoints, and
+  exists from the throttle/flood modes in `axi_driver.svh`), un-waive those coverpoints, and
   close the open **T-exc** checklist item.
 
 - **FW-5 — X-propagation, randomized reset, gate-level.** Reset is a single deterministic
@@ -898,5 +917,5 @@ Populated from [instr_trace.h](../Vortex/sim/simx/instr_trace.h) `instr_trace_t`
 1. Extend `vx_commit_probe.sv`: on `retire_fire[i]`, push `{uuid,wid,PC,rd,wb,tmask,data[lane]}` to a package-scope retire queue (D2a), `cfg.enable_lockstep`-gated.
 2. Repurpose `simx_golden_model` stub → `simx_golden_agent`: post-`simx_run`, drain `simx_cosim_pop()` (already imported), emit golden retire txns on `ap`.
 3. `lockstep_scoreboard`: `dut_map`/`gold_map` by `uuid`, per-active-lane compare `{PC,rd,result[lane]}` (W1.3), drain-empty check.
-4. Add `cfg.enable_lockstep` + plusarg; wire golden agent + scoreboard in `vortex_env.sv`; sequence the drain after the end-state scoreboard's `simx_run`.
+4. Add `cfg.enable_lockstep` + plusarg; wire golden agent + scoreboard in `vortex_env.svh`; sequence the drain after the end-state scoreboard's `simx_run`.
 5. Run `vecadd_lite`; prove lane-exact match, injected-corruption catch, and `uuid` 1:1 identity (A0 accept).
