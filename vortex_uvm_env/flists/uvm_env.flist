@@ -73,33 +73,6 @@ $VORTEX_UVM_HOME/uvm_env/ral/vortex_dcr_ral_pkg.sv
 $VORTEX_UVM_HOME/tb/vx_dcr_probe.sv
 
 # 6. Agent components (standalone, each imports its own pkg at the top)
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent.sv
 
 # 7. Ref model
 $VORTEX_UVM_HOME/uvm_env/ref_model/simx_pkg.sv

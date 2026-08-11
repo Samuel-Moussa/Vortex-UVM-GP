@@ -4,11 +4,11 @@
 //
 // Change from original (file:18):
 //   Added two lines only:
-//     `include "random_instr_stress_vseq.sv"         (after kernel_launch_vseq)
-//     `include "random_instruction_stress_test.sv"    (after kernel_launch_test)
+//     `include "random_instr_stress_vseq.svh"         (after kernel_launch_vseq)
+//     `include "random_instruction_stress_test.svh"    (after kernel_launch_test)
 //
 // Subsequent additions (T-fmem / T-axi):
-//   Removed `include "functional_memory_test.sv" from its original position
+//   Removed `include "functional_memory_test.svh" from its original position
 //   (which was before kernel_launch_test — wrong order since the new class
 //   extends kernel_launch_test). Added both new tests at the end of the test
 //   include block, after barrier_sync_test.sv.
@@ -38,33 +38,33 @@ package vortex_test_pkg;
     //==========================================================================
     // Sequence base classes (must come before any test that uses them)
     //==========================================================================
-    `include "vortex_base_sequence.sv"
-    `include "vortex_virtual_sequence.sv"
+    `include "vortex_base_sequence.svh"
+    `include "vortex_virtual_sequence.svh"
 
     //==========================================================================
     // Virtual sequences (must come before tests that instantiate them)
     //==========================================================================
-    `include "vortex_functional_mem_vseq.sv"
-    `include "kernel_launch_vseq.sv"
-    `include "random_instr_stress_vseq.sv"          // ← NEW
-    `include "host_coverage_vseq.sv"                // ← NEW (coverage push)
+    `include "vortex_functional_mem_vseq.svh"
+    `include "kernel_launch_vseq.svh"
+    `include "random_instr_stress_vseq.svh"          // ← NEW
+    `include "host_coverage_vseq.svh"                // ← NEW (coverage push)
 
     //==========================================================================
     // Include Test Files
     //==========================================================================
-    `include "vortex_base_test.sv"
-    `include "vortex_sanity_test.sv"
-    `include "vortex_smoke_test.sv"
-    `include "kernel_launch_test.sv"
-    `include "host_coverage_test.sv"                // ← NEW (extends kernel_launch_test)
-    `include "negative_result_test.sv"
-    `include "negative_dropped_store_test.sv"        // ← SB-DIR bidirectional (dropped-store) proof
-    `include "random_instruction_stress_test.sv"    // ← NEW
-    `include "warp_scheduling_test.sv"
-    `include "barrier_sync_test.sv"
-    `include "functional_memory_test.sv"            // ← NEW (extends kernel_launch_test; must follow it)
-    `include "axi_memory_test.sv"                   // ← NEW (extends kernel_launch_test; AXI path only)
-    `include "regression_test.sv"       
+    `include "vortex_base_test.svh"
+    `include "vortex_sanity_test.svh"
+    `include "vortex_smoke_test.svh"
+    `include "kernel_launch_test.svh"
+    `include "host_coverage_test.svh"                // ← NEW (extends kernel_launch_test)
+    `include "negative_result_test.svh"
+    `include "negative_dropped_store_test.svh"        // ← SB-DIR bidirectional (dropped-store) proof
+    `include "random_instruction_stress_test.svh"    // ← NEW
+    `include "warp_scheduling_test.svh"
+    `include "barrier_sync_test.svh"
+    `include "functional_memory_test.svh"            // ← NEW (extends kernel_launch_test; must follow it)
+    `include "axi_memory_test.svh"                   // ← NEW (extends kernel_launch_test; AXI path only)
+    `include "regression_test.svh"       
 
 endpackage : vortex_test_pkg
 

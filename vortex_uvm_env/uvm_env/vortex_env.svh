@@ -42,7 +42,7 @@ import status_agent_pkg::*;
 import vortex_dcr_ral_pkg::*;
 import vortex_env_pkg::*;
 
-// `include "vortex_virtual_sequencer.sv"
+// `include "vortex_virtual_sequencer.svh"
 
 // Note: scoreboard and coverage_collector are included by vortex_env_pkg.sv
 // Do NOT include them here again to avoid double-compilation errors.

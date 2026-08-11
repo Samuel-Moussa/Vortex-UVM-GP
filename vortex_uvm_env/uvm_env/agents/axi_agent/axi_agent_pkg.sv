@@ -116,22 +116,22 @@ package axi_agent_pkg;
     //==========================================================================
     
     // Transaction class (sequence item)
-    `include "axi_transaction.sv"
+    `include "axi_transaction.svh"
     
     // Driver (active component)
-    `include "axi_driver.sv"
+    `include "axi_driver.svh"
     
     // Monitor (passive observer)
-    `include "axi_monitor.sv"
+    `include "axi_monitor.svh"
     
     // Sequencer (transaction arbiter)
-    `include "axi_sequencer.sv"
+    `include "axi_sequencer.svh"
     
     // Sequences (stimulus generators)
-    `include "axi_sequences.sv"
+    `include "axi_sequences.svh"
     
     // Agent container (top-level)
-    `include "axi_agent.sv"
+    `include "axi_agent.svh"
     
     //==========================================================================
     // Utility Functions

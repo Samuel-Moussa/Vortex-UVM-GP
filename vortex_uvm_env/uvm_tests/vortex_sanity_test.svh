@@ -26,7 +26,7 @@ import uvm_pkg::*;
 import vortex_config_pkg::*;
 import vortex_env_pkg::*;
 
-`include "vortex_base_test.sv"
+`include "vortex_base_test.svh"
 
 
 class vortex_sanity_test extends vortex_base_test;
