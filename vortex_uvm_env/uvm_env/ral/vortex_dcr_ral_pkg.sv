@@ -244,9 +244,27 @@ package vortex_dcr_ral_pkg;
         int unsigned n_checked  = 0;
         int unsigned n_failed   = 0;
         int unsigned n_unmapped = 0;
+
+        // How many probe instances SHOULD have reported, i.e. how many cores the
+        // RTL elaborated. Set by the env from the config object; left 0 means
+        // "unknown" and the completeness check is skipped rather than guessed.
+        //
+        // WHY THIS EXISTS: `bind` makes the probe per-core by construction, but
+        // "by construction" is not the same as "verified". Every observation that
+        // ARRIVES is checked, yet nothing noticed observations that never arrive —
+        // so a probe that silently failed to bind on a deep core produced a green
+        // result. That is the exact failure mode the per-core check is supposed to
+        // catch (OBS-025 lives on the deep cores, not core 0), so a checker blind
+        // to it would be worse than useless: it would look like evidence.
+        int unsigned expected_instances = 0;
         bit          inject     = 0;
         bit          injected   = 0;
         bit          inject_seen_fail = 0;
+
+        // Distinct hierarchical paths that reported at least once. Keyed by the
+        // probe's own `%m`, so the count is the number of cores actually observed
+        // — never a derived or assumed number.
+        protected bit m_seen_paths[string];
 
         function new(string name, uvm_component parent);
             super.new(name, parent);
@@ -274,6 +292,11 @@ package vortex_dcr_ral_pkg;
                 uvm_reg            rg = regs.reg_at(o.addr);
                 vortex_dcr_reg     vr_dbg;
                 bit [63:0]         expected, actual;
+
+                // Record liveness BEFORE the unmapped filter: an observation of
+                // an address this build does not model still proves that probe
+                // instance exists and is reporting.
+                m_seen_paths[o.path] = 1'b1;
 
                 if (rg == null) begin
                     // Not modelled in this build (e.g. an XLEN_64-only address on
@@ -322,8 +345,35 @@ package vortex_dcr_ral_pkg;
             end
 
             `uvm_info("DCR_RAL", $sformatf(
-                "DCR backdoor check: observations=%0d checked=%0d failed=%0d unmapped(not built in this config)=%0d",
-                vx_dcr_observer::q.size(), n_checked, n_failed, n_unmapped), UVM_LOW)
+                "DCR backdoor check: observations=%0d checked=%0d failed=%0d unmapped(not built in this config)=%0d cores_observed=%0d",
+                vx_dcr_observer::q.size(), n_checked, n_failed, n_unmapped,
+                m_seen_paths.num()), UVM_LOW)
+
+            // COMPLETENESS: did every core report? VX_dcr_data is instantiated
+            // once per core (VX_core.sv:82, its only instantiation site), and
+            // sockets SUBDIVIDE cores rather than multiplying them
+            // (NUM_SOCKETS = UP(NUM_CORES/SOCKET_SIZE), VX_gpu_pkg.sv:99), so the
+            // elaborated instance count is exactly NUM_CLUSTERS * NUM_CORES.
+            // The DCR bus is broadcast, so every core sees every write and must
+            // appear here. Fewer means a probe did not bind or a core never got
+            // the write — both are real findings, and both would otherwise hide
+            // behind a green per-observation result.
+            if (expected_instances != 0) begin
+                if (m_seen_paths.num() != expected_instances) begin
+                    `uvm_error("DCR_RAL", $sformatf(
+                        "DCR probe COMPLETENESS FAILED: %0d core(s) reported, expected %0d (NUM_CLUSTERS*NUM_CORES). Either a vx_dcr_probe did not bind, or a core never observed a DCR write.",
+                        m_seen_paths.num(), expected_instances))
+                    foreach (m_seen_paths[p])
+                        `uvm_info("DCR_RAL", $sformatf("  reported: %s", p), UVM_LOW)
+                end else begin
+                    `uvm_info("DCR_RAL", $sformatf(
+                        "DCR probe completeness OK: all %0d core(s) reported",
+                        expected_instances), UVM_LOW)
+                end
+            end else begin
+                `uvm_info("DCR_RAL",
+                    "expected_instances not set — per-core completeness NOT checked (count above is informational only)", UVM_LOW)
+            end
 
             // A silent checker is worthless. If nothing was ever observed the
             // probe is not wired, and saying so is better than reporting "0 fails".
