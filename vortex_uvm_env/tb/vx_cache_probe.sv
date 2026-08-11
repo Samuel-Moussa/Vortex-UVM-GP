@@ -46,6 +46,14 @@ module vx_cache_probe import VX_gpu_pkg::*; #(
     parameter CACHE_SIZE          = 1024,
     parameter NUM_WAYS            = 1,
     parameter WRITEBACK           = 0,
+    // Passed straight through from VX_cache_bank.sv:42. A cache built with
+    // WRITE_ENABLE=0 has no write datapath at all (VX_cache_bank.sv:271 g_data_sel
+    // and :590 g_mreq_queue are both generate-gated on it), so write and flush
+    // activity is structurally impossible rather than merely unstimulated. In
+    // this design the only such cache is the icache (VX_socket.sv:106 passes
+    // .WRITE_ENABLE (0)); every other level is writable, so no bins are lost
+    // where they are reachable.
+    parameter WRITE_ENABLE        = 1,
     parameter ENABLE              = 1   // explicit suppression hook (see header)
 ) (
     input wire clk,
@@ -117,6 +125,18 @@ module vx_cache_probe import VX_gpu_pkg::*; #(
             // normal per-value filter that happens to be gated on the parameter.
             ignore_bins wb_unreachable = {EV_WRITEBACK}
                                          with (item == EV_WRITEBACK && WRITEBACK == 0);
+            // A read-only cache is never flushed, for TWO independent structural
+            // reasons -- either alone is sufficient:
+            //   1. There is no dirty state to write back and no write datapath to
+            //      invalidate through (WRITE_ENABLE=0 removes both generate blocks,
+            //      VX_cache_bank.sv:271 and :590).
+            //   2. MEM_REQ_FLAG_FLUSH has exactly ONE producer in the whole design,
+            //      VX_lsu_slice.sv:73 (= req_is_fence), which drives the DCACHE
+            //      path. VX_fetch.sv contains no flush logic whatsoever, so no
+            //      flush request can ever be addressed to the icache.
+            // Same `item`-referencing form as above (vlog-13185).
+            ignore_bins flush_unreachable = {EV_FLUSH}
+                                         with (item == EV_FLUSH && WRITE_ENABLE == 0);
         }
 
         // Hit vs miss on a core request — the primary cache-quality signal.
@@ -129,6 +149,13 @@ module vx_cache_probe import VX_gpu_pkg::*; #(
         cp_rw: coverpoint s_is_write iff (s_event == EV_ACCESS) {
             bins rd = {0};
             bins wr = {1};
+            // No write can reach a cache built without a write datapath
+            // (WRITE_ENABLE=0 -> VX_cache_bank.sv:271/:590 not generated). The
+            // icache is fed only by VX_fetch, which issues reads exclusively.
+            // NOTE: this also removes <wr,hit> and <wr,miss> from cross_rw_hit
+            // automatically -- a cross is built from the coverpoint's REMAINING
+            // bins, so the two cross bins must NOT be waived separately.
+            ignore_bins wr_unreachable = {1} with (item == 1 && WRITE_ENABLE == 0);
         }
 
         // MSHR replay: a request that previously missed being re-driven. Exercises

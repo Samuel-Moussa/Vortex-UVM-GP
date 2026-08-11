@@ -1041,7 +1041,13 @@ module vortex_tb_top;
         .BANK_ID    (BANK_ID),
         .CACHE_SIZE (CACHE_SIZE),
         .NUM_WAYS   (NUM_WAYS),
-        .WRITEBACK  (WRITEBACK)
+        .WRITEBACK  (WRITEBACK),
+        // Structural waiver key: the icache is built .WRITE_ENABLE(0)
+        // (VX_socket.sv:106), which makes its write and flush bins impossible
+        // rather than unstimulated. Passed through by `bind` so the waiver is
+        // per-instance and config-generic -- enable L2/L3 or change the socket
+        // and the correct caches keep their bins with no edit here.
+        .WRITE_ENABLE (WRITE_ENABLE)
     ) u_cache_probe (
         .clk            (clk),
         .reset          (reset),
