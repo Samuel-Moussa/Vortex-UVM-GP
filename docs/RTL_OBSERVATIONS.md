@@ -1013,3 +1013,44 @@ exits through `tmc x0` → `active_warps=0` → `busy` deassert and **never deco
 exactly as `vx_start.S:69-75` and `VX_schedule.sv:139/390` predict. The `** Warning:` on the
 architecturally-correct path is therefore emitted on a fully passing run — which is the concrete
 cost of the inverted hierarchy described above.
+
+---
+
+### OBS-025 (RESET-DOMAIN hazard, multi-cluster/multi-socket only) — the DCR broadcast tree stacks **three** unreset elements in exactly the window where a core self-starts
+
+- **Class:** reset-domain / X-propagation hazard. Benign in practice today, but it compounds
+  INV-2 and is present **only** at `NUM_CLUSTERS > 1` or `NUM_SOCKETS > 1`. Found while scoping
+  the B1 DCR RAL. **OPEN.**
+- **What we saw — three unreset elements in series:**
+  1. **The DCR pipe register is doubly unreset.** `BUFFER_DCR_BUS_IF`
+     (`Vortex/hw/rtl/VX_define.vh:373-388`) instantiates `VX_pipe_register` with
+     `.reset (1'b0)` hardwired (`:381`) **and** without passing `RESETW`, which defaults to `0`
+     (`Vortex/hw/rtl/libs/VX_pipe_register.sv:19`). So the stage has no reset by two independent
+     mechanisms, and `dst.write_valid` is **X out of reset** until the first write propagates.
+  2. **The DCR storage has no reset.** `VX_dcr_data.sv:27` `UNUSED_VAR (reset)`; `dcrs` holds X
+     until written (this is the INV-2 root cause).
+  3. **Cores self-start from reset.** `VX_schedule.sv:230` — a core begins fetching without
+     waiting for any DCR handshake.
+- **Why it is benign *today*:** the X only reaches `if (dcr_bus_if.write_valid)`
+  (`VX_dcr_data.sv:32`), and an X condition takes the false branch in simulation, so no bogus
+  write is latched. That is a *simulation semantics* rescue, not an architectural guarantee —
+  it would not survive X-pessimism analysis, gate-level simulation, or synthesis inference.
+- **Why it matters and why it is config-specific:** the pipe stages exist only at
+  `NUM_CLUSTERS > 1` (`Vortex.sv:138`) and `NUM_SOCKETS > 1` (`VX_cluster.sv:129`), each
+  `DEPTH=1`. At ≥2 clusters/sockets a DCR write therefore reaches a deep core **later** than
+  core 0, widening the INV-2 race window (core already running before its `STARTUP_ADDR`
+  arrives) for precisely the cores that are hardest to observe. At 1CL/1C the tree is degenerate
+  and none of this is reachable — which is why it has never been seen.
+- **Direct consequence for the B1 RAL (recorded so it is not rediscovered):** a per-core DCR
+  mirror check must **NOT** be armed off the global TB `dcr_bootstrap_done` handshake. That
+  signal says the TB finished driving, not that the write traversed up to two pipeline stages
+  to a deep core; arming on it would sample a deep core's `dcrs` too early and report a **false
+  mismatch that is pure tree latency**. The check must be **event-driven per probe instance** —
+  each bound probe compares only after it observes its own `write_valid` retire into `dcrs`.
+  That derives no latency constant and stays correct if the tree ever gets deeper.
+- **Disposition:** OPEN. Not a defect we can demonstrate failing today; it is a latent
+  X/reset-domain hazard plus a real widening of the INV-2 window at scale.
+- **Enhancement if closed:** give `BUFFER_DCR_BUS_IF` a real reset (pass `reset` and a
+  `RESETW`/`INIT_VALUE` that clears `write_valid`), and/or reset `dcrs` in `VX_dcr_data`. Either
+  removes an unreset element from the startup path; doing both plus the INV-2 reset-hold makes
+  DCR bootstrap deterministic at any topology.
