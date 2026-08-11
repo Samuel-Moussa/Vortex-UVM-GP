@@ -204,6 +204,12 @@ done
 
 echo "=== SUITE VERDICT: ${#RUNS[@]} staged, $FAILED FAILED ==="
 echo "=== MERGING ${#RUNS[@]} runs ==="; printf '  %s\n' "${RUNS[@]}"
+# The exclusion generator is CONFIG-KEYED (gen_coverage_exclude.sh NCL NC NW NT),
+# but merge_coverage.sh reads the config from COV_* env vars that default to
+# 1/1/4/4 (merge_coverage.sh:48). Without this export a 2CL suite would be banked
+# with 1CL exclusions -- e.g. the single-core `is_global` barrier waiver applied to
+# a build where that barrier IS reachable. Pass through the config we actually ran.
+export COV_NCL="$CLUSTERS" COV_NC="$CORES" COV_NW="$WARPS" COV_NT="$THREADS"
 bash scripts/merge_coverage.sh --fresh   >"$LOGDIR/merge.log" 2>&1
 bash scripts/merge_coverage.sh --collect "${RUNS[@]}" >>"$LOGDIR/merge.log" 2>&1
 echo "=== DONE — combined coverage: ==="
