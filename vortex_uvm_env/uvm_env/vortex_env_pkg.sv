@@ -41,13 +41,13 @@ package vortex_env_pkg;
     `uvm_analysis_imp_decl(_rvvi)
 
     // INCLUDE the components so they are compiled inside this package
-    `include "vortex_virtual_sequencer.sv"
-    `include "rvvi_txn.sv"
-    `include "rvvi_monitor.sv"
-    `include "vortex_scoreboard.sv"
-    `include "lockstep_scoreboard.sv"
-    `include "vortex_coverage_collector.sv"
-    `include "vortex_env.sv"
+    `include "vortex_virtual_sequencer.svh"
+    `include "rvvi_txn.svh"
+    `include "rvvi_monitor.svh"
+    `include "vortex_scoreboard.svh"
+    `include "lockstep_scoreboard.svh"
+    `include "vortex_coverage_collector.svh"
+    `include "vortex_env.svh"
 
 endpackage : vortex_env_pkg
 

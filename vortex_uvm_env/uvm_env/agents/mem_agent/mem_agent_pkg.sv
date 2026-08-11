@@ -73,22 +73,22 @@ package mem_agent_pkg;
     //==========================================================================
     
     // Transaction class (sequence item)
-    `include "mem_transaction.sv"
+    `include "mem_transaction.svh"
     
     // Driver (active component)
-    `include "mem_driver.sv"
+    `include "mem_driver.svh"
     
     // Monitor (passive observer)
-    `include "mem_monitor.sv"
+    `include "mem_monitor.svh"
     
     // Sequencer (transaction arbiter)
-    `include "mem_sequencer.sv"
+    `include "mem_sequencer.svh"
     
     // Sequences (stimulus generators)
-    `include "mem_sequences.sv"
+    `include "mem_sequences.svh"
     
     // Agent container (top-level)
-    `include "mem_agent.sv"
+    `include "mem_agent.svh"
     
     //==========================================================================
     // Utility Functions

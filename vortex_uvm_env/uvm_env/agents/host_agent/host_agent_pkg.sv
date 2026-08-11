@@ -53,22 +53,22 @@ package host_agent_pkg;
     //==========================================================================
     
     // Transaction class (host operation descriptor)
-    `include "host_transaction.sv"
+    `include "host_transaction.svh"
     
     // Sequencer (transaction arbiter)
-    `include "host_sequencer.sv"
+    `include "host_sequencer.svh"
     
     // Driver (transaction executor using clocking blocks)
-    `include "host_driver.sv"
+    `include "host_driver.svh"
     
     // Monitor (passive observer using clocking blocks)
-    `include "host_monitor.sv"
+    `include "host_monitor.svh"
     
     // Agent container (top-level orchestrator)
-    `include "host_agent.sv"
+    `include "host_agent.svh"
     
     // Sequence library (reusable test sequences)
-    `include "host_sequences.sv"
+    `include "host_sequences.svh"
     
 endpackage : host_agent_pkg
 

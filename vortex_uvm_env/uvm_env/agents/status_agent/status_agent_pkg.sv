@@ -48,13 +48,13 @@ package status_agent_pkg;
     //==========================================================================
     
     // Transaction class (status snapshot)
-    `include "status_transaction.sv"
+    `include "status_transaction.svh"
     
     // Monitor (passive observer)
-    `include "status_monitor.sv"
+    `include "status_monitor.svh"
     
     // Agent container (top-level)
-    `include "status_agent.sv"
+    `include "status_agent.svh"
     
 endpackage : status_agent_pkg
 
