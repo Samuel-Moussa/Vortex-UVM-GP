@@ -11,7 +11,31 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A COMPLETE · B2 CLOSED 2026-08-07. NEXT: Phase B / B1 (RAL).**
+**CURRENT MILESTONE: Phase A COMPLETE · B2 CLOSED · B1 CLOSED (2026-08-11). NEXT: `.svh` convention fix, then RE-BANK 1CL and 2CL coverage.**
+
+**B1 ✅ (2026-08-11, `8ff86a4`) — DCR RAL with a per-core `bind`-probe backdoor.**
+Achieved **real read-back checking**, which this plan previously said was impossible. New files:
+`vortex_uvm_env/tb/vx_dcr_probe.sv` (bound into `VX_dcr_data`, peek-only) and
+`vortex_uvm_env/uvm_env/ral/vortex_dcr_ral_pkg.sv` (reg block + adapter + checker).
+**Measured: `host_coverage_test` 15/15 observations checked, 0 failed** — the RTL stored every
+DCR write correctly including `MPM_CLASS`'s 8-bit truncation. Non-vacuity proven with
+`+DCR_RAL_INJECT` (default OFF): names register, probe path and both values. No regression —
+`vecadd_lite data_compared=84` unchanged, both Gate-0 guards still RED on injection.
+**⚠ TWO TESTBENCH BUGS FOUND DURING B1 — the DUT was correct both times.** Recorded because the
+failure signature looks exactly like a DUT defect:
+1. **`set_auto_predict` leaves a stale mirror.** It only updates the model for writes issued
+   *through* the RAL, but most DCR traffic comes from legacy sequences driving the agent
+   directly (bootstrap, `host_coverage_vseq`). RTL held the right value, mirror held 0 ⇒ **11
+   false errors**. Fixed with a `uvm_reg_predictor` on the **monitor**, which also extends the
+   check to legacy stimulus (strictly more valuable than RAL-only coverage).
+2. **End-state mirror vs historical observation.** Comparing every observation against the
+   *final* mirrored value is wrong whenever an address is written more than once —
+   `host_coverage_test` sweeps DCR values, so `RTL(actual)` legitimately showed `0x0`/`0x40`/
+   `0x10000` while the mirror held `0x80000000` ⇒ **10 false errors**. Fixed by comparing each
+   observation against the write that produced it, truncated to the field width the register
+   model supplies.
+**Lesson to carry:** a firing checker is not evidence of a DUT bug. Both times the correct move
+was to investigate which side was right, not to loosen the check.
 
 **B2 ✅ (2026-08-07) — end-state scoreboard collapsed to a single source of truth.**
 `shadow_memory` (a parallel 64-bit reconstruction assembled from snooped write transactions)
@@ -38,7 +62,41 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 
 ### ▶▶ NEXT ACTION (exact, resumable — 2026-08-07)
 
-**PHASE A IS COMPLETE. B2 IS CLOSED. NEXT: Phase B — B1 (RAL).**
+**PHASE A COMPLETE. B2 CLOSED. B1 CLOSED. NEXT, IN THIS ORDER:**
+
+**(1) `.svh` convention fix (small, mechanical, own commit).** UVM 1.2 convention is: files that
+are **compiled** (packages, modules, interfaces, tb_top) stay `.sv`; files that are
+**`` `include ``-d** into a package/class scope are headers and should be `.svh`. The repo
+violates this — e.g. `uvm_env/vortex_env.sv` is `` `include ``-d at `vortex_env_pkg.sv:50`.
+Keep it a standalone commit: it rewrites every `` `include `` plus flist entries, and mixing it
+with functional work would bury the diff and complicate a bisect. Imported *packages* are
+compilation units and must NOT be renamed.
+
+**(2) RE-BANK 1CL coverage.** One `scripts/run_suite.sh` run, now **45/45** (the `text_big`
+budget was raised 400k→800k in `6627311` after measuring 490,468 cycles to completion). The
+current `cov/merged.ucdb` is a **44-run merge missing `text_big`** and must not be quoted as a
+clean bank. Fresh 1CL totals from that incomplete merge: total 90.90% · stmt 96.80% ·
+branch 91.02% · cond 76.03% · toggle 78.42% · assert 96.09% · directives 100% ·
+covergroup bins 398/407 (97.78%).
+
+**(3) RE-BANK 2CL coverage.** The banked 2CL numbers are from 2026-07-10 (total 85.16%) and are
+**stale** — they predate L2/L3 enablement, the G1 cache probe, A3, A6, B2 and B1. Requires an
+RTL + SimX rebuild for the config. **This run also discharges a B1 gate item:** confirm the
+per-core DCR check reports **ZERO** mismatches at 2CL/2C before trusting it as an INV-2 race
+detector, otherwise "found the race" is indistinguishable from "armed too early" (OBS-025).
+
+**(4) icache coverage — structural waivers are READY TO WRITE (analysis done 2026-08-11, not yet
+applied).** All 6 `cache_event_cg` misses are accounted for, with RTL citations:
+- **icache `cp_rw.wr`** and the two `cross_rw_hit <wr,*>` bins — **STRUCTURAL**: the icache is
+  instantiated `.WRITE_ENABLE (0)` (`Vortex/hw/rtl/VX_socket.sv:107`). Instruction fetch cannot
+  write.
+- **icache `cp_event.flush`** — **STRUCTURAL**: `MEM_REQ_FLAG_FLUSH` has exactly **one** producer
+  in all of `hw/rtl` — `core/VX_lsu_slice.sv:73` `= req_is_fence`, which drives the **dcache**.
+  `VX_fetch.sv` contains no flush logic at all, so the fetch path cannot request a flush.
+- **icache + dcache `cp_mshr_stall.stall`** — **NOT structural**, a genuine stimulus gap (the MSHR
+  never saturates). Leave honestly uncovered.
+Applying the 4 structural waivers takes covergroup bins 398/407 → **398/403 = 98.76%**, leaving
+only the two honest `mshr_stall` gaps. Do this as part of the re-bank so it is measured once.
 
 **B2 ✅ CLOSED — do not re-open it, and specifically do not "finish" it by deleting the write
 mask.** What actually landed (see the milestone block above for the full result table):
@@ -523,7 +581,7 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 > **read the RTL first and correct this text in place** — do not treat a forward-looking criterion
 > as a constraint.
 
-- **B1 — RAL for DCR.** `uvm_reg_block` modeling the DCR base registers (STARTUP_ADDR0/1, ARGV_PTR0/1, MPM_CLASS). *Accept: DCR sequences issue through the reg model; reg coverage collected; per-core backdoor mirror checks pass.*
+- **B1 — RAL for DCR. ✅ DONE (2026-08-11, `8ff86a4`).** `uvm_reg_block` over the DCR base registers, write frontdoor through the existing `dcr_agent`, read side via the `bind`-ed `vx_dcr_probe`. Measured 15/15 observations checked / 0 failed on `host_coverage_test`; non-vacuity proven via `+DCR_RAL_INJECT`. Remaining gate item: confirm ZERO per-core mismatches at 2CL/2C (see NEXT ACTION step 3).
 
   > ⚠️ **The original text of this box was written ahead of the RTL investigation and was wrong in two directions. Both are corrected here (see the PROVISIONAL note at the top of this section).** The superseded wording claimed the RAL would give *"abstraction + predicted mirror + reg coverage, **not** read-back checking (documented limitation)"*, and that *"CSR side can use readback if a path exists"*.
 
