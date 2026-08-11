@@ -64,6 +64,14 @@ $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent_pkg.sv
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent_pkg.sv
 $VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent_pkg.sv
 
+# 5b. B1 — DCR RAL. MUST follow dcr_agent_pkg (the adapter builds a
+# dcr_transaction) and MUST precede both vx_dcr_probe.sv (the probe calls
+# vortex_dcr_ral_pkg::vx_dcr_observer::note) and vortex_env_pkg.sv (the env
+# instantiates the reg block + checker). This is why the probe does NOT sit with
+# the other tb/ probes above — its package dependency lands later than theirs.
+$VORTEX_UVM_HOME/uvm_env/ral/vortex_dcr_ral_pkg.sv
+$VORTEX_UVM_HOME/tb/vx_dcr_probe.sv
+
 # 6. Agent components (standalone, each imports its own pkg at the top)
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_transaction.sv
 $VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequences.sv

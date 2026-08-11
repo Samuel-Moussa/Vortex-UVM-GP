@@ -39,6 +39,7 @@ import axi_agent_pkg::*;
 import dcr_agent_pkg::*;
 import host_agent_pkg::*;
 import status_agent_pkg::*;
+import vortex_dcr_ral_pkg::*;
 import vortex_env_pkg::*;
 
 // `include "vortex_virtual_sequencer.sv"
@@ -62,6 +63,22 @@ class vortex_env extends uvm_env;
   dcr_agent    m_dcr_agent;
   host_agent   m_host_agent;
   status_agent m_status_agent;
+
+  //==========================================================================
+  // B1 — DCR register model (RAL)
+  //
+  // Write frontdoor through the existing dcr_agent (so the driven waveform and
+  // the SimX feed are unchanged); read side via the bound vx_dcr_probe, since
+  // VX_dcr_bus_if has no read channel. m_dcr_ral_checker turns the probe's
+  // per-core observations into a real verdict.
+  //==========================================================================
+  vortex_dcr_reg_block   m_dcr_regs;
+  vortex_dcr_adapter     m_dcr_adapter;
+  vortex_dcr_ral_checker m_dcr_ral_checker;
+  // Predicts off the MONITOR, so DCR writes issued by legacy sequences directly
+  // on the agent (bootstrap, host_coverage_vseq) update the mirror too. Without
+  // this the backdoor check reports a false mismatch for every non-RAL write.
+  uvm_reg_predictor #(dcr_transaction) m_dcr_predictor;
 
   //==========================================================================
   // Virtual Sequencer
@@ -142,6 +159,17 @@ class vortex_env extends uvm_env;
     if (cfg.dcr_agent_enable) begin
       m_dcr_agent = dcr_agent::type_id::create("m_dcr_agent", this);
       `uvm_info("VORTEX_ENV", "dcr_agent created", UVM_MEDIUM)
+
+      // B1: register model + backdoor checker. Built alongside the agent because
+      // the frontdoor needs its sequencer; the checker is harmless if no DCR
+      // write ever happens (it warns rather than passing silently).
+      m_dcr_regs = vortex_dcr_reg_block::type_id::create("m_dcr_regs");
+      m_dcr_regs.build();
+      m_dcr_adapter = vortex_dcr_adapter::type_id::create("m_dcr_adapter");
+      m_dcr_ral_checker = vortex_dcr_ral_checker::type_id::create("m_dcr_ral_checker", this);
+      m_dcr_ral_checker.regs = m_dcr_regs;
+      m_dcr_predictor = uvm_reg_predictor#(dcr_transaction)::type_id::create("m_dcr_predictor", this);
+      `uvm_info("VORTEX_ENV", "DCR RAL (reg block + backdoor checker) created", UVM_MEDIUM)
     end
 
     if (cfg.host_agent_enable) begin
@@ -225,6 +253,24 @@ class vortex_env extends uvm_env;
         m_dcr_agent.get_is_active()  == UVM_ACTIVE &&
         m_dcr_agent.m_sequencer  != null)
       m_virtual_sequencer.m_dcr_sequencer = m_dcr_agent.m_sequencer;
+
+    // B1: attach the RAL frontdoor to the real DCR sequencer, so a reg-model
+    // write produces exactly the same dcr_transaction the agent already drives.
+    if (m_dcr_regs != null &&
+        m_dcr_agent != null &&
+        m_dcr_agent.get_is_active() == UVM_ACTIVE &&
+        m_dcr_agent.m_sequencer != null) begin
+      m_dcr_regs.dcr_map.set_sequencer(m_dcr_agent.m_sequencer, m_dcr_adapter);
+      `uvm_info("VORTEX_ENV", "DCR RAL frontdoor attached to dcr_sequencer", UVM_MEDIUM)
+    end
+
+    // Explicit prediction off the monitor — see vortex_dcr_ral_pkg build().
+    if (m_dcr_predictor != null && m_dcr_regs != null && m_dcr_agent != null) begin
+      m_dcr_predictor.map     = m_dcr_regs.dcr_map;
+      m_dcr_predictor.adapter = m_dcr_adapter;
+      m_dcr_agent.ap.connect(m_dcr_predictor.bus_in);
+      `uvm_info("VORTEX_ENV", "DCR RAL predictor attached to dcr monitor", UVM_MEDIUM)
+    end
 
     if (m_host_agent != null &&
         m_host_agent.get_is_active() == UVM_ACTIVE &&
