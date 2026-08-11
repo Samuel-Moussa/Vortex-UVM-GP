@@ -1,20 +1,20 @@
 QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
-Start time: 23:44:10 on Jul 10,2026
-vcover report -summary cov/bank_1CL_1C_4W_4T/merged.ucdb 
-Coverage Report Totals BY INSTANCES: Number of Instances 2247
+Start time: 00:04:14 on Aug 12,2026
+vcover report -summary /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/cov/merged.ucdb 
+Coverage Report Totals BY INSTANCES: Number of Instances 2256
 
     Enabled Coverage              Bins      Hits    Misses    Weight  Coverage
     ----------------              ----      ----    ------    ------  --------
-    Assertions                     129       121         8         1    93.79%
-    Branches                      2831      2581       250         1    91.16%
-    Conditions                     313       239        74         1    76.35%
-    Covergroups                     17        na        na         1   100.00%
-        Coverpoints/Crosses         85        na        na         1        na
-            Covergroup Bins        377       374         3         1    99.20%
+    Assertions                     128       123         5         1    96.09%
+    Branches                      2831      2578       253         1    91.06%
+    Conditions                     313       238        75         1    76.03%
+    Covergroups                     19        na        na         1    99.12%
+        Coverpoints/Crosses         97        na        na         1        na
+            Covergroup Bins        403       398         5         1    98.75%
     Directives                       5         5         0         1   100.00%
-    Statements                    4443      4312       131         1    97.05%
-    Toggles                     425432    334632     90800         1    78.65%
-Total coverage (filtered view): 91.00%
+    Statements                    4443      4302       141         1    96.82%
+    Toggles                     425444    333669     91775         1    78.42%
+Total coverage (filtered view): 91.08%
 
-End time: 23:44:11 on Jul 10,2026, Elapsed time: 0:00:01
+End time: 00:04:15 on Aug 12,2026, Elapsed time: 0:00:01
 Errors: 0, Warnings: 0
