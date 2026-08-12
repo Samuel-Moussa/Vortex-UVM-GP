@@ -66,6 +66,51 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
+### ▶ THE FOUR FIXES BEFORE THE 2CL RE-BANK (exact, resumable — 2026-08-13)
+
+**All 8 of the first 2CL attempt's failures are root-caused and NONE is a DUT defect.** Do these
+four, then re-run 2CL ONCE. Everything below is MEASURED — do not re-derive or re-guess it.
+
+**FIX 1 — core-gate riscv-dv programs (OBS-027, the big one).** riscv-dv emits a **single-hart**
+program and its hart dispatch is a structural NO-OP (`csrr x5,0xf14; li x6,0; beq x5,x6,0f` where
+the branch target falls through to the same `h0_start`), so **every core runs the identical stream
+regardless of `mhartid`**. Vortex cores all self-start from reset (`VX_schedule.sv:230`) ⇒ at 2CL
+four cores concurrently execute one single-hart program against the SAME `.data` addresses with no
+fences. Store ORDER then decides each value, and the timing-accurate RTL orders differently from
+functional SimX. *Do:* add post-processing in `prepare.sh` so non-zero cores exit immediately (read
+`VX_CSR_MHARTID`/gtid, `vx_tmc(0)` if != 0). *Accept:* `riscv_rand_instr_test` at 2CL gives 0
+mismatches. ⚠ **Until this lands, EVERY riscv-dv result at ≥2 cores is architecturally undefined
+and must not be quoted as a DUT pass OR failure.**
+
+**FIX 2 — core-scope `barrier_test` (OBS-026).** `bar2_stall` is a shared `volatile int` incremented
+NON-ATOMICALLY by every warp purely as a delay, read by nothing ⇒ no architecturally-defined value.
+At 2CL, 4 cores x 4 warps race on it. The DUT is RIGHT: the kernel self-grades and the DUT wrote
+`0x900DCAFE` (errors==0) while SimX wrote `1`; every CHECKED array matches. *Do:* make all cores
+except core 0 exit, and make the delay loop warp-local. *Accept:* 0 mismatches at 2CL.
+
+**FIX 3 — raise the two MEASURED budgets** (both were only 3–10% short, i.e. fragile even when
+passing, and the shortfall was MASKING the divergences above):
+| test | MEASURED need | current | where |
+|---|---|---|---|
+| `barrier_sync_test` | **164,602** cyc | 150,000 | `run_suite.sh:152` |
+| riscv-dv (all) | **205,982** cyc | 200,000 | `run_suite.sh:71` |
+Set them with real margin (≥3x), not to the measured number.
+*(SimX's own cap is already fixed: `f90a18c` raised the default 2,000,000 → 20,000,000 from the
+measurement that `wide_stress` @2CL needs **2,584,300** SimX cycles. `wide_stress` now PASSES —
+33,004 words compared, 0 mismatches.)*
+
+**FIX 4 — decide FW-1b.** `riscv_pmp_test` ≡ `riscv_non_compressed_instr_test` are BYTE-IDENTICAL
+programs (`.S` md5 `16be14c6…`) testing neither PMP nor non-compressed instructions — measured 0
+`pmpcfg`/`pmpaddr` writes and 0 compressed instrs, because their `gen_opts` are inert at
+`--target=rv32im`. Either drop both and state the honest test count, or make the options effective.
+*Accept:* every riscv-dv entry in `run_suite.sh` produces a program with a DISTINCT md5 — assert it
+in the suite so it cannot regress.
+
+**THEN re-run 2CL once.** Expect at best 43/45 (`riscv_no_fence_test` +
+`riscv_full_interrupt_test` remain documented SimX cross-cluster divergences — do not "fix" them).
+**BANK IT IMMEDIATELY**: `run_suite` merges into `cov/merged.ucdb`, so an unbanked result is
+destroyed by the next config's merge (this nearly lost the clean 1CL bank on 2026-08-12).
+
 **(3) RE-BANK 2CL — ATTEMPTED 2026-08-12, RESULT REJECTED (37/45 staged, 8 FAILED). DO NOT QUOTE
 its 88.76% / 947-1095 bins: an incomplete merge is not a bank.** Full root-cause of all 8 in the
 "2CL FAILURE TRIAGE" block below; none is a DUT defect. **Prerequisites before re-running:**
