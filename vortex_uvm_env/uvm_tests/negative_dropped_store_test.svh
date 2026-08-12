@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: negative_dropped_store_test.sv
+// File: negative_dropped_store_test.svh
 // Description: Negative test for the BIDIRECTIONAL (SB-DIR) scoreboard check.
 //
 // Purpose:

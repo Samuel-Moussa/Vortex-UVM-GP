@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: mem_driver.sv
+// File: mem_driver.svh
 // Description: Custom Memory Agent Driver (Slave Responder)
 //
 // This driver acts as the memory responder for the Vortex DUT when the custom

@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: dcr_transaction.sv
+// File: dcr_transaction.svh
 // Description: DCR (Device Configuration Register) Transaction Class
 //
 // This transaction represents a write to one of Vortex's Device Configuration

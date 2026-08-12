@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_transaction.sv
+// File: host_transaction.svh
 // Description: Host Transaction for High-Level Kernel Operations
 //
 // This transaction represents host-level operations that control the Vortex

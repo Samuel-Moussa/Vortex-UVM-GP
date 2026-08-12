@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: axi_agent.sv
+// File: axi_agent.svh
 // Description: AXI4 UVM Agent Container
 //
 // The agent encapsulates the AXI4 verification components into a reusable

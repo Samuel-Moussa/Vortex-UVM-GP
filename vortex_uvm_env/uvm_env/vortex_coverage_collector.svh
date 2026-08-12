@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_coverage_collector.sv
+// File: vortex_coverage_collector.svh
 // Description: Functional Coverage Collector for Vortex GPGPU
 //
 // Collects functional coverage by subscribing to all agent monitors.

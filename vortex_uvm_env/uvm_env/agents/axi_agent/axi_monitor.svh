@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: axi_monitor.sv
+// File: axi_monitor.svh
 // Description: AXI4 Protocol Monitor with Burst Reconstruction
 //
 // This monitor passively observes all 5 AXI4 channels and reconstructs

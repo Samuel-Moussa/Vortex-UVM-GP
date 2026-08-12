@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_sequencer.sv
+// File: host_sequencer.svh
 // Description: Host Agent Sequencer
 //
 // Standard UVM sequencer parameterized with host_transaction.

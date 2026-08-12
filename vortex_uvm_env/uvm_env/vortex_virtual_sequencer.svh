@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_virtual_sequencer.sv
+// File: vortex_virtual_sequencer.svh
 // Description: Virtual Sequencer for Multi-Agent Coordination
 //
 // The virtual sequencer provides a centralized access point to all agent

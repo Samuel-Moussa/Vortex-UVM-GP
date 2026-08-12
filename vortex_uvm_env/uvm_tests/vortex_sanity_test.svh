@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_sanity_test.sv
+// File: vortex_sanity_test.svh
 // Description: Ultra-Simple Sanity Test
 //
 // Purpose: Verify that:

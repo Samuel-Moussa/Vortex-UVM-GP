@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: lockstep_scoreboard.sv
+// File: lockstep_scoreboard.svh
 // Description: Phase-A / A0 per-instruction lockstep scoreboard (RVVI-style).
 //
 //   The existing vortex_scoreboard checks END-STATE memory equivalence vs SimX.

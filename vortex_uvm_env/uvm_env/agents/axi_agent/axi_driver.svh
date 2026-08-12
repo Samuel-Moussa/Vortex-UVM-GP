@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: axi_driver.sv
+// File: axi_driver.svh
 // Description: AXI4 Slave Driver (Responder)
 //
 // This driver acts as the memory responder for the Vortex DUT, which is an

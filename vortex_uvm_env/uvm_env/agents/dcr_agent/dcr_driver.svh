@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: dcr_driver.sv
+// File: dcr_driver.svh
 // Description: DCR Agent Driver with Clocking Block Support
 //
 // This driver actively drives DCR write transactions onto the Vortex DCR

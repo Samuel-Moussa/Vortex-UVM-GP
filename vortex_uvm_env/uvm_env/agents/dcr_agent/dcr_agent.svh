@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: dcr_agent.sv
+// File: dcr_agent.svh
 // Description: DCR Agent Container for Vortex GPU Configuration Interface
 //
 // The agent encapsulates all DCR verification components into a reusable

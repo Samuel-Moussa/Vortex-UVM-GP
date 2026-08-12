@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: status_agent.sv
+// File: status_agent.svh
 // Description: Status Agent Container for Vortex Execution Monitoring
 //
 // The status agent is a PASSIVE-ONLY agent (no driver or sequencer) that

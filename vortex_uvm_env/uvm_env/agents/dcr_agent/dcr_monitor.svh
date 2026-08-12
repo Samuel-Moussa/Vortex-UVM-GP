@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: dcr_monitor.sv
+// File: dcr_monitor.svh
 // Description: DCR Agent Monitor with Protocol Checking
 //
 // This monitor passively observes DCR write transactions on the Vortex DCR

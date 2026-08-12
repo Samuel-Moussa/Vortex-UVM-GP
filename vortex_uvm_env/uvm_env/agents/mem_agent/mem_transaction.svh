@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: mem_transaction.sv
+// File: mem_transaction.svh
 // Description: Memory Transaction for Vortex Custom Memory Interface
 //
 // This transaction represents a single memory request-response pair on the

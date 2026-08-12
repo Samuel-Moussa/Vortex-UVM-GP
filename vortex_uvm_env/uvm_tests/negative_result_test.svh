@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: negative_result_test.sv
+// File: negative_result_test.svh
 // Description: Negative / Fault-Injection Test (checker-failure proof)
 //
 // Purpose:
