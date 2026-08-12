@@ -11,7 +11,8 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**CURRENT MILESTONE: Phase A COMPLETE · B2 CLOSED · B1 CLOSED (2026-08-11). NEXT: `.svh` convention fix, then RE-BANK 1CL and 2CL coverage.**
+**CURRENT MILESTONE (2026-08-12): Phase A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (2CL gate discharged, `3c622cd`) · `.svh` DONE (`59b7ea2`) · icache waivers APPLIED (`5c4b70f`) · I3 CLOSED (verified from `simx_config.stamp`) · 1CL RE-BANKED CLEAN & SAVED (`3217dbc`: 45/45, total 91.08%, cg bins 398/403).**
+**NEXT: fix the three 2CL budgets + the two TB defects they exposed, THEN re-bank 2CL.** The first 2CL attempt gave 37/45 staged / 8 FAILED and is NOT a bank — see ▶▶ NEXT ACTION. None of the 8 is a DUT defect: 3 are budget (SimX's own `MAX_CYCLES` cap and two DUT `+TIMEOUT`s), 3 runs are 2 real OBS-009-class divergences, 2 are the documented expected pair. Two genuine TB defects were found in the process (scoreboard ignored the `-2` sentinel; `MAX_CYCLES` hardcoded) — both fixed, not yet committed.
 
 **B1 ✅ (2026-08-11, `8ff86a4`) — DCR RAL with a per-core `bind`-probe backdoor.**
 Achieved **real read-back checking**, which this plan previously said was impossible. New files:
@@ -56,7 +57,7 @@ too. **Both Gate-0 guards still RED on injection at the same address `0x800075d8
 store into a partially-written dword is invisible — pre-existing, bounded, OPEN).
 **A6 ✅ (2026-08-07):** Spike independence audit done — DUT/SimX/Spike all retire **exactly 11,076** writebacks on `riscv_arithmetic_basic_test_0.elf` and agree on every PC/rd/value (**0 mismatches**); non-vacuity proven by injection. Scope is warp0/lane0/base-ISA only — **SIMT still has no independent reference**. New trace hook `+LOCKSTEP_TRACE=<path>` (default OFF) + `scripts/spike_audit.py`. See [`docs/A6_SPIKE_INDEPENDENCE_AUDIT.md`](A6_SPIKE_INDEPENDENCE_AUDIT.md) and **OBS-022** (lockstep is writeback-domain only: branches/stores not directly compared).
 
-**PRIOR MILESTONE LINE (superseded by the A6 close above):** A0 ✅ · A1(a–e) ✅ · A2 ✅ · **A3 ✅ CLOSED (2026-08-06)** — golden refusals are now NAMED halts (-4 GOLDEN_HALT) not anonymous crashes (-3); disassembler never aborts (33 sites); 39 semantic sites record pc/instr/sub-field; verified prefix preserved, truncated tail excluded. **MEASURED: the UNVERIFIABLE bucket is EMPTY** — all 10 retained riscv-dv re-run, zero SimX aborts, real byte-exact compares (15..1414 words); the "~10 still abort / 69 std::abort" claim was STALE. Non-vacuity proven via `SIMX_FORCE_HALT` (default OFF). · A4 ✅ (2CL divergence grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · A6 ❄️ FROZEN (**not a blocker for A3 — Spike has no SIMT model and cannot run a Vortex kernel; the bucket emptied without it**). **2CL sweep 5→12 of 15 verified.** TCU ✅ · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). **cache_tier VALIDATED @1CL** (460,769 cyc, 64,772 instr, 16,452 byte-exact words, 0 err). NEXT ACTION: (1) L2/L3 cache-tier coverage confirmation + 15-kernel L2/L3 sweep re-run; (2) **Phase B — B2 scoreboard→mem_model**. See ▶▶ block. **⚠ Before making any "we verified / we stressed it" claim, read the 🎯 VERIFICATION-MATURITY ASSESSMENT & FUTURE WORK section (FW-1..FW-7) — FW-1 (no seed control ⇒ random results not reproducible) is the top gap.**
+**PRIOR MILESTONE LINE (superseded by the A6 close above):** A0 ✅ · A1(a–e) ✅ · A2 ✅ · **A3 ✅ CLOSED (2026-08-06)** — golden refusals are now NAMED halts (-4 GOLDEN_HALT) not anonymous crashes (-3); disassembler never aborts (33 sites); 39 semantic sites record pc/instr/sub-field; verified prefix preserved, truncated tail excluded. **MEASURED: the UNVERIFIABLE bucket is EMPTY** — all 10 retained riscv-dv re-run, zero SimX aborts, real byte-exact compares (15..1414 words); the "~10 still abort / 69 std::abort" claim was STALE. Non-vacuity proven via `SIMX_FORCE_HALT` (default OFF). · A4 ✅ (2CL divergence grounded in MICRO'21 §4.1.4 + RTL proof) · A5 ✅ · A6 ❄️ FROZEN (**not a blocker for A3 — Spike has no SIMT model and cannot run a Vortex kernel; the bucket emptied without it**). **2CL sweep 5→12 of 15 verified.** TCU ✅ · FPU ✅ (OBS-014) · SFU ✅ (OBS-015). **L2/L3 buildable + green** (OBS-016/017/018). **Config fidelity closed** (OBS-019). **cache_tier VALIDATED @1CL** (460,769 cyc, 64,772 instr, 16,452 byte-exact words, 0 err). NEXT ACTION: (1) L2/L3 cache-tier coverage confirmation + 15-kernel L2/L3 sweep re-run; (2) **Phase B — B2 scoreboard→mem_model**. See ▶▶ block. **⚠ Before making any "we verified / we stressed it" claim, read the 🎯 VERIFICATION-MATURITY ASSESSMENT & FUTURE WORK section (FW-1..FW-7) — FW-1 seed control is now DONE (reproducibility verified 2026-08-12); the OPEN half is seed VOLUME, plus new FW-1b (two vacuous duplicate riscv-dv entries).**
 
 **PAPER (2026-07-17): final generic rewrite committed — `docs/paper/vortex_uvm_paper.tex`, title "A UVM-Based Per-Instruction Verification Methodology for the Vortex RISC-V GPGPU". No internal jargon (Gate-0 reframed as non-vacuity discipline; OBS-x → R1–R9); sections: env / verdicts+non-vacuity / SIMT lockstep (5 rules) / two-pass load feed / stimulus / coverage / RTL findings / ref-model findings / limits+soundness boundary / enhancements. On branch (`f2ecd37`) AND main (`d83c5cb`), both pushed.**
 
@@ -65,7 +66,14 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
-**(3) RE-BANK 2CL coverage — THE ONLY OPEN STEP.** The banked 2CL numbers are from 2026-07-10
+**(3) RE-BANK 2CL — ATTEMPTED 2026-08-12, RESULT REJECTED (37/45 staged, 8 FAILED). DO NOT QUOTE
+its 88.76% / 947-1095 bins: an incomplete merge is not a bank.** Full root-cause of all 8 in the
+"2CL FAILURE TRIAGE" block below; none is a DUT defect. **Prerequisites before re-running:**
+(a) measure and raise the three budgets — do NOT guess, `text_big` was fixed at a MEASURED
+490,468 cycles; (b) commit the two TB fixes (scoreboard `-2` handling, `SIMX_MAX_CYCLES`) with a
+non-vacuity proof for each; (c) decide FW-1b (the duplicate/vacuous riscv-dv pair).
+**Expect AT BEST 43/45 — never 45/45 at 2CL.**
+The banked 2CL numbers are from 2026-07-10
 (total 85.16%) and are **stale** — they predate L2/L3 enablement, the G1 cache probe, A3, A6, B2,
 B1, the icache waivers and the `.svh` change. Requires an RTL + SimX rebuild for the config:
 `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 bash scripts/run_suite.sh`.
@@ -114,6 +122,36 @@ of a correct structural waiver.
   honestly uncovered; they are 2 of the 5 residual misses. The other 3 are the long-documented
   weight-0 red herrings (`mem_usage_cp`, `system_mem_cross`, `cp_occ`), which is why the weighted
   covergroup metric reads 99.12% against 98.75% raw bins.
+
+### 2CL FAILURE TRIAGE (2026-08-12) — all 8 root-caused, NONE a DUT defect
+
+**First, the thing that will be assumed and is WRONG: the laptop slept mid-run, and that is NOT
+the cause.** Every failure is a simulation-time or model-internal cap; a suspend freezes the
+process without advancing simulation time and cannot produce any of them. The run is sound.
+
+| test | evidence | class |
+|---|---|---|
+| `wide_stress` | SimX exit **-2** = hit its own `MAX_CYCLES=2000000`; golden image truncated ⇒ **all 4,115** mismatches read `SimX=0x0` while DUT retired 577,569 instrs correctly. DUT budget was already 40M — only the GOLDEN model was starved | **budget** |
+| `barrier_sync_test` | DUT TIMEOUT @150,000 (`run_suite.sh:152`) | **budget** |
+| `riscv_rand_instr_test` | DUT TIMEOUT @200,000 (`run_suite.sh:71`) | **budget** |
+| `riscv_mmu_stress_test` | clean exits both sides; mismatches are two DIFFERENT non-zero values; passed at 1CL | **OBS-009 divergence** |
+| `riscv_non_compressed_instr_test` | same as ↓ — these two are the SAME PROGRAM (FW-1b) | **OBS-009, double-counted** |
+| `riscv_pmp_test` | `.S` md5 `16be14c6…` identical to non_compressed | **OBS-009, double-counted** |
+| `riscv_no_fence_test` | documented SimX cross-cluster divergence | **expected** |
+| `riscv_full_interrupt_test` | documented SimX cross-cluster divergence | **expected** |
+
+**TWO REAL TB DEFECTS THIS EXPOSED — the important output of the whole exercise:**
+1. **The scoreboard ignored the `-2` sentinel.** `-4` (GOLDEN_HALT) and `-3` (CRASH) return early
+   and skip the end-state compare; **`-2` (CAPPED) fell straight through into
+   `compare_all_written()`**. That is the exact mechanism by which "the golden model ran out of
+   budget" became 4,115 `MEM MISMATCH` errors indistinguishable from DUT data corruption. Fixed:
+   `-2` now skips the compare and classifies the run UNVERIFIABLE, naming the cap and the env var
+   to raise it. **This is the same lesson as the B1 DCR bugs and OBS-024: a firing checker is NOT
+   evidence of a DUT defect until you establish which side is right.**
+2. **`MAX_CYCLES` was hardcoded** at 2,000,000 with the comment *"basic needs ~1800; huge margin"* —
+   sized for small kernels. A fixed cap cannot be right across program sizes and core counts, and
+   when it is wrong it FABRICATES failures rather than reporting a budget problem. Now overridable
+   via **`SIMX_MAX_CYCLES`** (env, default unchanged).
 
 **B2 ✅ CLOSED — do not re-open it, and specifically do not "finish" it by deleting the write
 mask.** What actually landed (see the milestone block above for the full result table):
@@ -638,7 +676,7 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 - **D1 — Parallel + graded regression.** Bounded worker pool in `run_suite.sh` (riscv-dv regen lane kept serial; respect QuestaSim licenses). `vcover ranktest` for a minimal sign-off set.
 - **D2 — Coverage-off dev fast path.** `COVERAGE=0` compile/sim mode for verdict-only iteration; scope toggle instrumentation off third-party (cvfpu/HardFloat).
 - **D3 — CI.** Nightly regression, results database, coverage-trend tracking, auto-triage.
-- **D4 — Seed farm.** riscv-dv scaled to hundreds of seeds. **SUPERSEDED/ABSORBED by FW-1** (see the Verification-Maturity Assessment section) — which also records the more serious finding that there is currently NO seed control at all, so random results are not reproducible. (The old parenthetical here — "C-extension enabled once Spike is the reference, it decodes RVC where SimX aborts" — is obsolete: RVC is excluded upstream at the toolchain level, `prepare.sh:321 --target=rv32im`.)
+- **D4 — Seed farm.** riscv-dv scaled to hundreds of seeds. **SUPERSEDED/ABSORBED by FW-1** (see the Verification-Maturity Assessment section) — seed control now EXISTS (prepare.sh:303-331, RV_SEED default 1, seed-keyed cache); what remains is seed VOLUME. (The old parenthetical here — "C-extension enabled once Spike is the reference, it decodes RVC where SimX aborts" — is obsolete: RVC is excluded upstream at the toolchain level, `prepare.sh:321 --target=rv32im`.)
 - **D5 — Automated sign-off.** One report: pass rate, merged per-config coverage vs goal, matrix status, **requirements traceability matrix**, tool versions + seeds logged (reproducibility).
 
 ---
@@ -730,7 +768,7 @@ verified" or "we stressed the design"** — neither is currently supportable (se
 | Checker strength / non-vacuity | **Strong** — above typical |
 | Reference-model quality | Good but **NOT independent** (hard ceiling — see FW-2) |
 | Bug-discovery track record | **Strong** |
-| Stimulus volume & randomization | **Weak** — 1 seed, non-reproducible (FW-1) |
+| Stimulus volume & randomization | **Weak** — reproducible now (seed default 1), but still 1 seed per profile; 2 entries vacuous duplicates (FW-1, FW-1b) |
 | Config coverage | **Weak** — 2 points, but now cheap (FW-3) |
 | Error/exception handling | **Absent** (FW-4) |
 | X-prop / reset randomization / GLS | **Absent** (FW-5) |
@@ -739,21 +777,43 @@ verified" or "we stressed the design"** — neither is currently supportable (se
 
 ### FUTURE WORK — ordered by claim-strength gained per unit effort
 
-- **FW-1 — Seed control + seed farm. HIGHEST PRIORITY; partly a CORRECTNESS bug, not just
-  throughput.** `prepare.sh:322` passes `--iterations=1` and **`grep -i seed` across
-  `run_suite.sh` / `simulate.sh` / `prepare.sh` returns NOTHING** — there is no seed control
-  anywhere. Two consequences:
-  1. One program per riscv-dv profile = **directed testing wearing a CRV costume**. Sign-off
-     elsewhere means thousands of seeds.
-  2. **Results are NOT REPRODUCIBLE.** Each `RISCV_DV_REGEN=1` generates a *different* program.
-     This is almost certainly why `riscv_non_compressed_instr_test` and `riscv_rand_jump_test`
-     failed in the 2026-08-06 sweep having passed previously. **You cannot debug, bisect, or
-     regress what you cannot reproduce** — this currently undermines every random-stimulus
-     result in the project.
-  *Do:* plumb an explicit `SEED=` through `prepare.sh`→riscv-dv (`--seed`) and record it in the
-  run log; raise `--iterations`; add a seed-sweep mode. *Accept:* a named seed reproduces a
-  failing program byte-identically; ≥100-seed sweep runs green or yields triaged failures.
-  Supersedes/absorbs the older, thinner **D4**.
+- **FW-1 — Seed control. ✅ REPRODUCIBILITY HALF IS DONE (verified 2026-08-12).** The text below
+  was written before the fix and is **STALE — do not re-derive from it**. `prepare.sh:303-331`
+  now implements: `RV_SEED` (**default 1**, so the committed suite is a stable regression gate),
+  `RV_START_SEED` + `RV_ITERATIONS` for sweeps, and **seed-keyed output directories**
+  (`out_vortex_<test>_s<seed>`) so reuse is deterministic rather than "newest `.S` on disk".
+  **Measured proof:** in the 2CL suite, repeated runs of the same profile produced
+  BYTE-IDENTICAL programs (`riscv_no_fence_test`, `riscv_full_interrupt_test`,
+  `riscv_pmp_test` each ran twice, identical md5). Results are now reproducible.
+  ⚠ The OLD claim — "`grep -i seed` returns NOTHING", "each `RISCV_DV_REGEN=1` generates a
+  different program", "the top gap" — is FALSE as of today and must not be repeated in the
+  paper or report.
+  **STILL OPEN (the volume half):** one seed per profile is still **directed testing wearing a
+  CRV costume**. *Do:* run the seed farm (`RV_START_SEED`/`RV_ITERATIONS` already exist).
+  *Accept:* ≥100-seed sweep green or triaged. Supersedes/absorbs the older, thinner **D4**.
+
+- **FW-1b — TWO riscv-dv SUITE ENTRIES ARE VACUOUS AND DUPLICATE EACH OTHER (found 2026-08-12,
+  OPEN).** `riscv_pmp_test` and `riscv_non_compressed_instr_test` generate **byte-identical
+  programs** (`.S` md5 `16be14c6…`, `.hex` md5 `4885c234…`). Root cause: both testlist entries
+  delegate to the same generator (`gen_test: riscv_rand_instr_test`,
+  `riscv-dv/target/rv32im/testlist.yaml:36,56`) and differ ONLY by `gen_opts` that are **inert
+  under `--target=rv32im`**:
+  - `+disable_compressed_instr=1` — **vacuous by construction**: rv32im has no C extension, so
+    there were never compressed instructions to disable. **Measured: 0 compressed instrs.**
+  - `+pmp_randomize=0 +pmp_num_regions=1 …` — **produced ZERO `pmpcfg`/`pmpaddr` writes**
+    (measured). Vacuous twice over, since `prepare.sh` also sed-strips M-mode CSR writes for
+    Vortex.
+  **Verification impact — this inflates the pass count with coverage that was not earned:**
+  the suite reports these as 2 independent results when they are 1 program. At 1CL, 2 of the
+  "45/45" passes were the same program passing twice; at 2CL their identical failure is ONE
+  divergence double-counted, not two. Neither test verifies the feature its name claims.
+  ⚠ **NOT a silent-fallback bug** — both names ARE in the testlist and `prepare.sh:361` hard
+  -errors if generation fails. The mechanism is *inert options*, which is quieter and worse:
+  nothing fails, you simply get a duplicate wearing a distinct name.
+  *Do:* either make the options effective (needs a target that actually has the feature — PMP
+  is arguably out of scope for Vortex, which has no PMP) or **drop both entries and state the
+  honest test count**. *Accept:* every riscv-dv entry in `run_suite.sh` produces a program whose
+  md5 is distinct from every other entry's — assert it in the suite so this cannot regress.
 
 - **FW-2 — Reference-model independence. ✅ PARTLY CLOSED 2026-08-07 (A6 done) — scalar axis
   closed, SIMT axis still fully open.** SimX is written by the Vortex team ⇒ shared assumptions
