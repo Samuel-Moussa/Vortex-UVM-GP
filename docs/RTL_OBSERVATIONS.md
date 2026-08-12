@@ -1083,6 +1083,27 @@ measured 164,602 cycles (the old budget was 10% short and had been *masking* thi
    before a spawned warp's write became visible increments `errors` and leaves **no trace** in the
    final image — which is exactly the DUT/SimX pair we observe.
 
+**The race is LATENT at 1CL, not absent — measured:**
+
+| run | clusters | words compared | mismatches |
+|---|---|---|---|
+| `run_235024_barrier_sync_test` | **1** | 32 | **0** |
+| `run_183422_barrier_sync_test` | **2** | 32 | **2** |
+
+At 1CL, DUT and SimX agree on `bar2_stall` exactly: within ONE core both resolve warp
+interleaving the same way, so the same sequence of lost updates happens on both sides. Add cores
+and that stops holding — SimX interleaves CORES at a coarser granularity than the timing-accurate
+RTL (same mechanism as `docs/investigations/SimX_2CL_no_fence_divergence.md`, where SimX's
+cluster-0 cores tracked the DUT exactly while cluster-1 diverged). **A latent race that only
+surfaces at higher core counts is exactly what a config sweep should expose — it simply surfaced
+in our test rather than in the DUT.**
+
+Scale check confirming it is lost updates and not a counting difference: the loop performs
+`(0+1+2+3)*256 = 1536` nominal increments PER CORE, yet the observed finals are **3** and **6** —
+three orders of magnitude below nominal. Three layers of concurrency hit one address with no
+atomicity: SIMT threads within a warp execute the RMW simultaneously, warps interleave on a core,
+and at 2CL four cores share the line with no coherence protocol (weak-coherent space, `fence`-based).
+
 **Why this is expected, from the RTL AND the publication (they agree):**
 - `VX_wctl_unit.sv:136` `assign barrier.is_global = rs1_data[31];` — barrier scope is selected by
   the **MSB of the barrier ID**. The MICRO'21 paper states the same: *"a similar table is also
