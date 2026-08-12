@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: rvvi_monitor.sv
+// File: rvvi_monitor.svh
 // Description: Phase-A / A1(c) RVVI monitor (core-v-verif uvma_rvvi style).
 //
 //   Discovers every rvvi_if instance the bound probes registered in

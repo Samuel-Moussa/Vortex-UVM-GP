@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: axi_transaction.sv
+// File: axi_transaction.svh
 // Description: AXI4 Transaction Sequence Item
 //
 // This class represents a single AXI4 transaction that can be either a 

@@ -1,5 +1,5 @@
 // ////////////////////////////////////////////////////////////////////////////////
-// // File: vortex_smoke_test.sv - FINAL WORKING VERSION
+// // File: vortex_smoke_test.svh - FINAL WORKING VERSION
 // // Description: Complete Smoke Test with Program Loading
 // //
 // // ALL BUGS FIXED:
@@ -15,7 +15,7 @@
 
 
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_smoke_test.sv - FINAL WORKING VERSION (TB_TOP DCR Edition)
+// File: vortex_smoke_test.svh - FINAL WORKING VERSION (TB_TOP DCR Edition)
 // Description: Complete Smoke Test with Program Loading
 //
 // ALL BUGS FIXED + TB_TOP DCR INTEGRATION:

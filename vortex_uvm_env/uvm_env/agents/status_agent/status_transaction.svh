@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: status_transaction.sv
+// File: status_transaction.svh
 // Description: Status Transaction for Vortex Execution Status Monitoring
 //
 // This transaction represents a snapshot of the Vortex GPU's execution status.

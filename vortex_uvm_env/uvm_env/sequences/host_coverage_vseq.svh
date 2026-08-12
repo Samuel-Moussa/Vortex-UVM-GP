@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_coverage_vseq.sv
+// File: host_coverage_vseq.svh
 // Coverage-directed virtual sequence (Samuel — functional coverage push).
 //
 // Purpose: lift host_operation_cg / dcr_config_cg out of the 50% floor that the

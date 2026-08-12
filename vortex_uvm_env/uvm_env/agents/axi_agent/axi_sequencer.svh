@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: axi_sequencer.sv
+// File: axi_sequencer.svh
 // Description: AXI4 UVM Sequencer
 //
 // The sequencer is a simple parameterized UVM sequencer that manages

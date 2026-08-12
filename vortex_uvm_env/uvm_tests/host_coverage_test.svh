@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_coverage_test.sv
+// File: host_coverage_test.svh
 // Coverage-directed test (Samuel — functional coverage push).
 //
 // Reuses kernel_launch_test wholesale (program preload, scoreboard, completion

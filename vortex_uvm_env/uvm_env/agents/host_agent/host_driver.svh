@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_driver.sv
+// File: host_driver.svh
 // Description: Host Agent Driver (Pure Orchestrator)
 //
 // This driver orchestrates high-level operations by coordinating with:

@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_env.sv
+// File: vortex_env.svh
 // Description: Top-Level Vortex UVM Environment
 //
 // Instantiates and connects all verification components:

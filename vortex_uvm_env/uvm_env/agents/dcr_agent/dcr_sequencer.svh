@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: dcr_sequencer.sv
+// File: dcr_sequencer.svh
 // Description: DCR Agent Sequencer
 //
 // Standard UVM sequencer parameterized with dcr_transaction.

@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: axi_sequences.sv
+// File: axi_sequences.svh
 // Description: AXI4 Sequence Library
 //
 // This file contains a collection of reusable AXI4 sequences that generate

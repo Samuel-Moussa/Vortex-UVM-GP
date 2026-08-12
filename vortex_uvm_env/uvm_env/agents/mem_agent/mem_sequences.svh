@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: mem_sequences.sv
+// File: mem_sequences.svh
 // Description: Memory Sequence Library for Vortex Custom Memory Interface
 //
 // This file contains a collection of reusable memory sequences that generate

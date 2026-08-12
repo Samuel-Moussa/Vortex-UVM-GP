@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_agent.sv
+// File: host_agent.svh
 // Description: Host Agent with Full Clocking Block Integration
 //
 // The host agent is the "conductor" of the verification environment, 

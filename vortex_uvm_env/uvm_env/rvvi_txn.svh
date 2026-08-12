@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: rvvi_txn.sv
+// File: rvvi_txn.svh
 // Description: Phase-A / A1(c) RVVI transaction — one captured DUT beat
 //   (commit writeback or LSU load writeback), published by rvvi_monitor on its
 //   analysis port and consumed by lockstep_scoreboard (routed on rec.kind).

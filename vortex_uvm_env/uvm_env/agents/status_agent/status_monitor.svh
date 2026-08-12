@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: status_monitor.sv
+// File: status_monitor.svh
 // Description: Status Agent Monitor with Execution Tracking
 //
 // Key Responsibilities:

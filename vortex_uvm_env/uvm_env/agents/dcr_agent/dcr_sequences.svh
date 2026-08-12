@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: dcr_sequences.sv
+// File: dcr_sequences.svh
 // Description: DCR Sequence Library for Vortex GPU Configuration
 //
 // This file contains a collection of reusable DCR sequences for configuring

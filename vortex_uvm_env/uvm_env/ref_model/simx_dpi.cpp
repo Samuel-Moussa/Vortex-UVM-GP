@@ -9,6 +9,7 @@
 #include <map>
 #include <csetjmp>
 #include <csignal>
+#include <cstdlib>       // getenv/strtoull — SIMX_MAX_CYCLES override
 
 // Vortex includes
 #include "processor.h"
@@ -672,7 +673,36 @@ int simx_run() {
 
         //  was: int run_status = g_processor->run();
         const uint64_t STEP_CHUNK = 100;        // cycles per step call
-        const uint64_t MAX_CYCLES = 2000000;    // hard cap — basic needs ~1800; huge margin
+
+        // Hard cap on golden-model cycles. MUST be overridable: this is not a
+        // safety net, it is a CORRECTNESS input. When SimX hits the cap it stops
+        // with the memory it has written SO FAR, and every location the DUT wrote
+        // afterwards then compares against 0 — turning "the golden model did not
+        // finish" into thousands of fake MEM MISMATCH errors that look exactly
+        // like a DUT bug. Measured 2026-08-12: wide_stress at 2CL/2C blew the old
+        // hardcoded 2,000,000 and produced 4,115 such false mismatches (SimX=0x0
+        // on every one) while the DUT completed 577,569 instructions correctly.
+        //
+        // The old comment ("basic needs ~1800; huge margin") sized this for small
+        // kernels only; big programs and higher core counts are both far more
+        // expensive, so a fixed number cannot be right for every config.
+        // DEFAULT RAISED 2,000,000 -> 20,000,000 on 2026-08-12, from MEASUREMENT:
+        // wide_stress at 2CL/2C needs 2,584,300 SimX cycles (DUT: 1,420,203 cycles /
+        // 577,569 instructions). The old 2,000,000 was short by 584,300 (~23%) and
+        // that shortfall alone produced 4,115 phantom MEM MISMATCH errors. Note SimX
+        // cycles are NOT DUT cycles — here the ratio was ~1.82x — so sizing this from
+        // a DUT +TIMEOUT is wrong; measure the golden model itself.
+        // 20,000,000 is ~7.7x the heaviest measured program, which still bounds a
+        // genuine runaway while leaving real programs room at higher core counts.
+        uint64_t MAX_CYCLES = 20000000;
+        if (const char* e = std::getenv("SIMX_MAX_CYCLES")) {
+            uint64_t v = std::strtoull(e, nullptr, 0);
+            if (v > 0) {
+                MAX_CYCLES = v;
+                std::cout << "[SimX-DPI] SIMX_MAX_CYCLES override: " << MAX_CYCLES
+                          << " (default 2000000)" << std::endl;
+            }
+        }
         uint64_t cycles_run = 0;
         int run_status;
 

@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: mem_agent.sv
+// File: mem_agent.svh
 // Description: Memory Agent Container for Vortex Custom Memory Interface
 //
 // The agent encapsulates all memory verification components into a reusable

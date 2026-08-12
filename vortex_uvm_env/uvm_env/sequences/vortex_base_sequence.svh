@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_base_sequence.sv
+// File: vortex_base_sequence.svh
 // Description: Base sequence class for all single-agent Vortex sequences.
 //
 // This is the base for sequences that run on a SINGLE agent sequencer —

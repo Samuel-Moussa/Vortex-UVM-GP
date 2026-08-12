@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_monitor.sv
+// File: host_monitor.svh
 // Description: Host Agent Monitor with Clocking Blocks
 //
 // This monitor observes high-level operations by tracking:

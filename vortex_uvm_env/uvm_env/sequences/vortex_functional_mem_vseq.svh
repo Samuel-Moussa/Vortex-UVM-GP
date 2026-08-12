@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_functional_mem_vseq.sv
+// File: vortex_functional_mem_vseq.svh
 // Description: Functional Memory Virtual Sequence
 //
 // Waits for EBREAK (DUT execution complete) then reads the result directly

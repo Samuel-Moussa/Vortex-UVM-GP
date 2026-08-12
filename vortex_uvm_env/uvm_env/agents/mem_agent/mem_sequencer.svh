@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: mem_sequencer.sv
+// File: mem_sequencer.svh
 // Description: Memory Agent Sequencer
 //
 // Standard UVM sequencer parameterized with mem_transaction.

@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: mem_monitor.sv
+// File: mem_monitor.svh
 // Description: Memory Agent Monitor with Clocking Block Support
 //
 // This monitor passively observes memory transactions on the Vortex custom

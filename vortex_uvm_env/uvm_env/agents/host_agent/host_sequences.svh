@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: host_sequences.sv
+// File: host_sequences.svh
 // Description: Host Sequence Library for Vortex GPU Control
 //
 // This file contains a collection of reusable host sequences for controlling

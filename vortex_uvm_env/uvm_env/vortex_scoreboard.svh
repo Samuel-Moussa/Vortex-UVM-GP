@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_scoreboard.sv
+// File: vortex_scoreboard.svh
 // Description: Scoreboard for Vortex GPGPU Verification
 //
 // Phase 1 Implementation (Post-Mortem Memory Comparison):
@@ -470,6 +470,30 @@ class vortex_scoreboard extends uvm_scoreboard;
         {"SimX crashed during run-to-completion with NO recorded reason (segfault, or an ",
          "abort site not yet converted to a GOLDEN_HALT) — run is UNVERIFIABLE (no ",
          "DUT/SimX compare)."})
+      return;
+    end
+
+    // -2 CAPPED — SimX stopped GRACEFULLY at its own cycle cap without the kernel
+    // signalling done (simx_dpi.cpp: "capped, not crashed"). The golden model is
+    // TRUNCATED, not wrong: it holds only the writes it managed before the cap.
+    //
+    // This MUST skip the compare, and did not before 2026-08-12. Falling through
+    // compared a complete DUT image against a partial golden one, so every address
+    // the DUT wrote after the cap mismatched against 0x0 — measured on wide_stress
+    // at 2CL/2C as 4,115 MEM MISMATCH errors, every single one reading SimX=0x0,
+    // while the DUT had correctly retired 577,569 instructions. That is a reference
+    // -model budget problem wearing the costume of a DUT data-corruption bug, and it
+    // is exactly the failure mode this project has been bitten by before: a firing
+    // checker is NOT evidence of a DUT defect until you establish which side is right.
+    if (exitcode == -2) begin
+      simx_crashed = 1;
+      `uvm_warning("SCOREBOARD",
+        {"SimX hit its CYCLE CAP without a clean exit — the golden memory image is ",
+         "TRUNCATED, so no end-state equivalence can be claimed and the compare is ",
+         "SKIPPED (run UNVERIFIABLE). This is NOT a DUT defect. Raise the cap with ",
+         "SIMX_MAX_CYCLES=<n> (env, default 20000000) and re-run; the DUT-side +TIMEOUT ",
+         "budget is separate and may also need raising for large programs or high ",
+         "cluster/core counts."})
       return;
     end
 

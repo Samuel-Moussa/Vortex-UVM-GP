@@ -1,5 +1,5 @@
 ////////////////////////////////////////////////////////////////////////////////
-// File: vortex_virtual_sequence.sv
+// File: vortex_virtual_sequence.svh
 // Description: Base Class for Virtual Sequences
 //
 // Virtual sequences coordinate transactions across multiple agents using
