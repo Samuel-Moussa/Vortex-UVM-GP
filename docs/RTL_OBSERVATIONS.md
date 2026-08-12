@@ -1054,3 +1054,63 @@ cost of the inverted hierarchy described above.
   `RESETW`/`INIT_VALUE` that clears `write_valid`), and/or reset `dcrs` in `VX_dcr_data`. Either
   removes an unreset element from the startup path; doing both plus the INV-2 reset-hold makes
   DCR bootstrap deterministic at any topology.
+
+---
+
+### OBS-026 (BARRIER SCOPE — expected behaviour; the DEFECT IS IN OUR TEST, not the DUT) — `barrier_test` is not multi-core safe, and its 2CL "failure" is a data race plus a transient visibility difference
+
+**What we saw.** `barrier_sync_test` (program `barrier_test`) failed at 2CL/2C with **exactly 2**
+`MEM MISMATCH`es out of 32 words compared, after the DUT `+TIMEOUT` was raised from 150,000 to a
+measured 164,602 cycles (the old budget was 10% short and had been *masking* this).
+
+| addr | symbol | DUT | SimX |
+|---|---|---|---|
+| `0x8000778c` | `bar2_stall` | `3` | `6` |
+| `0x80010000` | `RESULT_ADDR` | `0x900DCAFE` (= errors==0) | `0x1` (= 1 error) |
+
+**Root cause — the DUT is right, and the test is racy by construction.**
+1. `bar2_stall` is a **shared `volatile int` incremented NON-ATOMICALLY** by every warp:
+   `for (int i = 0; i < wid*256; i++) bar2_stall++;` (`barrier_test.cpp`, `bar2_kernel`). It is a
+   pure busy-wait delay — **nothing ever reads it for correctness**. At 2CL/2C, 4 cores x 4 warps
+   perform unsynchronised read-modify-write on one location, so it has **no architecturally
+   -defined value**. DUT=3 and SimX=6 are BOTH legitimate outcomes of the same racy program.
+2. The DUT's own sentinel says the DUT PASSED: the kernel is self-checking and writes
+   `0x900DCAFE` only when `errors == 0`. **Every CHECKED array matches** between DUT and SimX —
+   `bar1_pre`, `bar1_post`, `bar2_data`, `bar3_contrib`, `bar3_confirm`, `bar4_*`. The only two
+   differing words are the race variable and the sentinel it fed.
+3. SimX's single error therefore came from a **transient** cross-warp visibility difference: the
+   checks accumulate `errors` in a REGISTER, never in memory, so a check that observed a sentinel
+   before a spawned warp's write became visible increments `errors` and leaves **no trace** in the
+   final image — which is exactly the DUT/SimX pair we observe.
+
+**Why this is expected, from the RTL AND the publication (they agree):**
+- `VX_wctl_unit.sv:136` `assign barrier.is_global = rs1_data[31];` — barrier scope is selected by
+  the **MSB of the barrier ID**. The MICRO'21 paper states the same: *"a similar table is also
+  used for global barriers in multi-core configurations where the MSB of the barrier ID indicates
+  global scope"*, and describes barriers as synchronising *"between software warps"* (wavefront
+  scope), citing Mellor-Crummey & Scott.
+- **`GBAR_ENABLE` is NOT defined in this build**, so `VX_wctl_unit.sv:138` hardwires
+  `barrier.is_global = 1'b0` — **all barriers are per-core**. `VX_schedule.sv:168` implements the
+  local release from per-core `barrier_ctrs`; the global path (`:252-268`) is `ifdef`-ed out.
+- `barrier_test` calls `vx_barrier(BAR_ID, nw)` with a small `BAR_ID`, i.e. **MSB=0 ⇒ local scope
+  by design**, even if `GBAR_ENABLE` were turned on.
+- The paper is explicit that cross-core *memory* synchronisation uses the RISC-V **`fence`**
+  instruction. `bar2_stall++` uses none. This is the OBS-009 weak-coherency class again.
+⇒ At 2CL/2C four cores each execute `main()` concurrently against the SAME global arrays, with a
+per-core barrier and no fence. The test was written for one core's warps.
+
+**Disposition: NOT A DUT BUG — TEST DEFECT, OPEN.** Do **not** "fix" the barrier RTL for this.
+*Fix options, in preference order:*
+1. **Core-scope the kernel** — have every core except core 0 exit immediately (`vx_core_id() != 0`
+   ⇒ `vx_tmc(0)`). Preserves the test's actual intent (barrier between WARPS) and stays valid at
+   any NCL/NC. Cheapest and most honest.
+2. Make it genuinely multi-core: global barrier (needs `GBAR_ENABLE` + MSB set in the barrier id)
+   plus `fence` around the shared arrays. Bigger change; also then tests a different feature.
+3. Exclude `barrier_test` from the 2CL suite and say so explicitly.
+Whatever is chosen, `bar2_stall` should stop being a shared non-atomic counter — a per-warp local
+delay loop achieves the same staggering with no race.
+
+**Wider lesson (same as OBS-024 and the B1 DCR bugs): a firing checker is not evidence of a DUT
+defect.** Here the raised timeout did not "fix" the test — it *revealed* a race the timeout had
+been hiding, and the mismatching value turned out to be the one variable in the program with no
+defined value.
