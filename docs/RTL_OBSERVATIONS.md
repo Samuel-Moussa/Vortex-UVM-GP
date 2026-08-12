@@ -1135,3 +1135,70 @@ delay loop achieves the same staggering with no race.
 defect.** Here the raised timeout did not "fix" the test — it *revealed* a race the timeout had
 been hiding, and the mismatching value turned out to be the one variable in the program with no
 defined value.
+
+---
+
+### OBS-027 (MULTI-CORE STORE ORDERING — expected; the DEFECT IS THE METHODOLOGY, not the DUT) — riscv-dv programs are SINGLE-HART and Vortex runs them on EVERY core, so the shared `.data` section is resolved in a different order by the DUT than by SimX
+
+**What we saw.** `riscv_rand_instr_test` at 2CL/2C: 6 `MEM MISMATCH`es out of 780 words compared,
+one value propagated — DUT `0xfff8` (x5) / `0xfff4` (x1) vs SimX `0x1a33` / `0x1af4`. Passed at 1CL.
+
+**It is DETERMINISTIC, which kills the obvious explanation.** The run was repeated and produced a
+**byte-identical** mismatch set (same 6 addresses, same values). Memory-ordering *races* do not
+reproduce byte-for-byte, so this is NOT the chaotic-race class and must not be filed as one.
+
+**Lockstep located it at instruction granularity** (`+LOCKSTEP`, trace via `LOCKSTEP_TRACE`):
+
+| seq | PC | addr | DUT | SimX | flag |
+|---|---|---|---|---|---|
+| 1319 | `800016d0` | `800130fa` | `fffffff8` | `1a33` | L |
+| 1329 | `80001704` | `80012ae2` | `fffffff8` | `fffffff4` | L |
+| 1330 | `80001708` | `80012ae2` | `fffffff8` | `33` | L |
+| 6851 | `80009af0` | `80012513` | `ffffffff` | `1a` | L |
+
+All are **LOAD-DATA** mismatches: `dut_pc == simx_pc` and `dut_rd == simx_rd` on every record —
+control flow and register allocation agree exactly, **only the loaded DATA differs**.
+
+**NOT misalignment.** `VX_lsu_slice.sv:186-192` asserts *"memory misalignment not supported!"*, but
+it checks alignment **to the ACCESS SIZE**: `0x…fa`/`0x…e2` are even (legal `lh`) and `0x…13` is odd
+but legal `lb`. The assertion correctly did NOT fire (0 occurrences). Do not chase this as a
+misaligned-access bug.
+
+**The proof that memory is concurrently modified:** seq 1329 and 1330 are ADJACENT retirements
+(PCs 4 bytes apart, no store between them in this warp) reading the **same address** `0x80012ae2`,
+yet SimX returns `fffffff4` then `33`. Something outside this warp wrote that location between two
+consecutive instructions.
+
+**The proof it is not a race:** the trace contains the same divergence for `cid=0` AND `cid=1` at
+the same seq with identical values (`key=0` and `key=10000` rows). **Each model is internally
+self-consistent across cores; the two models simply disagree with each other.**
+
+**ROOT CAUSE.** riscv-dv emits a **single-hart** program. Its hart dispatch is a structural no-op —
+`csrr x5,0xf14; li x6,0; beq x5,x6,0f` where the branch target falls through to the same
+`h0_start`, so **every core runs the identical stream regardless of `mhartid`**. Vortex cores all
+self-start from reset (`VX_schedule.sv:230`), so at 2CL/2C **four cores concurrently execute the
+same single-hart program against the same `.data` addresses**, with no fences (`fence` is what the
+MICRO'21 paper specifies for cross-core memory ordering) and no core gating. The surviving value at
+each address is therefore decided by store ORDER. Both simulators are deterministic, so each
+produces a repeatable order — but the timing-accurate RTL and the functional SimX produce
+DIFFERENT orders. Hence: deterministic, self-consistent per model, divergent between models, and
+absent at 1CL where only one core stores.
+
+**Why lockstep reports a LOAD as the first divergence:** stores are outside the lockstep writeback
+domain (OBS-022), so the actual originating event — a store landing in a different order — is
+structurally invisible. The load is the first *observable* symptom, not the cause. This is a
+concrete instance of the OBS-022 limitation, and worth remembering before reading any lockstep
+"first divergence" as the true first divergence.
+
+**Disposition: NOT A DUT BUG — METHODOLOGY, OPEN.** Same family as OBS-009 /
+`docs/investigations/SimX_2CL_no_fence_divergence.md`, but this is the first time the class has
+been pinned down with instruction-level evidence and a determinism control rather than inferred.
+*Options:*
+1. **Core-gate riscv-dv programs** — patch `prepare.sh`'s post-processing so all cores except core 0
+   exit immediately (read `VX_CSR_MHARTID`/gtid, `vx_tmc(0)` if non-zero). Makes every riscv-dv
+   result meaningful at ANY config and preserves the existing programs. Preferred.
+2. Accept riscv-dv as a 1CL-only signal and exclude it from multi-core banks — honest, but throws
+   away the random stimulus exactly where concurrency bugs live.
+3. Give each core a private `.data` region (needs generator/linker work).
+⚠ Until one is chosen, **every riscv-dv result at ≥2 cores is architecturally undefined** and must
+not be quoted as a pass OR a failure of the DUT.
