@@ -66,7 +66,47 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
-### ▶ THE FOUR FIXES BEFORE THE 2CL RE-BANK (exact, resumable — 2026-08-13)
+### ▶ THE FOUR FIXES — ✅ ALL FOUR DONE AND MEASURED (2026-08-13)
+
+**Status: COMPLETE. Next action is the TWO BANK RUNS (1CL then 2CL), not these fixes.**
+
+| fix | commit | measured result |
+|---|---|---|
+| 1 — core-gate riscv-dv | `3d0ec30` | `riscv_rand_instr_test` @2CL **`MEM MISMATCH` 6 → 0**, `data_compared=780` UNCHANGED (non-vacuous), `per_cluster_busy=01` |
+| 2 — core-scope `barrier_test` | `47d6e7a` | @2CL **`MEM MISMATCH` 2 → 0, `CONSOLE FAIL` 1 → 0**, kernel prints `ALL PASSED` from core 0 only |
+| 3 — budgets ≥3x measured | `eb8a630` | **nine** tests were under 1.6x, not the two the plan named |
+| 4 — FW-1b duplicate | `eb8a630` | `riscv_pmp_test` dropped; md5 sweep proves it was the ONLY duplicate ⇒ suite is **44 distinct programs** |
+
+**Three corrections this work forced — do NOT resume from the superseded text below:**
+1. **Use `VX_CSR_CORE_ID` (`0xCC2`), NOT `VX_CSR_MHARTID` (`0xF14`)** as FIX 1's text says. `0xF14`
+   is stripped by our own sed (`prepare.sh:454`), and MHARTID returns a COMPOSED gtid whose `!=0`
+   test is only valid because reset leaves warp0/thread0 alone. `0xCC2` returns `CORE_ID` directly.
+2. **FIX 2's stated cause (`bar2_stall`) was wrong.** T2 passed on all four cores. The `errors==1`
+   came from `test_accumulator_barrier()`'s own `bar3_contrib[w]=0` init loop running on a LATER
+   core's main thread and wiping an EARLIER core's contributions (`FAIL accumulator=2 expected 10`).
+   `bar2_stall` was real but was one of the two MEMORY mismatches, not the test failure.
+3. **FIX 3's two budgets were the symptom, not the disease.** Nine tests sat under 1.6x margin;
+   `cache_stress` was at 1.14x and `axi_memory_test` at 1.19x, both one config-slowdown from a
+   masked timeout. All raised to ≥3x, with the policy recorded in `run_suite.sh`.
+
+**Also corrected in `docs/RTL_OBSERVATIONS.md` (`2b6c1cf`):** OBS-026's `bar2_stall` table read
+DUT=3 / SimX=6 and concluded "three orders of magnitude below nominal". That was a hex misparse —
+the true values are `0x300`=768 and `0x600`=1536 against a nominal 1536, i.e. **SimX lost ZERO
+updates and the DUT lost exactly half**, a clean 2:1.
+
+**⚠ BOTH banks must now be re-run, not just 2CL.** FIX 1 changed all 10 riscv-dv programs (3
+instructions at `_start`, all addresses shift 12 bytes) and FIX 2 changed `barrier_test`'s `.data`
+layout. The clean 1CL bank of 2026-08-12 was produced from the OLD programs, so quoting it beside a
+new 2CL bank would compare two different stimulus sets.
+
+**⚠ The "expect at best 43/45" guidance below may now be WRONG.** `riscv_no_fence_test` and
+`riscv_full_interrupt_test` fail by the same cross-core mechanism FIX 1 removes, so they may now
+PASS. Treat 43/45 as a hypothesis to test, not a ceiling to assume — and if they still fail after
+core-gating, the OBS-009 diagnosis for them needs re-opening.
+
+---
+
+#### (superseded detail — kept for the reasoning, not as instructions)
 
 **All 8 of the first 2CL attempt's failures are root-caused and NONE is a DUT defect.** Do these
 four, then re-run 2CL ONCE. Everything below is MEASURED — do not re-derive or re-guess it.
