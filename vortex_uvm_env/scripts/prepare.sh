@@ -457,6 +457,49 @@ if [[ -n "$PROGRAM" ]]; then
                     "$PROGRAM_SOURCE" > "$ASM_CLEAN"
                 print_info "Stripped machine-mode CSRs/mret, replaced ecall→ebreak → $ASM_CLEAN"
 
+                # ── OBS-027: CORE GATE (must run AFTER the sed above) ────────
+                # riscv-dv emits a SINGLE-HART program whose hart dispatch is a
+                # structural no-op: `csrr x5,0xf14; li x6,0; beq x5,x6,0f` where the
+                # branch target IS the next instruction (confirmed in the linked
+                # binary: `beq t0,t1,80000018` at 0x80000014). The sed above then
+                # rewrites that csrr to nop, so even the vestigial hart read is gone.
+                # Vortex cores ALL self-start from reset (VX_schedule.sv:230), so at
+                # >=2 cores every core executes the same stream against the same
+                # .data with no fences => store ORDER decides the surviving values,
+                # and the timing-accurate RTL orders them differently from SimX.
+                # Both models are deterministic and self-consistent; they simply
+                # disagree. Result: every riscv-dv run at >=2 cores was
+                # architecturally undefined. Gate it for real.
+                #
+                # VX_CSR_CORE_ID (0xCC2), NOT VX_CSR_MHARTID (0xF14), because:
+                #  (1) 0xF14 is stripped by the sed above; 0xCC2 matches none of
+                #      those patterns, so this carries no ordering dependency.
+                #  (2) MHARTID returns a COMPOSED gtid
+                #      (CORE_ID<<(NW_BITS+NT_BITS)) + (wid<<NT_BITS) + tid
+                #      (VX_csr_unit.sv:125,132), so testing it !=0 is only valid
+                #      because reset leaves warp0/thread0 alone
+                #      (VX_schedule.sv:230-233). VX_csr_data.sv:179 returns CORE_ID
+                #      directly — no warp/thread terms, no config arithmetic, valid
+                #      at ANY NCL/NC/NW/NT.
+                #  (3) Both models compose the global core id identically: RTL
+                #      VX_cluster.sv:132 -> VX_socket.sv:227; SimX processor.cpp:37
+                #      -> cluster.cpp:39 -> socket.cpp:100, read back at
+                #      emulator.cpp:501. Equal on both sides by construction.
+                # vx_tmc 0 (.insn r 0x0B,0,0,x0,x0,x0) retires the warp: empty tmask
+                # -> SimX active_warps_.reset(wid) (execute.cpp:1638-1640), matching
+                # the RTL retire. ebreak would NOT work — it has no execute-side
+                # consumer in Vortex (OBS-024).
+                # On 1 core this is a fall-through and the program is unchanged.
+                sed -i '/^_start:/a\                  csrr x5, 0xCC2\n                  beqz x5, _vortex_core0\n                  .insn r 0x0B, 0, 0, x0, x0, x0\n_vortex_core0:' "$ASM_CLEAN"
+                if grep -q "^_vortex_core0:" "$ASM_CLEAN"; then
+                    print_info "Injected core gate (VX_CSR_CORE_ID != 0 → vx_tmc 0): only core 0 runs"
+                else
+                    print_error "Core gate NOT injected — no '^_start:' anchor in $ASM_CLEAN."
+                    print_error "OBS-027: without it every core runs the same single-hart program"
+                    print_error "against the same .data, so a multi-core result is UNDEFINED."
+                    exit 1
+                fi
+
                 # ── Self-checking signature epilogue ─────────────────────────
                 # Pure-arithmetic riscv-dv tests compute only in registers and write
                 # nothing to memory → the black-box end-state scoreboard has nothing

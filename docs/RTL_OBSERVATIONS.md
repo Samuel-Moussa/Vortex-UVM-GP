@@ -1190,7 +1190,19 @@ structurally invisible. The load is the first *observable* symptom, not the caus
 concrete instance of the OBS-022 limitation, and worth remembering before reading any lockstep
 "first divergence" as the true first divergence.
 
-**Disposition: NOT A DUT BUG — METHODOLOGY, OPEN.** Same family as OBS-009 /
+**Disposition: NOT A DUT BUG — METHODOLOGY. ✅ FIXED 2026-08-13 (option 1, MEASURED).**
+`prepare.sh:460-500` now injects a real core gate (`csrr x5,0xCC2; beqz x5,_vortex_core0;
+vx_tmc 0`) into every riscv-dv program after the sed stage, with a hard `exit 1` if the `^_start:`
+anchor is ever absent — a silent miss would restore undefined multi-core results.
+**Acceptance (2CL/2C/4W/4T, `riscv_rand_instr_test`, `results/20260813/run_194404`):
+`MEM MISMATCH` 6 → 0, with `data_compared=780` UNCHANGED** — the divergence disappeared without
+the comparison shrinking, so the fix is not vacuous. 0 UVM_ERROR, 0 RTL errors, 18,080 instructions.
+**Live DUT proof of the gate:** the probe trace reads `per_cluster_busy=01` for the whole run —
+cluster 1's cores retired at `_start` and never executed the body.
+**Side effect worth carrying:** the run now takes **194,966** cycles vs the **205,982** measured
+pre-fix, because gated cores no longer contend for memory. Any riscv-dv cycle budget measured
+BEFORE this fix is stale.
+Historical context follows. Same family as OBS-009 /
 `docs/investigations/SimX_2CL_no_fence_divergence.md`, but this is the first time the class has
 been pinned down with instruction-level evidence and a determinism control rather than inferred.
 *Options:*
