@@ -1078,10 +1078,34 @@ measured 164,602 cycles (the old budget was 10% short and had been *masking* thi
    `0x900DCAFE` only when `errors == 0`. **Every CHECKED array matches** between DUT and SimX —
    `bar1_pre`, `bar1_post`, `bar2_data`, `bar3_contrib`, `bar3_confirm`, `bar4_*`. The only two
    differing words are the race variable and the sentinel it fed.
-3. SimX's single error therefore came from a **transient** cross-warp visibility difference: the
-   checks accumulate `errors` in a REGISTER, never in memory, so a check that observed a sentinel
-   before a spawned warp's write became visible increments `errors` and leaves **no trace** in the
-   final image — which is exactly the DUT/SimX pair we observe.
+3. ~~SimX's single error came from a **transient** cross-warp visibility difference.~~
+   **CORRECTED 2026-08-13 — that was a hypothesis, and the console output disproves it.** The
+   error is concrete, cross-CORE, and fully explained. `run_183422` console (prefixes are gtid =
+   `core_id<<4` at 4W/4T, so `#0/#16/#32/#48` are the four cores):
+   ```
+   #0:   FAIL accumulator=2 expected 10
+   #16:  FAIL accumulator=2 expected 10
+   #48:  PASS (accumulator=10, 4 warps confirmed)
+   #32:  PASS (accumulator=10, 4 warps confirmed)
+   ```
+   `bar3_contrib[]` should hold `[1,2,3,4]` (sum 10). **A sum of 2 means only slot 1 survived and
+   slots 0/2/3 read as 0** — i.e. they were zeroed AFTER being written. The culprit is
+   `test_accumulator_barrier()`'s own init loop `for (w) bar3_contrib[w] = 0;`, which runs on
+   **every core's main thread**: a later core wipes the array while an earlier core's warps have
+   already written it, so that core's warp-0 reduction sums a partially-zeroed array.
+   **The barrier cannot prevent this**, and that is the real lesson of OBS-026:
+   `vx_barrier(BAR_ID, nw)` is PER-CORE (`GBAR_ENABLE` undefined ⇒ `VX_wctl_unit.sv:138` ties
+   `is_global` to `1'b0`), so it orders only the 4 warps of ONE core. **The test's synchronisation
+   scope is a core; the data it protects is GPU-wide.** Every symptom follows from that one
+   mismatch: the `bar3` race (errors==1 on cores 0,1), the `RESULT_ADDR` divergence (4 cores write
+   DIFFERENT values — `0x900DCAFE` from the passing cores, `1` from the failing ones — so
+   last-writer-wins decides, and DUT and SimX order it differently), the `bar2_stall` mismatch, and
+   the console-interleave mismatch.
+   ⚠ Point 2 above ("every CHECKED array matches") is still true **of the final image only** —
+   the arrays are eventually rewritten by all cores. The failing read happened mid-race.
+   ⚠ Note `bar2_stall`'s values: SimX `0x600` = 1536 = `0+256+512+768`, the exact serial total for
+   ONE core, i.e. SimX lost NO updates; DUT `0x300` = half. Confirmed symbol
+   (`nm barrier_test.elf`): `8000778c B bar2_stall`.
 
 **The race is LATENT at 1CL, not absent — measured:**
 
