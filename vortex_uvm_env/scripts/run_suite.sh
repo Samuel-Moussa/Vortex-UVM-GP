@@ -68,11 +68,26 @@ clear_stale_dv_lock(){
     echo "  (clearing stale riscv-dv vlog lock, dead owner pid=$p)"; rm -f "$L"
   fi
 }
-runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=200000 >"$LOGDIR/rv_$1.log" 2>&1; stage $?; }
+runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=600000 >"$LOGDIR/rv_$1.log" 2>&1; stage $?; }
 # regression (Ahmad's MSCRATCH kernel-launch harness): basic verifies DUT-vs-SimX;
 # diverge/sgemm/dogfood run-to-completion co-sim but classify UNVERIFIABLE (spawn).
 runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST=regression_test PROGRAM_KIND="$1" ${2:-} $CFG TIMEOUT=10000000 >"$LOGDIR/r_$1.log" 2>&1; stage $?; }
 
+# ---- BUDGET POLICY (raised 2026-08-13) --------------------------------------
+# Every TIMEOUT below is >=3x the MEASURED cycle count at 2CL (the slower of our
+# two configs). Rationale, learned the hard way twice:
+#   * TIMEOUT is a FAILSAFE CAP, not a run length. A passing test exits on
+#     program completion (busy deassertion, OBS-024) long before the cap, so
+#     raising a budget costs nothing unless a test genuinely hangs. There is no
+#     trade-off to tune here - an under-set budget is pure downside.
+#   * A timeout is staged as a FAILURE (`stage $?` stages only passing runs), so
+#     it silently drops the run from the coverage bank AND masks whatever is
+#     underneath it. In the 2026-08-12 2CL suite, barrier_sync_test timed out at
+#     149,999/150,000 and riscv_rand_instr_test at 199,999/200,000 - both within
+#     a rounding error of their cap - and each was hiding a real divergence
+#     (OBS-026, OBS-027) that only surfaced once the budget was raised.
+# When adding a test: measure it at the SLOWEST config you support, then set 3x.
+# Do not trim a budget toward the measured value to "save time" - it saves none.
 # ---- kernels (first does full compile) ----
 runk sim      hello           100000
 for k in vecadd_lite diverge_lite diverge_deep diverge_peel diverge_fpu fpu_test fpu_mt spawn_tmc_sweep barrier_lite fibonacci; do
@@ -87,11 +102,11 @@ done
 # is fetch-bound by design (232KB resident .text, 600 noinline fns, runtime-indexed reverse
 # sweep) and retires at ~0.12 IPC, so it is the most cache-configuration-sensitive test we
 # have — keep generous headroom rather than trimming to the measured value.
-runk sim-only text_big 800000
+runk sim-only text_big 1600000
 # mem_stress: co-activates memory-request backpressure with med/low-IPC windows and
 # a dependent IDIV chain -> fills cross_ipc_stalls <med_ipc,*,mem-stalled> /
 # <med_ipc,fetch-stalled,*>. Completes ~290k cycles; 400k timeout for headroom.
-runk sim-only mem_stress 400000
+runk sim-only mem_stress 900000
 # sfu_masks: register-form csrrw (fsrm) + csrrc on FP CSRs under peeled thread masks
 # -> fills cross_sfu_threads <csrrw|csrrc, {uniform,partial[2],partial[3]}> (CSR-WRITE
 # ops otherwise fire only single-threaded from crt0). Fast (~32k cyc), deterministic.
@@ -107,10 +122,10 @@ runk sim-only diverge_uni3 200000
 # cache_stress: 600-function resident .text swept by runtime index (icache miss -> fetch_stall)
 # INTERLEAVED with a compute-free independent-load burst (dcache backpressure -> memory_stall)
 # -> fills cross_ipc_stalls <*,fetch-stalled,mem-stalled> (both caches stalled at once).
-runk sim-only cache_stress 600000
+runk sim-only cache_stress 1600000
 # mem_zero: compute-free 128-block independent-load saturation -> zero/very-low-IPC windows
 # co-sampled with mem/fetch stalls (cross_ipc_stalls <zero|very_low,*,stalled> family).
-runk sim-only mem_zero 400000
+runk sim-only mem_zero 1000000
 # axi_edge: minimal store-and-exit (x=5). Short run makes the idle<->busy transitions
 # dominate; best-effort stimulus for system_axi_cross edge tuples (system_cg samples every
 # cycle). Note: empirically the AXI beats do not land on the busy toggle (pipeline gap +
@@ -146,10 +161,10 @@ runk sim-only div_edge 2000000
 # (+AXI_FLOOD) -> DUT deasserts rready -> assert_r_valid/r_data_stable. Byte-exact.
 runflood mem_stress 4000000
 # ---- directed tests ----
-rund axi_memory_test        axi_traffic     150000
-rund functional_memory_test functional_mem  150000
-rund warp_scheduling_test   warp_test       150000
-rund barrier_sync_test      barrier_test    150000
+rund axi_memory_test        axi_traffic     400000
+rund functional_memory_test functional_mem  400000
+rund warp_scheduling_test   warp_test       400000
+rund barrier_sync_test      barrier_test    500000
 rund host_coverage_test     vecadd_lite     200000   # DCR/host coverage sweep (dcr_config_cg)
 # ---- regression kernel-launch harness (Ahmad) ----
 runr basic
@@ -195,10 +210,24 @@ runr dogfood "DOGFOOD_TESTID=4"
 # -> EXCLUDED, same class as riscv_illegal_instr_test.
 # NOTE: several RETAINED tests pass on liveness but are UNVERIFIABLE (SimX golden model aborts on
 # some random sequences — Steven's SimX-robustness lane); they run the DUT to EBREAK cleanly.
+# FW-1b (2026-08-13): riscv_pmp_test REMOVED — it is not a distinct test.
+# It generated a program BYTE-IDENTICAL to riscv_non_compressed_instr_test
+# (both .S md5 16be14c6ebe6). Both testlist entries delegate to
+# `gen_test: riscv_rand_instr_test` and differ only by gen_opts that are INERT
+# at --target=rv32im: +disable_compressed_instr=1 is vacuous (rv32im has no C
+# extension — measured 0 compressed instructions) and the PMP options produced
+# 0 pmpcfg/pmpaddr writes (and prepare.sh seds M-mode CSR writes away anyway).
+# So the suite was counting 2 results where there was 1 program, and NEITHER
+# tested the feature its name claims. Keeping it inflated the pass count and
+# double-counted its 2CL failure as two divergences.
+# Verified by md5-ing all 10 generated programs: this is the ONLY duplicate
+# pair; the other 8 are distinct. Suite is now 44 DISTINCT programs.
+# Do not re-add without making the gen_opts effective on a target that
+# implements the feature.
 for P in riscv_arithmetic_basic_test riscv_jump_stress_test \
          riscv_non_compressed_instr_test riscv_loop_test riscv_rand_instr_test \
          riscv_rand_jump_test riscv_mmu_stress_test riscv_no_fence_test \
-         riscv_full_interrupt_test riscv_pmp_test; do
+         riscv_full_interrupt_test; do
   runrv "$P"
 done
 
