@@ -373,9 +373,39 @@ if [[ -n "$PROGRAM" ]]; then
         # FW-1: make the run self-describing. The seed and the EXACT program are
         # recorded next to the results, so a failure found months later can be
         # reproduced from the log alone without guessing what riscv-dv produced.
+        # ── FW-1b GUARD: detect two profiles that emit the SAME program ─────
+        # riscv_pmp_test and riscv_non_compressed_instr_test generated
+        # BYTE-IDENTICAL programs (md5 16be14c6ebe6): both testlist entries
+        # delegate to `gen_test: riscv_rand_instr_test` and their distinguishing
+        # gen_opts are INERT at --target=rv32im. The suite counted 2 results for
+        # 1 program, so a pass was double-counted and their single 2CL failure
+        # looked like two divergences. Nothing detected it — both names are in
+        # the testlist and generation succeeded, so there was no error to catch.
+        # Record every program's md5 and say so loudly on a collision.
+        # WARNING, not fatal: a duplicate does not make a result WRONG, it makes
+        # the test COUNT wrong — and failing the run would block a legitimate
+        # rerun over a bookkeeping issue.
+        RV_MD5=$(md5sum "$PROGRAM_SOURCE" 2>/dev/null | cut -d' ' -f1)
+        RV_MANIFEST="$RISCV_DV_HOME/vortex_program_md5.manifest"
+        if [[ -n "$RV_MD5" ]]; then
+            if [[ -f "$RV_MANIFEST" ]]; then
+                RV_DUP=$(awk -v m="$RV_MD5" -v t="$RISCV_DV_TEST" -v s="$RV_SEED_TAG" \
+                         '$1==m && $3==s && $2!=t {print $2}' "$RV_MANIFEST" 2>/dev/null \
+                         | sort -u | tr '\n' ' ')
+                if [[ -n "$RV_DUP" ]]; then
+                    print_warning "FW-1b: '${RISCV_DV_TEST}' produced a program IDENTICAL to: ${RV_DUP}(md5 ${RV_MD5:0:12}, seed ${RV_SEED_TAG})"
+                    print_warning "  These are NOT distinct tests — do not count them separately."
+                    print_warning "  Their gen_opts are almost certainly inert at this --target."
+                fi
+            fi
+            grep -qs "^${RV_MD5} ${RISCV_DV_TEST} ${RV_SEED_TAG}\$" "$RV_MANIFEST" 2>/dev/null || \
+                echo "${RV_MD5} ${RISCV_DV_TEST} ${RV_SEED_TAG}" >> "$RV_MANIFEST" 2>/dev/null || true
+        fi
+
         {
             echo "riscv_dv_test   = $RISCV_DV_TEST"
             echo "randomization   = $RV_SEED_DESC"
+            echo "program_md5     = ${RV_MD5:-unknown}"
             echo "reproduce_with  = make sim TEST=random_instruction_stress_test PROGRAM=$RISCV_DV_TEST RV_SEED=${RV_SEED} RISCV_DV_REGEN=1"
             echo "program_source  = $PROGRAM_SOURCE"
             echo "out_dir         = $RV_OUT_DIR"
