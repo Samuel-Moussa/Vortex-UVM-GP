@@ -1065,7 +1065,7 @@ measured 164,602 cycles (the old budget was 10% short and had been *masking* thi
 
 | addr | symbol | DUT | SimX |
 |---|---|---|---|
-| `0x8000778c` | `bar2_stall` | `3` | `6` |
+| `0x8000778c` | `bar2_stall` | `0x300` (768) | `0x600` (1536 = nominal) |
 | `0x80010000` | `RESULT_ADDR` | `0x900DCAFE` (= errors==0) | `0x1` (= 1 error) |
 
 **Root cause — the DUT is right, and the test is racy by construction.**
@@ -1107,6 +1107,16 @@ measured 164,602 cycles (the old budget was 10% short and had been *masking* thi
    ONE core, i.e. SimX lost NO updates; DUT `0x300` = half. Confirmed symbol
    (`nm barrier_test.elf`): `8000778c B bar2_stall`.
 
+**✅ FIXED 2026-08-13 (commit `47d6e7a`) — MEASURED.** `barrier_test.cpp` now (a) core-gates
+`main()` on `vx_core_id() != 0` and (b) gives `bar2_stall` per-warp slots so its finals are
+deterministic (`w*256`) instead of a raced scalar. Acceptance at 2CL/2C/4W/4T
+(`results/20260813/run_195900`): **`MEM MISMATCH` 2 → 0, `CONSOLE FAIL` 1 → 0**, the kernel prints
+`ALL PASSED` from **core 0 only** (was `#0`/`#16`/`#32`/`#48`), 0 UVM_ERROR, 164,394 cycles,
+`data_compared` 32 → 36. `per_cluster_busy=01` for the whole run confirms the gate in the DUT.
+Config-generic on all four axes — see the commit message. Gating costs no coverage *because*
+barriers are per-core; genuinely multi-core barrier stimulus would need per-core data regions and
+is only worth building if `GBAR_ENABLE` is turned on.
+
 **The race is LATENT at 1CL, not absent — measured:**
 
 | run | clusters | words compared | mismatches |
@@ -1122,11 +1132,15 @@ cluster-0 cores tracked the DUT exactly while cluster-1 diverged). **A latent ra
 surfaces at higher core counts is exactly what a config sweep should expose — it simply surfaced
 in our test rather than in the DUT.**
 
-Scale check confirming it is lost updates and not a counting difference: the loop performs
-`(0+1+2+3)*256 = 1536` nominal increments PER CORE, yet the observed finals are **3** and **6** —
-three orders of magnitude below nominal. Three layers of concurrency hit one address with no
-atomicity: SIMT threads within a warp execute the RMW simultaneously, warps interleave on a core,
-and at 2CL four cores share the line with no coherence protocol (weak-coherent space, `fence`-based).
+⚠ **CORRECTED 2026-08-13 — the earlier "3 and 6 / three orders of magnitude below nominal" reading
+was a HEX MISPARSE of the 64-bit dump and its conclusion was wrong.** `DUT=0x0000030000000004`
+splits into the word at `0x8000778c` (= `bar2_stall`, per `nm`) = **`0x300` = 768** and the word at
+`0x80007788` = 4; SimX's is **`0x600` = 1536**. Nominal is `(0+1+2+3)*256 = 1536` per core.
+So the true signature is **SimX = EXACTLY nominal (zero lost updates) and DUT = EXACTLY half** — a
+clean 2:1, not a three-orders-of-magnitude collapse. That is a sharper and different result: the
+functional model serialises the RMW perfectly, while the timing-accurate RTL loses precisely every
+other update, which is what genuine concurrent read-modify-write on one line looks like. The
+concurrency layers named below are still the right mechanism; only the magnitude claim was wrong.
 
 **Why this is expected, from the RTL AND the publication (they agree):**
 - `VX_wctl_unit.sv:136` `assign barrier.is_global = rs1_data[31];` — barrier scope is selected by
