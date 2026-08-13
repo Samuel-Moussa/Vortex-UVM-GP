@@ -1202,3 +1202,28 @@ been pinned down with instruction-level evidence and a determinism control rathe
 3. Give each core a private `.data` region (needs generator/linker work).
 ⚠ Until one is chosen, **every riscv-dv result at ≥2 cores is architecturally undefined** and must
 not be quoted as a pass OR a failure of the DUT.
+
+**MACHINE-CODE CONFIRMATION (2026-08-13).** The dead hart gate was confirmed in the linked binary,
+not merely in the source. Assembling the post-sed program shows:
+`80000014: 00628263  beq t0,t1,80000018` — **the branch target IS the next instruction.** Both arms
+fall through. Verified present, and identically dead, in **all 10** cached riscv-dv profiles
+(`_start:` ×1 and `csrr x5,0xf14` ×1 in each). Note our own sed (`prepare.sh:454`) rewrites that
+`csrr` to `nop`, so by the time the DUT sees it even the vestigial hart read is gone.
+
+**⚠ USE `VX_CSR_CORE_ID` (`0xCC2`), NOT `VX_CSR_MHARTID` (`0xF14`), FOR THE FIX.** Three reasons:
+1. **`0xF14` is stripped by our own sed** (`prepare.sh:454` matches `csrr …, 0xf14`), so a gate
+   written with it depends on injection order relative to that sed. `0xCC2` is outside both the
+   `0x300–0x3FF` and `0xf14` patterns and cannot be eaten.
+2. **`0xCC2` needs no config arithmetic.** `VX_CSR_MHARTID` returns
+   `gtid = (CORE_ID<<(NW_BITS+NT_BITS)) + (wid<<NT_BITS) + tid` (`VX_csr_unit.sv:125,132`), so a
+   `!=0` test on it is only valid because reset leaves warp0/thread0 alone
+   (`VX_schedule.sv:230-233`). `VX_CSR_CORE_ID` (`VX_csr_data.sv:179`) returns `CORE_ID` directly —
+   no dependence on the reset mask at all.
+3. **Both models agree on it by construction.** RTL composes
+   `CLUSTER_ID*NUM_SOCKETS + socket_id` (`VX_cluster.sv:132`) → `SOCKET_ID*SOCKET_SIZE + core_id`
+   (`VX_socket.sv:227`); SimX composes it identically (`processor.cpp:37` → `cluster.cpp:39` →
+   `socket.cpp:100`) and returns `core_->id()` for `VX_CSR_CORE_ID` (`emulator.cpp:501`). Globally
+   unique and equal on both sides at any NCL/NC/NW/NT.
+**Retire semantics match too:** `vx_tmc 0` (`.insn r 0x0B,0,0,x0,x0,x0`, encodes `0000000b`) gives an
+empty tmask, and SimX then executes `active_warps_.reset(wid)` (`execute.cpp:1638-1640`) — the same
+deactivation the RTL performs. `ebreak` would NOT work here (OBS-024: no execute-side consumer).
