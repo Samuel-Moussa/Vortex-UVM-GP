@@ -116,8 +116,17 @@ if [[ -x "$GEN_EXCLUDE" ]]; then
         do ${EXCLUDE_DO};
         coverage save ${MERGED_UCDB};
         quit -f;" 2>&1 | tee "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error|excluded" || true
-    HNE=$(grep -c "had no effect" "${COV_DIR}/exclude_apply.log" 2>/dev/null || echo 0)
-    [[ "$HNE" -eq 0 ]] || echo "WARN: $HNE exclusion line(s) had no effect (stale path for this config?)"
+    # NOTE: `grep -c` prints "0" AND exits 1 when there are no matches, so the old
+    # `|| echo 0` fired IN ADDITION to grep's own output and set HNE to the two-line
+    # string "0\n0". `[[ "0\n0" -eq 0 ]]` is then a syntax error, which took the
+    # `||` branch and printed a bogus "WARN: 0\n0 exclusion line(s) had no effect".
+    # So this guard — the one that proves the config-aware exclusions actually
+    # matched real RTL paths — could never report a TRUE count either: any genuine
+    # stale-exclusion count would have been reported as garbage too. Use `|| HNE=0`
+    # on the ASSIGNMENT so grep's numeric output is kept and only the exit status is
+    # swallowed.
+    HNE=$(grep -c "had no effect" "${COV_DIR}/exclude_apply.log" 2>/dev/null) || HNE=0
+    [[ "${HNE:-0}" -eq 0 ]] || echo "WARN: $HNE exclusion line(s) had no effect (stale path for this config?)"
     [[ -f "$MERGED_UCDB" ]] || { echo "ERROR: exclusion/save failed"; exit 1; }
 else
     echo "WARN: $GEN_EXCLUDE missing/not-exec — merging WITHOUT exclusions (cvfpu in denominator!)"
