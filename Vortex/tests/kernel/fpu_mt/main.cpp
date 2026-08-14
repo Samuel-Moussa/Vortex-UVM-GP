@@ -14,6 +14,8 @@
 #include <vx_spawn.h>
 
 #define N 16
+// Static bound for out_buf now that the grid scales with the device.
+#define MAX_TOTAL 128            // 8 cores x 16 threads/core
 
 typedef struct { int *out; } fpu_args_t;
 
@@ -39,7 +41,7 @@ void fpu_kernel(fpu_args_t *__UNIFORM__ args) {
   args->out[i] = flag + (int)(r > 1.0f);   // fcmp -> exact 0/1
 }
 
-volatile int out_buf[N];
+volatile int out_buf[MAX_TOTAL];
 
 static int ref(int i) {
   float a = (float)i + 0.5f, b = 1.25f;
@@ -52,11 +54,26 @@ static int ref(int i) {
 }
 
 int main() {
-  for (int i = 0; i < N; i++) out_buf[i] = 0;
+  // CONFIG-ADAPTIVE GRID (was `total = N` = 16 = exactly ONE core's capacity, so
+  // vx_spawn_threads computed needed_cores=1 and idled every other core —
+  // vx_spawn.c:274-279). Size it from the DEVICE so every core participates at
+  // any NCL/NC/NW/NT.
+  // out_buf is DELIBERATELY NOT zeroed here: it is .bss and already zero in the
+  // loaded image, and once every core has work a core still in its init loop
+  // would wipe results another core had already written (the OBS-026 failure).
   fpu_args_t args; args.out = (int*)out_buf;
-  uint32_t total = N;
+  uint32_t total = (uint32_t)vx_num_cores() * vx_num_warps() * vx_num_threads();
+  if (total > MAX_TOTAL) total = MAX_TOTAL;
   vx_spawn_threads(1, &total, nullptr, (vx_kernel_func_cb)fpu_kernel, &args);
+  // Verify ONLY this core's slice. vx_spawn distributes tasks CONTIGUOUSLY
+  // (all_tasks_offset = core_id * tasks_per_core, vx_spawn.c:299), so core c
+  // owns [lo,hi) and never reads a slice another core is still writing. That is
+  // what makes this safe with no global barrier - Vortex has none with
+  // GBAR_ENABLE off (VX_wctl_unit.sv:138). ref(i) is a pure function of i, so a
+  // per-core check is exactly as strong as the whole-array one used to be.
+  uint32_t nc = (uint32_t)vx_num_cores(), cid = (uint32_t)vx_core_id();
+  uint32_t per = total / nc, lo = cid * per, hi = lo + per;
   int errors = 0;
-  for (int i = 0; i < N; i++) if (out_buf[i] != ref(i)) errors++;
+  for (uint32_t i = lo; i < hi; i++) if (out_buf[i] != ref((int)i)) errors++;
   return errors;
 }
