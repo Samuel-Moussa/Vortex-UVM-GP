@@ -1277,3 +1277,59 @@ fall through. Verified present, and identically dead, in **all 10** cached riscv
 **Retire semantics match too:** `vx_tmc 0` (`.insn r 0x0B,0,0,x0,x0,x0`, encodes `0000000b`) gives an
 empty tmask, and SimX then executes `active_warps_.reset(wid)` (`execute.cpp:1638-1640`) — the same
 deactivation the RTL performs. `ebreak` would NOT work here (OBS-024: no execute-side consumer).
+
+---
+
+### OBS-028 (CONFIG FIDELITY — TESTBENCH/KERNEL DEFECT, not RTL) — kernels compute their grid from `VX_config.h` macros that are FROZEN at 1/1/4/4, so "multi-core aware" kernels silently run on ONE core
+
+**What we saw.** At 2CL/2C/4W/4T, `wide_stress` reported `per_cluster_busy=01` for its entire
+~2.4M-cycle run — cluster 1 never executed a single instruction. The same held for `cache_stress`,
+`fpu_mt`, `tcu_mt`, `text_big` and others. The 2CL bank shows `cluster0_core0` missing **0**
+`instr_probe` bins while the other three cores are each missing **28**.
+
+**Root cause.** `Vortex/hw/VX_config.h:99-111` hardcodes the DEFAULTS
+`NUM_CLUSTERS 1 · NUM_CORES 1 · NUM_WARPS 4 · NUM_THREADS 4`.
+Kernel Makefiles pass **no** config defines and `prepare.sh` **never rebuilds kernels per config**
+(it rebuilds only the RTL and the SimX objects). So every kernel macro is pinned to the default
+regardless of `CLUSTERS=n CORES=n WARPS=n THREADS=n` on the command line.
+
+**The kernels are not naive — they are misinformed.** `wide_stress:18` is commented
+*"Multi-core aware: TOTAL threads, each owns a strided disjoint set of lines"* and computes
+```c
+#define TOTAL (NUM_CLUSTERS * NUM_CORES * NUM_WARPS * NUM_THREADS)   // = 1*1*4*4 = 16
+```
+The scaling arithmetic is CORRECT; its INPUTS are frozen. The kernel asks for one core's worth of
+work, and `vx_spawn_threads` then does exactly the right thing with it:
+```c
+needed_cores = ceil(num_tasks / threads_per_core);      // 16/16 = 1
+active_cores = MIN(needed_cores, num_cores);            // 1
+if (core_id >= active_cores) return 0;                  // vx_spawn.c:274-279
+```
+⇒ **the parallelism was never broken; we were launching a 1-core problem on an N-core machine.**
+
+**13 kernels use the frozen macros** — `wide_stress`, `cache_tier`, `div_edge`, `vote_shfl`,
+`toggle_stress` (all four of `NUM_CLUSTERS/NUM_CORES/NUM_WARPS/NUM_THREADS`), plus `tcu_mt`,
+`tcu_test`, `diverge_deep/peel/uni3`, `compute_flat`, `barrier_lite`, `spawn_tmc_sweep`.
+⚠ Several also SIZE STATIC ARRAYS from them (`g_out[TOTAL]`, `out_buf[NUM_WARPS*TM*TN]`), so a
+compile-time fix that raised the macros without raising the bounds would **overflow** them.
+
+**Fix: query the DEVICE at RUNTIME, not the build.**
+`vx_num_cores()/vx_num_warps()/vx_num_threads()` read the real CSRs
+(`VX_CSR_NUM_CORES` etc.), so ONE ELF is correct at every config and cannot drift from the
+elaborated hardware. Compile-time defines are the wrong instrument twice over: kernels are not
+rebuilt per config today, and even if they were, a build-time constant can disagree with the RTL —
+exactly the drift class `I2`/OBS-019 exists to prevent. The only thing that must stay compile-time
+is the STATIC ARRAY BOUND, which should be a documented worst case, not a silent default.
+
+**Applied so far:** `cache_stress` (`81ffa24`) and `fpu_mt` (`49b19ba`) — both measured
+`per_cluster_busy` `01 → 11` at 2CL, byte-exact vs SimX, 0 mismatches.
+⚠ Scaling the grid ALSO ARMS a latent race: `main()` runs on every core, so a whole-array init or
+self-check that was harmless while one core did all the work becomes destructive once every core
+has work (a late core wipes an earlier core's results — the OBS-026 failure mode). Both fixes drop
+the redundant `.bss` zeroing and scope any self-check to the core's own slice, which is safe
+because `vx_spawn` distributes tasks CONTIGUOUSLY (`all_tasks_offset = core_id * tasks_per_core`,
+`vx_spawn.c:299`) — no global barrier needed, and Vortex has none with `GBAR_ENABLE` off.
+
+**Disposition: OPEN — TB defect, no DUT implication.** It does not invalidate any PASS/FAIL result
+(every kernel ran a correct, defined program); it means multi-core STIMULUS was far weaker than the
+kernel comments claim, and the per-core coverage deficit at 2CL is ours, not the design's.
