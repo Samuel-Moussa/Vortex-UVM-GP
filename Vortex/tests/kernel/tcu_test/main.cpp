@@ -10,7 +10,8 @@
 // fp32 -> byte-exact DUT-vs-SimX compare (no FP tolerance needed). Single warp
 // (spawn total = NUM_THREADS) -> no multi-warp spawn distribution.
 
-#include <VX_config.h>     // NUM_THREADS
+#include <VX_config.h>
+#include <vx_intrinsics.h>     // NUM_THREADS
 #include <vx_spawn.h>
 #include <vx_tensor.h>
 
@@ -36,6 +37,14 @@ void tcu_kernel(tcu_args_t *__UNIFORM__ args) {
 }
 
 int main() {
+  // STRUCTURAL GUARD (OBS-028): the WMMA context is a TEMPLATE on NUM_THREADS, so
+  // the tile geometry is fixed at compile time, and VX_config.h is frozen at 4
+  // because kernels are never rebuilt per config. If the elaborated hardware has a
+  // different warp width this kernel is invalid — and the scoreboard cannot detect
+  // it, since DUT and SimX run the same binary and agree on the same wrong answer.
+  if ((int)vx_num_threads() != NUM_THREADS)
+    return 1;   // rebuild with CONFIGS="-DNUM_THREADS=n" for this config
+
   for (int i = 0; i < TM * TN; i++) out_buf[i] = 0.0f;
   tcu_args_t args; args.out = out_buf;
   uint32_t total = NUM_THREADS;             // exactly one warp
