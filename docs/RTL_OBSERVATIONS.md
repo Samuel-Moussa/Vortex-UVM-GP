@@ -1514,9 +1514,16 @@ assign core_req_ready = creq_grant
                      && ~mshr_alm_full         // needed for mshr allocation
                      && ~pipe_stall;
 ```
-and the fill queue asserts almost-full at `MREQ_SIZE - PIPELINE_STAGES` = **4 - 2 = 2** entries
-(`:659`, `PIPELINE_STAGES=2` at `:117`). So the fill queue throttles acceptance at 2 outstanding
-fills, while `LSUQ_OUT_SIZE` caps what the LSU can have in flight at all:
+⚠ **CORRECTION (same session).** An earlier draft of this entry argued that the FILL queue is the
+binding throttle, asserting almost-full at `MREQ_SIZE - PIPELINE_STAGES` = 4 - 2 = 2 entries. **That
+is wrong for the configuration we actually build:** `scripts/compile.sh:70-73` overrides the cache
+queue depths on every compile —
+`+define+ICACHE_MREQ_SIZE=16 +define+DCACHE_MREQ_SIZE=16` (and the MSHR sizes to 16) — so
+`MREQ_SIZE` is **16, not the RTL default 4**, and its almost-full threshold is 14. The fill queue
+is therefore NOT the throttle here. See OBS-032 for the override itself.
+
+The argument that survives, and the one the measurements support, is the REQUESTER width:
+`LSUQ_OUT_SIZE` caps what the LSU can have in flight at all, and it is not overridden anywhere:
 
 | NUM_THREADS | LSU_LINE_SIZE | **LSUQ_OUT_SIZE** | vs MSHR_SIZE=16 |
 |---|---|---|---|
@@ -1526,6 +1533,8 @@ fills, while `LSUQ_OUT_SIZE` caps what the LSU can have in flight at all:
 
 Even summing over a shared socket dcache (`SOCKET_SIZE` cores), 2 x 4 = 8 at 2CL — still below 16.
 The icache side is bounded the same way by outstanding fetches (one per warp): 4, or 8 at 2CL.
+This bound is independent of the compile.sh queue-depth override, which is why the conclusion is
+unchanged by the correction above — but the *reason* had to be narrowed to the one that is true.
 
 **⇒ The bin is unreachable for the same reason `cp_ipc_bucket.high_ipc` was: a structural width,
 not a missing test.** It becomes reachable only at `NUM_THREADS>=16` (or with `LSUQ_*`/`MSHR_SIZE`
@@ -1543,3 +1552,50 @@ to a single-requester layout) and the `high_ipc` bucket. In all three, a bin was
 gap when the real answer was a structural width — and in all three the honest resolution came from
 reading the RTL parameter chain rather than writing a better test. Check the width before writing
 the kernel.
+
+
+---
+
+## OBS-032 — the testbench silently overrides the cache queue depths, so the banked coverage is NOT the RTL's default cache configuration
+
+**What we saw.** Every compile passes, unconditionally and with no comment
+(`vortex_uvm_env/scripts/compile.sh:70-73`):
+```
++define+ICACHE_MSHR_SIZE=16  +define+DCACHE_MSHR_SIZE=16
++define+ICACHE_MREQ_SIZE=16  +define+DCACHE_MREQ_SIZE=16
+```
+Against the RTL defaults (`Vortex/hw/rtl/VX_config.vh`):
+
+| define | RTL default | **what we build** |
+|---|---|---|
+| `ICACHE_MSHR_SIZE` / `DCACHE_MSHR_SIZE` | 16 (`:567`, `:628`) | 16 — no change |
+| `ICACHE_MREQ_SIZE` / `DCACHE_MREQ_SIZE` | **4** (`:633`) | **16 — 4x deeper** |
+
+Found while root-causing OBS-031: the compile transcript disagreed with the header file, and the
+header is what the analysis had been based on.
+
+**Why it matters.**
+1. **It changes cache behaviour.** `MREQ_SIZE` sets the fill-request queue depth and its almost-full
+   threshold is `MREQ_SIZE - PIPELINE_STAGES` (`VX_cache_bank.sv:659`): 2 at the default, **14** as
+   we build it. That gate is one of the two terms in `core_req_ready` (`:232`), i.e. it directly
+   controls when a bank stops accepting misses. A back-pressure path that engages at 2 outstanding
+   fills is a materially different design from one that engages at 14 — and back-pressure is
+   precisely what several of our coverage bins are trying to observe.
+2. **Coverage claims inherit it.** Every banked number describes a machine with 4x-deeper cache
+   fill queues than a default Vortex build. Nothing in the plan, the paper, or the bank metadata
+   says so.
+3. **It nearly produced a false structural waiver.** OBS-031 was one edit away from justifying an
+   `ignore_bins` with "the fill queue throttles at 2 entries" — true of the RTL default, false of
+   the binary we run. Reading the compile transcript rather than the header is what caught it.
+4. **No provenance.** `git log -S` traces it to the initial `Add files via upload` commit, with no
+   message, comment, or doc explaining the intent. It may well be deliberate (a deeper queue hides a
+   performance cliff and speeds simulation), but nothing records that.
+
+**Bug vs expected:** **TB configuration defect (undocumented divergence from the DUT defaults).**
+Not an RTL bug — the RTL honours the override exactly as designed.
+
+**Disposition: OPEN.** Options, in preference order: (a) delete the override and re-measure, so we
+verify the default configuration; (b) keep it, but make it terminal-controlled like `L2`/`L3` and
+state it in the bank metadata and the paper's configuration table. What must NOT continue is an
+unexplained silent override that analysis keeps tripping over. Until resolved, any statement of the
+form "Vortex's L1 does X under back-pressure" must be qualified with the queue depths we built.
