@@ -1652,3 +1652,116 @@ verify the default configuration; (b) keep it, but make it terminal-controlled l
 state it in the bank metadata and the paper's configuration table. What must NOT continue is an
 unexplained silent override that analysis keeps tripping over. Until resolved, any statement of the
 form "Vortex's L1 does X under back-pressure" must be qualified with the queue depths we built.
+
+---
+
+## OBS-033 — 26% of the entire toggle gap is ONE read-only cache: the icache's write-data path is elaborated but structurally undrivable
+
+**Status of the old claim.** Since session 10 (2026-07-10) every doc has explained the toggle
+ceiling as *"`DCACHE_WRITEBACK=0` (write-through) => 512-bit full-line write-data fields never
+driven, plus constant PC high bits"*. That explanation named the **dcache**. Measured on the clean
+1CL bank of 2026-08-15, **it points at the wrong cache**:
+
+| subtree | toggle bins | missing | coverage |
+|---|---|---|---|
+| `socket/icache` | 51,340 | **22,730** | **55.7%** |
+| `socket/dcache` | 86,604 | 9,524 | 89.0% |
+
+The icache is **half the size and carries 2.4x the misses**. It is **22,730 of the design's 85,957
+missing toggle bins = 26.4% of the entire toggle gap, from one subtree.**
+
+**Root cause — `VX_socket.sv:106` instantiates the icache with `.WRITE_ENABLE (0)`.** The cache
+generic is fully parameterised, so the write-data payload, its byte-enables and every buffer stage
+that carries them are still *elaborated*; they are simply never driven. Zero-toggle nodes inside
+the icache, by signal:
+
+```
+   3232  req_data.data          <- 512-bit write payload, replicated per interface hop
+   1241  data_out               \
+    732  data_in                 |  the elastic buffers / stream arbiters that
+    697  req_data_in[0]          |  carry that same payload through the hierarchy
+    697  req_data_out[0]         |
+    620  mem_req_pdata[0]        |
+    620  per_bank_mem_req_pdata[0]
+    512  per_bank_mem_req_data[0]/
+    404  req_data.byteen        <- byte-enables for a write that cannot happen
+```
+Counter-check that this is the write path and not "the icache is under-stimulated": on the same
+interface, `rsp_data.data` (the fill payload) toggles **45-46 times per bit across all 512 bits**.
+The read path is fully exercised; only the write direction is dead.
+
+**This is the SAME citation we already accepted for functional coverage and never applied to code
+coverage.** Commit `5c4b70f` waived the icache `cp_rw.wr` covergroup bin as structural on exactly
+`VX_socket.sv:106`. The toggle bins produced by that same tie-off were left in the denominator, so
+the bank has been reporting a structural impossibility as an uncovered feature for every bank we
+have ever taken.
+
+**Amplified by the metric's own shape: Questa toggle coverage is BY INSTANCE.** `VX_mem_bus_if`
+merged by design unit is **2,456 bins at 96.49%**; counted by instance it is **98,160 bins with
+15,951 missing**. The identical dead field is re-counted at every hop it passes through
+(`arb_core_bus_if` -> `mem_bus_tmp_if` -> `mem_bus_cache_if` -> `cache_mem_bus_if` -> per-bank), and
+eight distinct parameterisations of that interface sit at *exactly* 46.96% each. One tie-off in the
+RTL therefore costs the metric roughly an order of magnitude more than it costs the design.
+
+**Disposition: OPEN — a config-aware structural exclusion is justified and is NOT gaming.** The
+waiver must be keyed off the instantiation parameter (`WRITE_ENABLE == 0`), exactly like the
+existing `vx_cache_probe` bind, so that it evaporates automatically if a future config enables
+icache writes. Waiving by hardcoded instance path would be wrong for the same reason OBS-030 was
+wrong. **Do NOT waive the dcache write-data path on this observation** — it is a different
+mechanism (write-through, OBS pending) and its numbers do not support a blanket waiver.
+
+---
+
+## OBS-034 — the design carries a 44-bit UUID counter that NO simulation can ever toggle, and the verification infrastructure itself depends on it
+
+**What we saw.** `uuid` fields are the second-largest toggle hole after the icache: **9,300 uuid
+toggle nodes design-wide, 5,103 of them dead (54.9%)**. Measured per bit on
+`socket/icache/cache_mem_bus_if[0]/req_data.tag.uuid`:
+
+```
+bit :  0  1  2  3  4  5  6  7  8  9 10 11 12 13 14 15 16 17 | 18..31 | 32 33 | 34..43
+tog : 46 46 46 46 46 46 46 46 46 45 33 27 19 17  7  7  2  1 |   all 0 | 37  1 |  all 0
+```
+
+This is the unmistakable signature of a **binary counter**, not a stimulus gap. Each successive bit
+toggles at half the rate of its predecessor (46, 46, ..., 33, 27, 19, 17, 7, 7, 2, 1, 0), and the
+break at bit 32 (37 toggles) is a packed sub-field boundary, not a counter bit.
+
+**Root cause — `VX_gpu_pkg.sv:66`:**
+```systemverilog
+`ifndef NDEBUG
+    localparam UUID_WIDTH = 44;      // <- our build lands here
+`else
+`ifdef SCOPE
+    localparam UUID_WIDTH = 44;
+`else
+    localparam UUID_WIDTH = 1;
+`endif
+`endif
+```
+**Toggling bit 18 requires 2^18 = 262,144 requests on that path; bit 43 requires 2^43 ~ 8.8e12.**
+No simulation reaches that, at any stimulus quality, ever. **4,542 of the 5,103 dead uuid nodes are
+bit index >= 18** — i.e. ~89% of the uuid gap is arithmetically unreachable rather than
+under-stimulated. This is a strictly stronger claim than "hard to hit": it is provable from the
+counter width and the run length, with no appeal to stimulus.
+
+**The obvious fix is CLOSED to us, and that is the point of this entry.** Building with `NDEBUG`
+sets `UUID_WIDTH = 1` and deletes these bins outright. **We cannot do that:** `uuid` is the
+correlation key our own verification stack is built on — `lockstep_scoreboard.svh`,
+`vx_commit_probe.sv`, `vx_lsu_probe.sv`, `rvvi_txn.svh`, `lockstep_pkg.sv`, `simx_pkg.sv` and
+`simx_dpi.cpp` all consume it. Narrowing it to 1 bit would silently destroy per-instruction
+lockstep, which is the strongest checker in the project.
+
+⚠ **Therefore the toggle metric is permanently penalised by the very instrumentation that makes the
+functional claims defensible.** That trade is worth making, but it must be *stated* rather than
+absorbed into a headline percentage — a reader comparing our 79.79% toggle against a published
+figure has no way to know that a debug counter no run can exercise sits in the denominator.
+
+**Related, same class, smaller:** `PC[0]` and `PC[1]` are dead on 64 nodes each — instructions are
+4-byte aligned, so the low two PC bits are constant 0 by ISA construction (RVC is excluded upstream,
+`prepare.sh:321 --target=rv32im`). PC high bits are constant because the programs are small; that
+part IS realism-limited rather than structural and must NOT be waived.
+
+**Disposition: OPEN.** Recommended: exclude uuid bits at or above the run-length bound with the
+bound *derived* (from retired-instruction count), never hardcoded, and state the residual in the
+paper. Do NOT set `NDEBUG`.
