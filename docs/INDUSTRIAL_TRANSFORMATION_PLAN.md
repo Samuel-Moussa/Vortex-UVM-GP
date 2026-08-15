@@ -66,7 +66,54 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
-### ▶▶ RESUME HERE — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
+### ▶▶ RESUME HERE — 2026-08-16 · TOGGLE ROOT-CAUSED AND WAIVED · NOTHING IN FLIGHT
+
+**Full analysis: `docs/COVERAGE_TOGGLE_20260816.md`. Evidence: OBS-033 / OBS-034.**
+**NO SIMULATION WAS RUN** — both banks were RE-REPORTED from their own `merged_raw.ucdb` with an
+extended exclusion set. Stimulus, 47/47 pass results and every functional number are unchanged.
+
+| bank | toggle | total | cg bins | hits |
+|---|---|---|---|---|
+| 1CL/1C/4W/4T | 79.79 → **82.16%** | 93.09 → **93.43%** | 370/377 = 98.14% (unchanged) | 339,487 → **339,487** |
+| 2CL/2C/4W/4T | 77.80 → **79.47%** | 92.67 → **92.91%** | 985/1032 = 95.44% (unchanged) | 972,317 → **972,317** |
+
+**Acceptance met at BOTH configs: not one covered bin moved (hits identical, only the denominator
+shrank) and 0 "had no effect".** Same non-vacuity gate the icache covergroup waiver passed in
+`5c4b70f`, plus the OBS-030 cross-config gate.
+
+**⚠ THE OLD TOGGLE EXPLANATION NAMED THE WRONG CACHE.** Every doc since 2026-07-10 blamed
+*"write-through dcache => 512-bit write-data never driven"*. Measured: **icache 51,340 bins /
+22,730 missing / 55.7%** vs **dcache 86,604 / 9,524 / 89.0%**. The icache is half the size and
+carries 2.4x the misses — **26.4% of the design's entire toggle gap from one subtree** — because
+`VX_socket.sv:106` instantiates it `.WRITE_ENABLE (0)`. Counter-check: `rsp_data.data` toggles 45-46
+times on all 512 bits, so the read path is fully exercised and only the write direction is dead.
+This is the SAME citation already accepted for `cp_rw.wr` in `5c4b70f`; the toggle bins from that
+identical tie-off had never been waived.
+
+**Second cause — `VX_uuid_gen.sv:40-41`: `uuid = { g_wid[11:0], counter[31:0] }`,
+`g_wid = (CORE_ID << NW_BITS) + wid`.** g_wid bits above the topology bound are waived
+config-awarely (1CL `uuid[43:34]` → 4CL/16W `uuid[43:40]`; it SHRINKS as the topology grows).
+**Counter bits [18:31] are deliberately NOT waived** — infeasible (bit 31 needs ~2.1e9 instructions
+on one warp) is not the same as structurally dead, and this project excludes only the latter.
+**Do NOT set `NDEBUG` to make them go away** — it sets `UUID_WIDTH=1` and would destroy the uuid key
+that `lockstep_scoreboard.svh` / `vx_commit_probe.sv` / `vx_lsu_probe.sv` / `simx_dpi.cpp` depend on.
+
+**Third factor — Questa toggle is BY INSTANCE.** `VX_mem_bus_if` is 2,456 bins @96.49% by design
+unit but 98,160 bins with 15,951 missing by instance; eight parameterisations sit at *exactly*
+46.96%. One tie-off costs the metric ~10x what it costs the design.
+
+**⚠ OPEN, NOT WAIVED: `mem_req_buf` / `mem_rsp_queue` internal `data_in`/`data_out`** (654+560 nodes,
+measured 100% dead). Both degenerate to passthrough (`MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1)`,
+`VX_cache.sv:105`; `ICACHE_MRSQ_SIZE 0`, `VX_config.vh:577`) and the passthru branch shows an ALIAS
+signature (`genblk1/__unused = 47` vs `genblk2/__unused = 0`). Excluding an alias of a covered net
+would hide real coverage — left in the denominator pending investigation.
+
+**▶ NEXT: the paper** (headline still wrong on all three counts), then optionally L2/L3 as a third
+bank. Remaining cheap targets unchanged: `cross_dvg_depth` 2 bins; OBS-032 decision.
+
+---
+
+### ▶▶ PREVIOUS — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
 
 **✅✅ BOTH POST-SCALING RE-RUNS DONE AND BANKED (2026-08-15). 44/44, 0 FAILED, BOTH CONFIGS.**
 **FULL ANALYSIS: `docs/COVERAGE_POSTSCALE_20260815.md`** — read that before quoting any number.
