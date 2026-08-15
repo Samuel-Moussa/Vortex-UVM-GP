@@ -111,11 +111,17 @@ class host_transaction extends uvm_sequence_item;
     }
     
     // Valid core/warp/thread configuration
+    // Only a POSITIVITY constraint. Any upper bound here is a guess about
+    // hardware this transaction knows nothing about: the previous
+    // `num_threads inside {[1:4]}` would have made an 8-thread build
+    // unrandomisable, and every fixed ceiling just moves that failure further
+    // out. The real bound is the elaborated config, enforced by the I2
+    // asserts and by vortex_config's macro-derived constraint.
     constraint valid_config_c {
-        num_clusters inside {[1:8]};
-        num_cores inside {[1:8]};
-        num_warps inside {[1:8]};
-        num_threads inside {[1:4]};
+        num_clusters > 0;
+        num_cores    > 0;
+        num_warps    > 0;
+        num_threads  > 0;
     }
     
     // Aligned memory addresses

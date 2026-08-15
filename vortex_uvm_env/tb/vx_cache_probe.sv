@@ -54,6 +54,13 @@ module vx_cache_probe import VX_gpu_pkg::*; #(
     // .WRITE_ENABLE (0)); every other level is writable, so no bins are lost
     // where they are reachable.
     parameter WRITE_ENABLE        = 1,
+    // OBS-031 structural-reachability key for cp_mshr_stall. MSHR_SIZE is this
+    // bank's own depth; MAX_OUTSTANDING is the most concurrent misses the
+    // REQUESTER side can present to it, computed at the bind site where the
+    // VX_config.vh macros are in scope. stall is reachable only when the
+    // requester can actually fill the MSHR.
+    parameter MSHR_SIZE           = 16,
+    parameter MAX_OUTSTANDING     = 16,
     parameter ENABLE              = 1   // explicit suppression hook (see header)
 ) (
     input wire clk,
@@ -167,9 +174,37 @@ module vx_cache_probe import VX_gpu_pkg::*; #(
 
         // MSHR back-pressure — the bank could not accept work. This is the
         // occupancy/pressure dimension that no previous covergroup observed.
+        //
+        // STRUCTURAL, CONFIG-AWARE WAIVER (OBS-031). `perf_mshr_stall` is
+        // `mshr_alm_full` (VX_cache_bank.sv:684), i.e. the bank is holding
+        // MSHR_SIZE concurrent outstanding misses. Whether that is reachable is
+        // decided by how many requests the REQUESTER side can have in flight,
+        // which is narrower than the MSHR in this configuration:
+        //   LSUQ_IN_SIZE  = 2*(SIMD_WIDTH/NUM_LSU_LANES) == 2 for EVERY config
+        //                   (VX_config.vh:426, and NUM_LSU_LANES == SIMD_WIDTH)
+        //   LSUQ_OUT_SIZE = MAX(LSUQ_IN_SIZE, LSU_LINE_SIZE/(XLEN/8))  (:431)
+        // giving 4 outstanding memory requests at NUM_THREADS=4 and 8 at 8 —
+        // against MSHR_SIZE=16. The bank also gates acceptance on the FILL queue
+        // (`~mreq_queue_alm_full`, :232) which asserts at MREQ_SIZE-PIPELINE_STAGES
+        // = 2 entries, so it throttles long before the MSHR could fill.
+        //
+        // PROVEN, not assumed: tests/kernel/mshr_flood was built specifically for
+        // this bin (same-bank stride, thread-interleaved slots piling ~64 lines on
+        // one 4-way set) and produced 67,207 dcache misses vs 774 hits with the
+        // stall bin still at ZERO — while the AXI tag buffer independently showed
+        // only 6 of 16 slots ever in use. Two independent measures of "~6
+        // outstanding" against a 16-deep MSHR.
+        //
+        // Keyed on MAX_OUTSTANDING (passed from the bind site, where the RTL
+        // macros are in scope) so it AUTO-REACTIVATES on any config that could
+        // actually reach it — e.g. NUM_THREADS=16 gives LSUQ_OUT_SIZE=16. Never
+        // waive this unconditionally: that is precisely the OBS-030 mistake of
+        // freezing a one-config claim into the coverage model.
         cp_mshr_stall: coverpoint s_mshr_stall {
             bins no_stall = {0};
             bins stall    = {1};
+            ignore_bins unreachable_narrow_requester =
+                {1} with (MAX_OUTSTANDING < MSHR_SIZE);
         }
 
         // The cross that actually matters: all four combinations of

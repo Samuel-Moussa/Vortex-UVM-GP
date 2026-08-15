@@ -1047,7 +1047,31 @@ module vortex_tb_top;
         // rather than unstimulated. Passed through by `bind` so the waiver is
         // per-instance and config-generic -- enable L2/L3 or change the socket
         // and the correct caches keep their bins with no edit here.
-        .WRITE_ENABLE (WRITE_ENABLE)
+        .WRITE_ENABLE (WRITE_ENABLE),
+        // OBS-031 structural-reachability key for cp_mshr_stall.stall. The bin
+        // needs MSHR_SIZE CONCURRENT outstanding misses in one bank; whether
+        // that is possible is set by the REQUESTER side, which is narrower than
+        // the MSHR at L1 in this configuration. Computed HERE because the
+        // VX_config.vh macros are in scope at the bind site but not inside the
+        // probe, and passed per-instance so it adapts to any config.
+        //   L1 icache: at most one outstanding fetch per warp, over the cores
+        //              sharing the socket.
+        //   L1 dcache: LSUQ_OUT_SIZE outstanding memory requests per LSU, over
+        //              the cores sharing the socket (VX_config.vh:431).
+        //   anything else (L2 1 MB / L3 2 MB): the requesters are CACHES, not a
+        //              core pipeline, and that bound is NOT established here —
+        //              so fall back to MSHR_SIZE, which makes the waiver
+        //              inapplicable. Never guess a bound for a level we have not
+        //              analysed; an unproven ignore_bins is the OBS-030 failure.
+        // ICACHE_SIZE == DCACHE_SIZE (both 16384), so WRITE_ENABLE is what
+        // separates them (the icache is built .WRITE_ENABLE(0), VX_socket.sv:106).
+        .MSHR_SIZE (MSHR_SIZE),
+        .MAX_OUTSTANDING (
+            (CACHE_SIZE == `ICACHE_SIZE && WRITE_ENABLE == 0)
+                ? (`SOCKET_SIZE * `NUM_WARPS)
+          : (CACHE_SIZE == `DCACHE_SIZE && WRITE_ENABLE == 1)
+                ? (`SOCKET_SIZE * `LSUQ_OUT_SIZE)
+          : MSHR_SIZE)
     ) u_cache_probe (
         .clk            (clk),
         .reset          (reset),

@@ -493,13 +493,16 @@ class vortex_coverage_collector extends uvm_component;
 
     cp_num_cores: coverpoint current_host.num_cores
         iff (current_host.op_type == host_transaction::HOST_LAUNCH_KERNEL) {
-      bins single = {32'd1};
-      bins sm     = {[32'd2:32'd4]};
-      bins lg     = {[32'd5:32'd8]};
       // Config-aware: only the bucket containing the COMPILED NUM_CORES is
       // reachable this build; other-config values are unreachable -> ignore so
-      // they leave the denominator. Auto-adapts to any config.
-      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_CORES);
+      // they leave the denominator. Open-ended top bucket so ANY config lands
+      // in exactly one bin.
+      bins single = {32'd1};
+      bins sm     = {[32'd2:32'd4]};
+      bins md     = {[32'd5:32'd8]};
+      bins lg     = {[32'd9:32'd16]};
+      bins xl     = {[32'd17:$]};
+      ignore_bins other_cfg = {[32'd0:$]} with (item != CFG_CORES);
     }
 
     cp_num_warps: coverpoint current_host.num_warps
@@ -507,15 +510,21 @@ class vortex_coverage_collector extends uvm_component;
       bins low  = {[32'd1:32'd2]};
       bins mid  = {[32'd3:32'd4]};
       bins high = {[32'd5:32'd8]};
-      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_WARPS);
+      bins wide = {[32'd9:32'd16]};
+      bins xl   = {[32'd17:$]};
+      ignore_bins other_cfg = {[32'd0:$]} with (item != CFG_WARPS);
     }
 
     cp_num_threads: coverpoint current_host.num_threads
         iff (current_host.op_type == host_transaction::HOST_LAUNCH_KERNEL) {
-      bins t1 = {32'd1};
-      bins t2 = {32'd2};
-      bins t4 = {32'd4};
-      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_THREADS);
+      // Was t1/t2/t4 ONLY: an 8-thread build had NO bin to land in at all.
+      bins t1  = {32'd1};
+      bins t2  = {32'd2};
+      bins t4  = {32'd4};
+      bins t8  = {32'd8};
+      bins t16 = {[32'd9:32'd16]};
+      bins txl = {[32'd17:$]};
+      ignore_bins other_cfg = {[32'd0:$]} with (item != CFG_THREADS);
     }
 
     cp_completion: coverpoint current_host.completion_flag

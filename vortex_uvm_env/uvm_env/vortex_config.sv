@@ -340,10 +340,17 @@ class vortex_config extends uvm_object;
     //==========================================================================
 
     constraint valid_hw_config_c {
-        num_clusters inside {[1:4]};
-        num_cores    inside {[1:32]};
-        num_warps    inside {[1:16]};
-        num_threads  inside {[1:8]};
+        // NO magic ceilings. The UVM config cannot legally differ from the
+        // hardware this build was elaborated with — a plusarg cannot create
+        // hardware, which is exactly what the I2 elaboration asserts enforce
+        // (vortex_tb_top.sv). So bound each dimension by its OWN compile-time
+        // macro: the constraint is then correct for ANY configuration, including
+        // ones nobody has run yet, and it can never silently exclude a legal
+        // value the way a hardcoded [1:4] / [1:8] range did.
+        num_clusters inside {[1:`NUM_CLUSTERS]};
+        num_cores    inside {[1:`NUM_CORES]};
+        num_warps    inside {[1:`NUM_WARPS]};
+        num_threads  inside {[1:`NUM_THREADS]};
         // RTL: NUM_BARRIERS = UP(NUM_WARPS/2) = max(NUM_WARPS/2, 1)
         num_barriers == ((num_warps / 2 > 0) ? (num_warps / 2) : 1);
 
