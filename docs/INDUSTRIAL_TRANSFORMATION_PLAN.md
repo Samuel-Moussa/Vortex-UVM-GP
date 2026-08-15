@@ -68,7 +68,42 @@ CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
 ### ▶▶ RESUME HERE — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
 
-**✅ 1CL POST-SCALING RE-RUN DONE AND BANKED (2026-08-15 05:44).** `44 staged, 0 FAILED`.
+**✅✅ BOTH POST-SCALING RE-RUNS DONE AND BANKED (2026-08-15). 44/44, 0 FAILED, BOTH CONFIGS.**
+**FULL ANALYSIS: `docs/COVERAGE_POSTSCALE_20260815.md`** — read that before quoting any number.
+
+| bank | total | cg bins | Δ total | Δ bins |
+|---|---|---|---|---|
+| 1CL/1C/4W/4T | **91.07%** | 398/403 = 98.75% | −0.01 (control) | 0 |
+| 2CL/2C/4W/4T | **90.54%** | **962/1095 = 87.85%** | **+1.85** | **+18** |
+
+**+18 bins, 0 lost, all at 2CL: exactly 6 per previously-idle core** (`CL0.C1`,`CL1.C0`,`CL1.C1`) —
+TCU `cp_warp.auto[0..3]` + TCU/FPU `cp_active_threads.uniform`, from the `tcu_mt`/`tcu_test`/
+`fpu_mt` grid scaling. **Every 2CL category improved**; weighted covergroups 92.11→98.13 is what
+drives the headline (Questa Total = unweighted mean of 7 categories).
+**⚠ CORRECTION — the "84 per-core bins / 28 each / core0 misses 0" figure was WRONG.** Measured:
+the per-core excess vs core0 was **14 each = 42 total** (now **8 each = 24**), and core0 misses
+**13**, not 0. Stop quoting 84/28.
+**`cp_mshr_stall.stall` did NOT move** — still 0/4 instances vs 5,131,366 `no_stall` samples. Four
+cores contending was not enough; genuine stimulus gap, honestly uncovered.
+**The residual 8-per-core are a DELIBERATE consequence of FIX 1 + FIX 2** (riscv-dv and
+`barrier_test` are core-gated to core 0, so Zicond `czeq`/`czne`, `lb` and the `<bar,*>`/`<pred,*>`
+SFU crosses have no producer on cores 1-3). **Do NOT recover them by removing the gates** — coverage
+from an architecturally-undefined program is not coverage. Recover them with a multi-core-SAFE
+directed kernel (per-core contiguous slice, `vx_spawn.c:299`).
+**BIGGEST REMAINING 2CL LEVER IS AXI, NOT THE CORES: 72 of 133 missing bins** are
+`cross_type_route` (39) + `cp_id_route` (33) — tag space scales with config, stimulus does not.
+**Asymmetry to remember:** core0 MISSES 2 divergence bins the other cores cover
+(`cross_dvg_depth.<divergent,d[3]>`, `<uniform,d[1]>`) ⇒ "core0 is a superset" is FALSE.
+Pre-scaling banks preserved: `cov/bank_{1CL_1C_4W_4T,2CL_2C_4W_4T}_prescale_20260814/`.
+Logs: `results/run_suite_logs_{1CL,2CL}_20260815/`.
+
+**▶ NEXT: update `docs/PAPER_BASE_EVALUATION.md` + `docs/paper/vortex_uvm_paper.tex`** — the
+headline "100% functional / 43/43 / 91.0%" is wrong on all three counts (98.75% raw bins 1CL /
+87.85% 2CL; **44** distinct programs; 91.07% 1CL / 90.54% 2CL).
+
+---
+
+**1CL detail (2026-08-15 05:44).** `44 staged, 0 FAILED`.
 **Total 91.07% · covergroup bins 398/403 = 98.75% · 2256 instances** — i.e. **statistically
 identical to the pre-scaling bank** (91.08%, 398/403, 2256). Only toggle moved, 78.42→78.39%
 (`wide_stress` walks a slightly different address pattern at the device-sized grid).
@@ -79,26 +114,17 @@ changed nothing it should not have ⇒ **any 2CL movement is attributable to the
 Pre-scaling 1CL bank preserved at `cov/bank_1CL_1C_4W_4T_prescale_20260814/`; 1CL per-test logs +
 suite log archived to `vortex_uvm_env/results/run_suite_logs_1CL_20260815/`.
 
-**⏳ THE 2CL RE-RUN IS IN FLIGHT RIGHT NOW (started 2026-08-15 05:45).** Detached (`setsid`, own
-SID — survives a session exit), `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4`, log:
-`/tmp/claude-1000/-home-samuel-ubuntu22-Vortex-UVM-GP/69210dfb-660d-4751-9578-61d1c46bcd08/scratchpad/suite_2cl_v2.log`
-(per-test logs in `vortex_uvm_env/results/run_suite_logs/`).
-*On resume:* check `grep "SUITE VERDICT" <log>`; if finished, **BANK IMMEDIATELY** —
-`mv cov/bank_2CL_2C_4W_4T cov/bank_2CL_2C_4W_4T_prescale_20260814 && mkdir cov/bank_2CL_2C_4W_4T &&
-cp cov/merged.ucdb cov/merged_raw.ucdb cov/bank_2CL_2C_4W_4T/ && cp -r cov/report cov/staging
-cov/bank_2CL_2C_4W_4T/`, then verify by RE-READING the copy (`vcover report -summary <copy>`).
+**2CL detail (2026-08-15 08:15).** `44 staged, 0 FAILED`, ~2.5 h wall clock.
+⚠ **NOTHING IS IN FLIGHT.** Both runs are finished and banked; no background sim is running.
 ⚠ `run_suite` merges into `cov/merged.ucdb`, so an UNBANKED result is destroyed by the next
 config's merge. Archive `results/run_suite_logs/` before each run — it is overwritten.
-*Compare against:* 2CL **88.69% / 944-1095** (the pre-scaling bank).
-Questions this run answers: (a) do the **84 per-core `instr_probe` bins on cores 1-3** fill,
-(b) does `cp_mshr_stall.stall` move now that 4 cores contend, (c) does the total beat 88.69%.
 
-**STATE: 1CL re-banked post-scaling (unchanged, as designed). 2CL re-run IN FLIGHT.**
+**STATE: both configs re-run post-scaling, banked, and verified by re-reading the copies.**
 
 | bank | programs | total | covergroup bins | instances |
 |---|---|---|---|---|
-| **1CL/1C/4W/4T** (`cov/bank_1CL_1C_4W_4T/`) | **44/44, 0 FAILED** | **91.08%** | 398/403 = 98.75% | 2256 |
-| **2CL/2C/4W/4T** (`cov/bank_2CL_2C_4W_4T/`) | **44/44, 0 FAILED** | **88.69%** | 944/1095 = 86.21% | 8275 |
+| **1CL/1C/4W/4T** (`cov/bank_1CL_1C_4W_4T/`) | **44/44, 0 FAILED** | **91.07%** | 398/403 = 98.75% | 2256 |
+| **2CL/2C/4W/4T** (`cov/bank_2CL_2C_4W_4T/`) | **44/44, 0 FAILED** | **90.54%** | 962/1095 = 87.85% | 8275 |
 
 **⭐ FIRST CLEAN 2CL SWEEP EVER** (previous attempt: 37/45 with 8 FAILED). Stale 2CL bank
 (85.16%) preserved as `bank_2CL_2C_4W_4T_stale_20260710/` — never quote it.
