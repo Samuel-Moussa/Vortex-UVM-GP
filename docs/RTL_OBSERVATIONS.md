@@ -1447,9 +1447,28 @@ paper, would be an unsupportable structural-unreachability claim (rule 1 / the F
 list). The genuine gap it hides is also real: `auto[64:127]` — the entire upper half of the 2CL
 route field — has **zero** hits, 32 bins.
 
-**Disposition: OPEN — needs a config-generic re-derivation.** The fix is not to re-tune the
-literals per config (that re-creates the same trap at 4CL). Bin the field by its **decoded
-sub-fields** — requester port, MSHR slot, read/write — each sized from the RTL parameters that
-define it, so the model adapts to any `NUM_PORTS_IN`/`TAG_BUFFER_SIZE` by construction. That also
-converts an over-specified implementation artifact ("which free-list slot") into a meaningful
-question ("does every requester port reach AXI, and does every MSHR slot get used").
+**Disposition: ✅ FIXED 2026-08-15.** The flat `cp_id_route`/`cross_type_route` and all four
+literal `ignore_bins` are withdrawn, replaced by a layout-derived decode in
+`vortex_coverage_collector.svh`: `cp_route_port` (requester port, reads), `cp_route_slot` (MSHR
+slot, reads), `cp_write_tag` (writes — coarse buckets, since the write tag genuinely IS a
+non-architectural counter id), and `cross_port_slot`. Every bound comes from
+`VX_gpu_pkg::VX_MEM_PORTS` and the adapter's `TAG_BUFFER_SIZE`, so no per-config maintenance
+exists to go stale. The prose trip-wire is now a `uvm_fatal` on
+`ROUTE_W < PORT_SEL_W + SLOT_W` plus a UVM_INFO banner printing the decode.
+
+**Verified config-generic by compiling the SAME source at both configs** — the derived layout
+tracks the hardware exactly:
+
+| | 1CL/1C | 2CL/2C |
+|---|---|---|
+| `AXI_ID_W` / `ROUTE_W` | 50 / **6** | 51 / **7** |
+| `MEM_PORTS` / `PORT_SEL_W` | 1 / **0** | 2 / **1** |
+
+`ROUTE_W` grows by exactly `PORT_SEL_W`, which confirms `VX_axi_adapter.sv:282` numerically rather
+than by argument. First 2CL run (`vecadd_lite`): `cp_route_port` **100%** (both requester ports
+reach AXI — previously invisible), `cp_route_slot` **25%** (slots 0-3 only), `cp_write_tag` 2/8.
+That 25% is the honest signal the waivers were destroying: the design has 16 MSHR entries and this
+stimulus reaches 4. Both Gate-0 guards re-proven RED at `0x800075d8` after the change.
+
+⚠ **The banked 2026-08-15 AXI numbers are not comparable across this change** (the denominator and
+the questions both changed). The banks are preserved; re-measure before quoting the AXI block.

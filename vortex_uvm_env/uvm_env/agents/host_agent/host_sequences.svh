@@ -180,14 +180,16 @@ class host_launch_kernel_sequence extends host_base_sequence;
     // Making them rand caused the solver to ignore caller assignments and
     // hardcode startup_address == 64'h80000000, ignoring +STARTUP_ADDR.
     bit [63:0] startup_address;
+    bit [31:0] num_clusters;
     bit [31:0] num_cores;
     bit [31:0] num_warps;
     bit [31:0] num_threads;
- 
+
     function new(string name = "host_launch_kernel_sequence");
         super.new(name);
         // RTL defaults — overridden from cfg in body() if cfg is available
         startup_address = 64'h80000000;
+        num_clusters    = 1;
         num_cores       = 1;
         num_warps       = 4;
         num_threads     = 4;
@@ -203,18 +205,20 @@ class host_launch_kernel_sequence extends host_base_sequence;
             startup_address = cfg.startup_addr;
         // Similarly pull core/warp/thread counts from cfg to match RTL compile
         if (cfg != null) begin
+            if (num_clusters == 1) num_clusters = cfg.num_clusters;
             if (num_cores   == 1) num_cores   = cfg.num_cores;
             if (num_warps   == 4) num_warps   = cfg.num_warps;
             if (num_threads == 4) num_threads = cfg.num_threads;
         end
- 
+
         `uvm_info("HOST_SEQ", $sformatf(
-            "Launching kernel at 0x%016h (cores=%0d warps=%0d threads=%0d)",
-            startup_address, num_cores, num_warps, num_threads), UVM_LOW)
- 
+            "Launching kernel at 0x%016h (clusters=%0d cores=%0d warps=%0d threads=%0d)",
+            startup_address, num_clusters, num_cores, num_warps, num_threads), UVM_LOW)
+
         trans = host_transaction::type_id::create("launch_trans");
         trans.op_type         = host_transaction::HOST_LAUNCH_KERNEL;
         trans.startup_address = startup_address;
+        trans.num_clusters    = num_clusters;
         trans.num_cores       = num_cores;
         trans.num_warps       = num_warps;
         trans.num_threads     = num_threads;
