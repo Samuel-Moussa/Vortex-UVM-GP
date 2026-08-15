@@ -124,26 +124,56 @@ config's merge. Archive `results/run_suite_logs/` before each run — it is over
 ---
 
 ### ▶▶ COVERAGE-GAP PUSH — 2026-08-15
-**⏳⏳ IN FLIGHT RIGHT NOW (2026-08-15 ~19:45): FULL 1CL SUITE, gap-push build.**
-Detached (`setsid`, SID 4778), log:
-`/tmp/claude-1000/-home-samuel-ubuntu22-Vortex-UVM-GP/69210dfb-660d-4751-9578-61d1c46bcd08/scratchpad/suite_1cl_gap.log`
-This is the FIRST suite containing the AXI route re-model (OBS-030), the config-aware
-`cp_mshr_stall` waiver (OBS-031) and the 3 new kernels (`multicore_isa`, `lmem_stress`,
-`mshr_flood`) — 47 programs, was 44.
-*On resume:* `grep "SUITE VERDICT" <log>`; when done **BANK IMMEDIATELY** —
-`mv cov/bank_1CL_1C_4W_4T cov/bank_1CL_1C_4W_4T_postscale_20260815 && mkdir cov/bank_1CL_1C_4W_4T &&
-cp cov/merged.ucdb cov/merged_raw.ucdb cov/bank_1CL_1C_4W_4T/ && cp -r cov/report cov/staging cov/bank_1CL_1C_4W_4T/`
-then verify by RE-READING the copy, then run 2CL
-(`CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 bash scripts/run_suite.sh`) and bank it the same way.
-⚠ `run_suite` merges into `cov/merged.ucdb` — an UNBANKED result is destroyed by the next merge.
-*Compare against:* 1CL **91.07% / 398-403** and 2CL **90.54% / 962-1095** (post-scaling banks).
-**EXPECT THE NUMBER TO MOVE BOTH WAYS** — three false ignore_bins removed (adds reachable bins to
-the denominator) vs real new coverage from the 3 kernels. Do not tune it.
- (AFTER the post-scaling banks). NOT YET RE-BANKED.
+**✅✅ GAP-PUSH COMPLETE — BOTH CONFIGS RE-RUN AND BANKED (2026-08-15/16). 47/47, 0 FAILED, BOTH.**
+**NOTHING IS IN FLIGHT.** Full analysis: **`docs/COVERAGE_GAPPUSH_20260815.md`**. Evidence:
+**OBS-030 / OBS-031 / OBS-032**.
 
-**Nothing below is in the banks yet.** The two banked configs predate all of it; the AXI block of
-those banks is no longer comparable (see OBS-030). Full evidence in `docs/RTL_OBSERVATIONS.md`
-**OBS-030 / OBS-031 / OBS-032**, which were NOT previously indexed here.
+| bank | programs | total | cg bins (raw) | cg weighted |
+|---|---|---|---|---|
+| 1CL/1C/4W/4T | **47/47, 0 FAILED** | **93.09%** (+2.02) | 370/377 = 98.14% | **99.79%** |
+| 2CL/2C/4W/4T | **47/47, 0 FAILED** | **92.67%** (+2.13) | 985/1032 = **95.44%** (+7.59) | **99.52%** |
+
+Every code category improved at BOTH configs: conditions **+9.27 / +8.14**, branches +2.08 / +2.50,
+statements +0.72 / +0.94, toggle +1.40 / +1.95.
+Previous banks preserved as `cov/bank_{1CL,2CL}_..._postscale_20260815/`; logs at
+`results/run_suite_logs_{1CL,2CL}_gap_20260815/`.
+
+**THREE NEW KERNELS (47 programs, was 44), each verified against its target BEFORE any suite ran:**
+* `multicore_isa` — **closed the per-core gap entirely.** All tracked bins on all 4 cores with
+  identical counts. Zicond `czeq`/`czne` from a kernel for the FIRST time (compiler cannot emit at
+  `-march=rv32imaf`; inline `.insn`). Recovers what FIX 1/FIX 2's core gates cost **without
+  weakening the gates**.
+* `lmem_stress` — first kernel to touch the scratchpad. `VX_local_mem` toggle **57.52 → 73.19%**.
+* `mshr_flood` — 67,207 dcache misses; its bin was NOT hit and that IS the finding (OBS-031).
+
+**COVERAGE MODEL REWRITTEN (OBS-030).** Flat `cp_id_route`/`cross_type_route` + four literal
+`ignore_bins` withdrawn — three fired on REAL traffic at 2CL (4488/10605/88 hits). Replaced by
+`cp_route_port` / `cp_route_slot` / `cp_write_tag` / `cross_port_slot`, bounds derived from
+`VX_MEM_PORTS` + adapter `TAG_BUFFER_SIZE`. ⚠ The AXI tag buffer is **config-dependent** — ABSENT at
+1CL, present per-port at 2CL — so `cp_route_slot` is gated on it. **Never compare the AXI block
+across this change.**
+
+**⚠ REMAINING GAPS — 1CL: 7 bins · 2CL: 47 bins. All accounted for:**
+* **24 (2CL)** `cp_route_slot` slots 4-15 + `cross_port_slot` — **measured** per-port concurrency is
+  3 (contiguous {0,1,2} proves the decode; lowest-free allocator). Same requester-width bound as
+  OBS-031. **Left uncovered, deliberately NOT waived** — the exact bound is not derived from RTL
+  params (measured 3 < naive 8), and waiving on an unproven bound is the OBS-030 mistake.
+* **8 (2CL) / 4 (1CL)** `cp_write_tag` high buckets — stimulus, low value.
+* **4** `mem_usage_cp`/`system_mem_cross` — weight-0 by design, MEM idle on AXI runs.
+* **2 (2CL)** `cross_dvg_depth` `<divergent,d[3]>`,`<uniform,d[1]>` — **the one clean cheap target
+  left**; ordinary stimulus, no structural obstacle.
+
+**⚠ OBS-032 STILL OPEN — WE HAVE NEVER MEASURED THE RTL's DEFAULT CACHE CONFIG.**
+`compile.sh:70-73` forces `{I,D}CACHE_MREQ_SIZE=16` over an RTL default of **4**. Decide before the
+paper: drop it and re-measure, or state it in the configuration table.
+
+**DEFERRED — L2/L3.** Suite never sets `L2=1 L3=1`, so both are PASSTHRU in every bank; no kernel
+can reach them. OBS-016/017 FIXED, OBS-018 proved they elaborate. Needs its OWN bank as a third
+config; verify with `vcover report -recursive | grep l2cache`, never by grepping the sim log.
+
+**▶ NEXT: the paper.** `docs/PAPER_BASE_EVALUATION.md` + `docs/paper/vortex_uvm_paper.tex` say
+"100% functional / 43/43 / 91.0%" — wrong on all three (**47** programs; 98.14%/95.44% raw bins;
+93.09%/92.67%).
 
 **WHAT LANDED**
 
