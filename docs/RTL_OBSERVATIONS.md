@@ -1490,6 +1490,34 @@ be issued when slots 0..14 are ALL occupied. The 1CL run reported `{0,2,3,7,11,1
 mis-decoded rather than under-stimulated. `cp_route_slot`/`cross_port_slot` are now gated on
 `TAG_BUF_PRESENT`, and the build logs which branch it took.
 
+**MEASURED ANSWER (2026-08-15, `mshr_flood` at 2CL) — the slot decode is CORRECT and the depth is
+REAL.** With the tag buffer present, the covered slots are **{0,1,2} — perfectly CONTIGUOUS** — and
+3..15 are zero:
+
+| config | covered slots | verdict |
+|---|---|---|
+| 1CL (no tag buffer) | {0,2,3,7,11,15} — non-contiguous | decode was meaningless (raw tag) |
+| 2CL (tag buffer present) | **{0,1,2} contiguous** | decode correct; max 3 concurrent reads/port |
+
+Contiguity is the self-check: a strictly lowest-free allocator can only ever produce a contiguous
+prefix, so a contiguous result means the field is being read correctly, and a gappy one means it is
+not. That single property distinguishes "under-stimulated" from "mis-decoded" without any extra
+instrumentation, and it is worth reusing on any allocator-indexed coverpoint.
+
+**⇒ The 13 unhit slots share OBS-031's root cause: the requester side is narrower than the
+resource.** `LSUQ_OUT_SIZE` is 4 at `NUM_THREADS=4`, and the measured per-port concurrency is 3.
+`mshr_flood` is the strongest outstanding-read stimulus in the suite (67k dcache misses at 1CL,
+33,060 words compared at 2CL) and it reaches 3 of 16.
+
+**Disposition: LEFT HONESTLY UNCOVERED — deliberately NOT waived.** A waiver asserts hardware
+*cannot* produce the value, and while the mechanism is clear, the exact concurrency bound has not
+been derived from the RTL parameters (measured 3 < the naive `LSUQ_OUT_SIZE * cores_per_port` = 8,
+so the naive formula would be wrong). Waiving on an unproven bound is precisely the OBS-030 mistake.
+These bins therefore stay in the denominator and lower the reported number — which is the correct
+outcome until someone derives the bound properly. Same for `cross_port_slot` (2 ports x 16 slots):
+it is kept even though ~26 of its 32 bins are unreachable in practice, because deleting a coverpoint
+because it reads low is tuning the metric, not verifying the design.
+
 **Lesson, third instance of the same class in one session:** a coverage bin is a CLAIM about what a
 signal means. Here the claim was true at 2CL and false at 1CL — the same trap as the original
 waivers, committed while fixing them. When bins appear in a pattern the hardware could not
