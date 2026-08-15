@@ -1392,3 +1392,64 @@ the DUT executed the intended program."* Nothing in an equivalence-based environ
 that; only an assertion on the stimulus can, and we now have one for exactly one shared input.
 **Disposition: OPEN (methodology).** Every remaining row of the table above is a place where a
 green run could still mean nothing. Add to the FW list and to the paper's limitations section.
+
+---
+
+## OBS-030 — the AXI route waivers are keyed to a field layout that only exists at ONE requester; three of four fire on real traffic at 2CL
+
+**What we saw.** In the 2026-08-15 post-scaling banks, `axi_transaction_cg.cp_id_route` reports its
+`ignore_bins` as **Occurred**, i.e. the "structurally unreachable" values are being produced by the
+DUT and then discarded by the waiver:
+
+| ignore_bin | stated premise | 1CL hits | **2CL hits** |
+|---|---|---|---|
+| `route_msb_unreachable = {[32:63]}` | "bit5 never set @1 requester" | 0 | **4,488** |
+| `route_emergent_read = {4,6,8,10,12,14}` | suite "NEVER emitted" these | **3** | **10,605** |
+| `route_high_write_tag = {23,27,31}` | write ids, "non-targetable" | 0 | **88** |
+| `route_even_ge16 = {16,18,…,30}` | "reads<=15, writes odd" | 0 | 0 |
+
+Evidence: `cov/bank_{1CL_1C_4W_4T,2CL_2C_4W_4T}/merged.ucdb`, `vcover report -cvg -details`.
+
+**Root cause (RTL, not stimulus).** `Vortex/hw/rtl/libs/VX_axi_adapter.sv:282`:
+```systemverilog
+assign xbar_tag_r_out = READ_FULL_TAG_WIDTH'({xbar_tag_out, req_xbar_sel_out[i]});
+```
+For **reads**, `arid` = `{tbuf_waddr, req_xbar_sel}` — the requester-port select occupies the
+**LOW** `NUM_PORTS_IN_BITS` bits (`:104-109`), so the MSHR slot index is **shifted up** by that
+many bits as soon as there is more than one input port. For **writes** (`:261`) `awid` is
+`mem_req_tag` with no port select appended, so reads and writes do not even share a layout.
+
+Consequences, measured:
+* `AXI_TID_W` 50 → **51** and `ROUTE_W = AXI_ID_W - UUID_W` 6 → **7** between 1CL and 2CL.
+* At 1CL a read route *is* `tbuf_waddr` (0..15). At 2CL it is `{tbuf_waddr, port}` (0..31), so the
+  old parity argument ("reads ≤15, writes odd") describes a field that no longer exists.
+* Every waiver is a **numeric literal set**, so at 2CL each one lands on a different physical
+  meaning than the one its evidence was gathered for.
+* At 128 values the coverpoint also exceeds Questa's default `auto_bin_max` (64), so 2CL is
+  measured in **range bins** (`auto[0:1]`, …) while 1CL is measured in **singletons** — the two
+  configs are not measuring the same thing.
+
+**This was predicted in-tree and never discharged.** `vortex_coverage_collector.svh:299-305` carries
+the trip-wire verbatim: *"validated for ROUTE_W==6 (1CL/1C/4W/4T). A wider config grows
+VX_MEM_TAG_WIDTH and the slot space -> re-derive before trusting these"* and *"at multi-core the AXI
+ID's requester-port bits make these routes reachable, so these ignores must be re-derived per config
+— DEFERRED to the Cores>1 phase."* The `SINGLE_CORE` localparam (`:213`) was declared for exactly
+this gate and **is never used by `cp_id_route`** (`:306-311`) — the ignores apply unconditionally.
+
+**Bug vs expected:** **TB / methodology defect.** The RTL is correct and is behaving as designed;
+the coverage model's reachability claims are wrong for any config with >1 requester.
+
+**Why it matters beyond a percentage.** An `ignore_bins` is an assertion that hardware *cannot*
+produce a value. Three of these are now demonstrably false, so the banked 2CL number rests in part
+on claims the same UCDB disproves. It does not inflate the hit-rate arithmetically (an ignored bin
+leaves both numerator and denominator), but it *discards real coverage* and, if repeated in the
+paper, would be an unsupportable structural-unreachability claim (rule 1 / the FW claim-discipline
+list). The genuine gap it hides is also real: `auto[64:127]` — the entire upper half of the 2CL
+route field — has **zero** hits, 32 bins.
+
+**Disposition: OPEN — needs a config-generic re-derivation.** The fix is not to re-tune the
+literals per config (that re-creates the same trap at 4CL). Bin the field by its **decoded
+sub-fields** — requester port, MSHR slot, read/write — each sized from the RTL parameters that
+define it, so the model adapts to any `NUM_PORTS_IN`/`TAG_BUFFER_SIZE` by construction. That also
+converts an over-specified implementation artifact ("which free-list slot") into a meaningful
+question ("does every requester port reach AXI, and does every MSHR slot get used").
