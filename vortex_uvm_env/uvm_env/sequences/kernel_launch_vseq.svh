@@ -27,6 +27,7 @@ class kernel_launch_vseq extends vortex_virtual_sequence;
         launch_seq = host_launch_kernel_sequence::type_id::create("launch_seq");
         if (cfg != null) begin
             launch_seq.startup_address = cfg.startup_addr;
+            launch_seq.num_clusters    = cfg.num_clusters;
             launch_seq.num_cores       = cfg.num_cores;
             launch_seq.num_warps       = cfg.num_warps;
             launch_seq.num_threads     = cfg.num_threads;

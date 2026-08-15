@@ -53,6 +53,7 @@ class random_instr_stress_vseq extends vortex_virtual_sequence;
             launch_seq = host_launch_kernel_sequence::type_id::create(
                              $sformatf("launch_seq_%0d", iter));
             launch_seq.startup_address = cfg.startup_addr;
+            launch_seq.num_clusters    = cfg.num_clusters;
             launch_seq.num_cores       = cfg.num_cores;
             launch_seq.num_warps       = cfg.num_warps;
             launch_seq.num_threads     = cfg.num_threads;

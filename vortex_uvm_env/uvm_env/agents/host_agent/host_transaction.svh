@@ -70,7 +70,8 @@ class host_transaction extends uvm_sequence_item;
     // Kernel Launch Parameters (executed via dcr_vif.master_cb)
     //--------------------------------------------------------------------------
     bit [63:0]  startup_address;     // Kernel entry point (PC)
-    bit [31:0]  num_cores;           // Number of cores to use
+    bit [31:0]  num_clusters;        // Number of clusters to use
+    bit [31:0]  num_cores;           // Number of cores per cluster
     bit [31:0]  num_warps;           // Number of warps per core
     bit [31:0]  num_threads;         // Number of threads per warp
     bit [31:0]  argc;                // Argument count
@@ -111,6 +112,7 @@ class host_transaction extends uvm_sequence_item;
     
     // Valid core/warp/thread configuration
     constraint valid_config_c {
+        num_clusters inside {[1:8]};
         num_cores inside {[1:8]};
         num_warps inside {[1:8]};
         num_threads inside {[1:4]};
@@ -131,6 +133,7 @@ class host_transaction extends uvm_sequence_item;
         `uvm_field_int(load_address, UVM_ALL_ON | UVM_HEX)
         `uvm_field_int(program_size, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(startup_address, UVM_ALL_ON | UVM_HEX)
+        `uvm_field_int(num_clusters, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(num_cores, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(num_warps, UVM_ALL_ON | UVM_DEC)
         `uvm_field_int(num_threads, UVM_ALL_ON | UVM_DEC)
@@ -147,6 +150,7 @@ class host_transaction extends uvm_sequence_item;
         // Default values
         timeout_cycles = 10000;
         completion_flag = 0;
+        num_clusters = 1;
         num_cores = 1;
         num_warps = 4;
         num_threads = 4;
@@ -234,8 +238,8 @@ class host_transaction extends uvm_sequence_item;
             
             HOST_LAUNCH_KERNEL: begin
                 s = {s, $sformatf("\n│ Startup Addr:  0x%016h", startup_address)};
-                s = {s, $sformatf("\n│ Configuration: %0d cores, %0d warps, %0d threads",
-                    num_cores, num_warps, num_threads)};
+                s = {s, $sformatf("\n│ Configuration: %0d clusters, %0d cores, %0d warps, %0d threads",
+                    num_clusters, num_cores, num_warps, num_threads)};
                 s = {s, "\n│ [Executed via dcr_vif.master_cb]"};
             end
             
@@ -281,6 +285,7 @@ class host_transaction extends uvm_sequence_item;
             super.do_compare(rhs, comparer) &&
             (op_type == rhs_.op_type) &&
             (startup_address == rhs_.startup_address) &&
+            (num_clusters == rhs_.num_clusters) &&
             (num_cores == rhs_.num_cores)
         );
     endfunction
@@ -313,6 +318,7 @@ class host_transaction extends uvm_sequence_item;
         dcr_address = rhs_.dcr_address;
         dcr_data = rhs_.dcr_data;
         startup_address = rhs_.startup_address;
+        num_clusters = rhs_.num_clusters;
         num_cores = rhs_.num_cores;
         num_warps = rhs_.num_warps;
         num_threads = rhs_.num_threads;

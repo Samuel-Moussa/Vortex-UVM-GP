@@ -183,9 +183,36 @@ class vortex_coverage_collector extends uvm_component;
   // Low bits of the AXI ID are routing/structural (nc_sel|req_sel|wsel|tag_id or
   // |MSHR_ID|bank_sel|); the high UUID_WIDTH(=44) bits are a free-running
   // per-instruction counter and must NOT be binned. Cover only the routing field.
-  localparam int AXI_ID_W  = $bits(current_axi.id);                  // 50
+  localparam int AXI_ID_W  = $bits(current_axi.id);                  // 50 @1CL, 51 @2CL
   localparam int UUID_W    = VX_gpu_pkg::UUID_WIDTH;                 // 44 (debug)
-  localparam int ROUTE_W   = AXI_ID_W - UUID_W;                      // ~6 reachable bits
+  localparam int ROUTE_W   = AXI_ID_W - UUID_W;                      // 6 @1CL, 7 @2CL
+
+  // -------------------------------------------------------------------------
+  // AXI ROUTE FIELD DECODE — config-generic (OBS-030).
+  //
+  // The route field is NOT one flat integer: its LAYOUT depends on the number of
+  // requester ports, so binning the raw value bakes in a single-config layout.
+  //   READS  (VX_axi_adapter.sv:282):
+  //       arid = {tbuf_waddr, req_xbar_sel}
+  //     -> the requester-port select occupies the LOW  NUM_PORTS_IN_BITS bits,
+  //        and the MSHR slot index sits ABOVE it (TAG_BUFFER_ADDRW bits).
+  //     -> adding a second requester SHIFTS the slot index up by one bit, which
+  //        is exactly why the old literal ignore_bins silently changed meaning
+  //        between 1CL and 2CL (three of them fired on real traffic; see OBS-030).
+  //   WRITES (VX_axi_adapter.sv:261):
+  //       awid = mem_req_tag  — NO port select appended, so reads and writes do
+  //       not even share a layout. They must be covered separately.
+  //
+  // Everything below is derived from the RTL parameters that DEFINE the layout,
+  // so the model adapts to any NUM_PORTS_IN / TAG_BUFFER_SIZE by construction.
+  // NUM_PORTS_IN is bound to VX_MEM_PORTS at the instantiation (Vortex_axi.sv:194).
+  localparam int MEM_PORTS  = VX_gpu_pkg::VX_MEM_PORTS;
+  localparam int PORT_SEL_W = (MEM_PORTS > 1) ? $clog2(MEM_PORTS) : 0;
+  // TAG_BUFFER_SIZE is left at the VX_axi_adapter.sv:26 default (16) — it is NOT
+  // overridden at the Vortex_axi.sv:188 instantiation. Trip-wire: the elaboration
+  // check in build_phase fails loud if the route field can no longer hold it.
+  localparam int TAG_BUF_SZ = 16;
+  localparam int SLOT_W     = $clog2(TAG_BUF_SZ);
 
   // -------------------------------------------------------------------------
   // Compile-time hardware config (from +define+NUM_* — the SAME values this run
@@ -205,12 +232,15 @@ class vortex_coverage_collector extends uvm_component;
   // NUM_WARPS/ISSUE_WIDTH is a VX_gpu_pkg localparam -> derive it. Max IPC ==
   // issue width (per-cycle issue slots).
   localparam int CFG_ISSUE_W  = CFG_WARPS / VX_gpu_pkg::PER_ISSUE_WARPS;
-  // Total cores = requesters into the AXI adapter. The route-field ignores below
-  // were evidence-validated for ONE requester (1CL/1C); with >1 core the AXI ID's
-  // requester-port bits make those routes reachable, so the ignores MUST NOT apply
-  // (they would fake coverage). Gate them on single-core.
+  // Total cores in the device (both config dimensions). Used by the config
+  // provenance coverpoints below.
+  // HISTORICAL NOTE: a `SINGLE_CORE` flag used to live here to gate the AXI
+  // route-field ignore_bins to 1-requester configs. It was DECLARED and never
+  // wired up, so the ignores applied unconditionally at 2CL and asserted a
+  // reachability that was false there (OBS-030). The gate is gone because the
+  // waivers are gone — the route model is now layout-derived and needs no
+  // per-config gating. Do NOT reintroduce either.
   localparam int TOTAL_CORES  = CFG_CLUSTERS * CFG_CORES;
-  localparam bit SINGLE_CORE  = (TOTAL_CORES == 1);
   // Max reachable IPC bucket. Sustained windowed IPC ~= min(ISSUE_WIDTH, NUM_WARPS/L),
   // where L = schedule->decode warp-unlock latency (VX_schedule elastic OUT_REG + icache
   // req elastic OUT_REG + icache round-trip; ~8 cycles at this config). So:
@@ -247,9 +277,11 @@ class vortex_coverage_collector extends uvm_component;
   //                                      errors are NOT modeled by SimX, so they are
   //                                      not black-box verifiable (would diverge).
   // REACHABLE — covered by stimulus, NOT ignored (ignoring would hide a real gap):
-  //   cp_id_route, cross_type_route : routing IDs (MSHR/bank/requester tag bits)
-  //     genuinely occur with memory traffic; need varied access patterns / more
-  //     outstanding requests to fill — a stimulus task, not a waiver.
+  //   cp_route_port / cp_route_slot / cp_write_tag / cross_port_slot :
+  //     the decoded routing field (requester port, MSHR slot, write tag). All
+  //     values are reachable; filling every slot needs TAG_BUF_SZ concurrent
+  //     outstanding reads — a STIMULUS task, never a waiver. See OBS-030 for why
+  //     the previous flat-value model + literal ignore_bins was withdrawn.
   // ==========================================================================
   covergroup axi_transaction_cg;
     option.per_instance = 1;
@@ -259,55 +291,52 @@ class vortex_coverage_collector extends uvm_component;
       bins read  = {axi_transaction::AXI_READ};
     }
 
-    // Routing/structural sub-field only (low ROUTE_W bits). Every value here is a
-    // real outstanding-slot / requester / NC-path destination — all REACHABLE,
-    // so NOT ignored: fill by stimulus (varied memory traffic), never by waiver.
-    // Route field = id[ROUTE_W-1:0] (ROUTE_W=6 here). Evidence-based ignores,
-    // decoded 2026-06-30 (DBG_ROUTE probe over the 29-run suite + VX_axi_adapter.sv);
-    // full writeup: Vortex_UVM_Plan_Current.md "COVERAGE GAP MAP".
-    //   * Reads : arid = tbuf_waddr = CLOG2(TAG_BUFFER_SIZE=16)=4-bit index -> route in [0,15].
-    //   * Writes: awid = mem_req_tag -> route always ODD (bit0=1) across all 29 runs
-    //             incl. random riscv-dv.
-    //   => route>=32 (bit5) NEVER set (route content <=5 bits); even values>=16
-    //      are reachable by neither path (reads<=15, writes odd) -> UNREACHABLE.
+    // ---- ROUTE COVERAGE, decoded by sub-field (rewritten 2026-08-15, OBS-030) --
+    // SUPERSEDES the old flat `cp_id_route` + four literal `ignore_bins`. That
+    // model was derived empirically at 1CL/1 requester and asserted that values
+    // {[32:63]}, {16,18..30}, {4,6..14} and {23,27,31} were structurally
+    // unreachable. The 2026-08-15 banks DISPROVED three of those four with the
+    // waivers' own hit counts (4488 / 10605 / 88 occurrences at 2CL; the
+    // "emergent read" set even fired 3x at 1CL). Root cause is layout, not
+    // stimulus: see the AXI ROUTE FIELD DECODE block above — a second requester
+    // inserts a port-select field in the LOW bits and shifts everything up.
     //
-    // PROOF — residual {4,6,8,10,12,14} (read-only evens) and {23,27,31} (write
-    // tags) are NON-MEANINGFUL INTERNAL-INDEX artifacts, not stimulus-reachable
-    // [REVIEW: Ahmad — coverage lane; drafted at Samuel's direction 2026-06-30]:
-    //   1. STRUCTURE: for reads route = tbuf_waddr = the MSHR free-list slot index
-    //      handed out by VX_allocator's LOWEST-FREE priority encoder
-    //      (VX_axi_adapter.sv:159-168 -> VX_index_buffer -> VX_allocator.sv:49).
-    //      It is pure internal bookkeeping — it names which of 16 in-flight buffers
-    //      holds an outstanding read; it encodes no address, data, or DUT-visible
-    //      behaviour. For writes route = mem_req_tag (odd source/counter id), the
-    //      same kind of non-architectural artifact. Even values 4..14 can come ONLY
-    //      from reads (writes are odd, structural).
-    //   2. NOT CONTROLLABLE: which slot the encoder emits is a pure function of the
-    //      acquire/release interleaving, which is set by EXTERNAL memory (Ramulator)
-    //      response ordering. No kernel instruction or DUT input selects a slot, so
-    //      individual slot values are not stimulus-targetable.
-    //   3. EMPIRICAL: the 29-run suite (incl. constrained-random riscv-dv) PLUS 4
-    //      directed AXI outstanding-request stress runs (tests/kernel/axi_stress —
-    //      config-aware, same-bank-concentrated 128B stride, K independent in-flight
-    //      loads, ILP-maximised) reached read DEPTH slot 15 yet NEVER emitted
-    //      {4,6,8,10,12,14}; the write counter reached 29 yet skipped {23,27,31}.
-    //      The covered subset {0,1,2,3,5,7,9,11,13,15,17,19,21,25,29} already proves
-    //      the tag path carries varied live values with full read-vs-write split
-    //      (cross_type_route) and tag-present (cp_uuid_present=100%). Binning each
-    //      remaining free-list index over-specifies an implementation artifact.
-    //   => ignore the residual indices as non-meaningful + non-targetable.
-    //   TRIP-WIRE: validated for ROUTE_W==6 (1CL/1C/4W/4T). A wider config grows
-    //      VX_MEM_TAG_WIDTH and the slot space -> re-derive before trusting these.
-    // Route ignores are evidence-validated for SINGLE-CORE (1 requester). At
-    // multi-core the AXI ID's requester-port bits make these routes reachable, so
-    // these ignores must be re-derived per config — DEFERRED to the Cores>1 phase.
-    // (config-constant `with (...)` does NOT work: Questa vopt-13185 drops it. The
-    // multi-core gate needs item-referencing bounds or `ifdef, done later.)
-    cp_id_route : coverpoint current_axi.id[ROUTE_W-1:0] {
-      ignore_bins route_msb_unreachable = {[32:63]};                 // bit5 never set @1 requester
-      ignore_bins route_even_ge16       = {16,18,20,22,24,26,28,30}; // reads<=15, writes odd
-      ignore_bins route_emergent_read   = {4,6,8,10,12,14};          // read-only MSHR idx, release-order emergent
-      ignore_bins route_high_write_tag  = {23,27,31};                // write src/counter id, non-targetable
+    // An `ignore_bins` is an assertion that hardware CANNOT produce a value.
+    // Three of these were false, so they were discarding real coverage while
+    // claiming structural impossibility. They are deleted rather than re-tuned:
+    // re-tuning literals per config would rebuild the same trap at 4CL.
+    //
+    // The replacement covers what the field MEANS (which port, which slot,
+    // read vs write) with every bound derived from the RTL parameters that
+    // define the layout — so it needs no per-config maintenance at all.
+    // --- READ path: requester port select (low PORT_SEL_W bits) --------------
+    // Asks a question worth asking — "does every requester port actually reach
+    // AXI?" — instead of binning a raw index. At MEM_PORTS==1 the mask is 0, so
+    // this degenerates to a single always-covered bin (the port IS used), which
+    // is the correct answer for that config rather than a waived one.
+    cp_route_port : coverpoint (current_axi.id & ((1 << PORT_SEL_W) - 1))
+        iff (current_axi.trans_type == axi_transaction::AXI_READ) {
+      bins port[] = {[0:MEM_PORTS-1]};
+    }
+
+    // --- READ path: MSHR / tag-buffer slot index (above the port select) -----
+    // "Does every outstanding-read slot get used?" Filling all TAG_BUF_SZ slots
+    // requires TAG_BUF_SZ concurrent outstanding reads on that port — the same
+    // condition as cache_event_cg.cp_mshr_stall.stall, so one directed
+    // MSHR-saturating kernel drives both.
+    cp_route_slot : coverpoint ((current_axi.id >> PORT_SEL_W) & (TAG_BUF_SZ - 1))
+        iff (current_axi.trans_type == axi_transaction::AXI_READ) {
+      bins slot[] = {[0:TAG_BUF_SZ-1]};
+    }
+
+    // --- WRITE path: mem_req_tag, no port select (VX_axi_adapter.sv:261) -----
+    // The write tag is a non-architectural source/counter id. Binning every
+    // value over-specifies an implementation artifact (the ORIGINAL reason the
+    // old waivers existed), so bucket it coarsely instead — and let the bucket
+    // count, not the value set, be what stays config-generic.
+    cp_write_tag : coverpoint current_axi.id[ROUTE_W-1:0]
+        iff (current_axi.trans_type == axi_transaction::AXI_WRITE) {
+      bins tag[8] = {[0:(1 << ROUTE_W) - 1]};
     }
 
     // Is the high UUID field actually populated (debug tag present, non-zero)?
@@ -382,20 +411,12 @@ class vortex_coverage_collector extends uvm_component;
     cross_type_burst_size: cross cp_type, cp_burst, cp_size;
     cross_type_len: cross cp_type, cp_len;
     cross_len_addr: cross cp_len, cp_addr_region;
-    // Inherits cp_id_route's ignores; plus type-specific structural unreachables:
-    //   reads use a 4-bit tbuf index (route<=15) -> READ x route[17..31] impossible;
-    //   writes are odd -> WRITE x even route impossible.
-    cross_type_route : cross cp_type, cp_id_route {
-      ignore_bins rd_above_tbuf = binsof(cp_type.read) &&
-                                  binsof(cp_id_route) intersect {[17:31]};
-      ignore_bins wr_even       = binsof(cp_type.write) &&
-                                  binsof(cp_id_route) intersect {0,2,4,6,8,10,12,14};
-      // Read side never emits these MSHR slot indices (covered in cp_id_route only
-      // via the write counter). Same non-meaningful / release-order-emergent
-      // artifact as route_emergent_read — see PROOF above. [REVIEW: Ahmad]
-      ignore_bins rd_emergent   = binsof(cp_type.read) &&
-                                  binsof(cp_id_route) intersect {1,5,9,13};
-    }
+    // Does EVERY requester port exercise EVERY outstanding-read slot? Both
+    // coverpoints are read-guarded, so this cross needs no type term and no
+    // ignore_bins — the old cross_type_route needed three only because it was
+    // crossing a type against a field whose layout already encoded the type.
+    // Sizes itself: MEM_PORTS x TAG_BUF_SZ (16 @1CL, 32 @2CL).
+    cross_port_slot : cross cp_route_port, cp_route_slot;
   endgroup : axi_transaction_cg
 
   // --------------------------------------------------------------------------
@@ -453,6 +474,21 @@ class vortex_coverage_collector extends uvm_component;
       // reset_n toggle, which is TB-controlled (not host-driven), so a HOST_RESET
       // transaction never completes in the normal flow. Structural waiver.
       ignore_bins reset  = {host_transaction::HOST_RESET};
+    }
+
+    // CONFIG PROVENANCE — these record, IN THE UCDB ITSELF, which hardware
+    // configuration produced this coverage. Each ignores every value except the
+    // compiled one, so a bank can never silently mix configs (a cross-config
+    // merge is invalid here — vcover-6821 width toggles + per-core instance
+    // inflation). The cluster axis was missing until 2026-08-15: NUM_CLUSTERS is
+    // the one dimension that changes the AXI route field LAYOUT (OBS-030), so
+    // leaving it unrecorded was exactly the wrong axis to omit.
+    cp_num_clusters: coverpoint current_host.num_clusters
+        iff (current_host.op_type == host_transaction::HOST_LAUNCH_KERNEL) {
+      bins single = {32'd1};
+      bins sm     = {[32'd2:32'd4]};
+      bins lg     = {[32'd5:32'd8]};
+      ignore_bins other_cfg = {[32'd0:32'd255]} with (item != CFG_CLUSTERS);
     }
 
     cp_num_cores: coverpoint current_host.num_cores
@@ -690,8 +726,25 @@ class vortex_coverage_collector extends uvm_component;
     // the AXI ID and accidentally bin the UUID counter again.
     if (!(ROUTE_W > 0 && ROUTE_W < 12))
       `uvm_fatal("COVERAGE",
-        $sformatf("cp_id_route width ROUTE_W=%0d implausible (AXI_ID_W=%0d, UUID_W=%0d) — check UUID_WIDTH source",
+        $sformatf("AXI route width ROUTE_W=%0d implausible (AXI_ID_W=%0d, UUID_W=%0d) — check UUID_WIDTH source",
                   ROUTE_W, AXI_ID_W, UUID_W))
+
+    // OBS-030 TRIP-WIRE — this replaces a PROSE trip-wire that sat in a comment
+    // for two months and was never discharged, which is exactly how the route
+    // waivers survived into a config they were invalid for. The read-path route
+    // must be wide enough to hold {slot, port} (VX_axi_adapter.sv:282); if the
+    // adapter's TAG_BUFFER_SIZE or port count ever outgrows the field, the
+    // decode above would silently alias slots onto each other. Fail loud instead.
+    if (ROUTE_W < (PORT_SEL_W + SLOT_W))
+      `uvm_fatal("COVERAGE",
+        $sformatf({"AXI route field too narrow for its own decode: ROUTE_W=%0d < PORT_SEL_W=%0d + SLOT_W=%0d ",
+                   "(MEM_PORTS=%0d, TAG_BUF_SZ=%0d). The read tag is {tbuf_waddr, req_xbar_sel} ",
+                   "(VX_axi_adapter.sv:282) — re-derive TAG_BUF_SZ from the adapter's TAG_BUFFER_SIZE."},
+                  ROUTE_W, PORT_SEL_W, SLOT_W, MEM_PORTS, TAG_BUF_SZ))
+
+    `uvm_info("COVERAGE",
+      $sformatf("AXI route decode: AXI_ID_W=%0d UUID_W=%0d ROUTE_W=%0d | MEM_PORTS=%0d PORT_SEL_W=%0d | TAG_BUF_SZ=%0d SLOT_W=%0d",
+                AXI_ID_W, UUID_W, ROUTE_W, MEM_PORTS, PORT_SEL_W, TAG_BUF_SZ, SLOT_W), UVM_LOW)
   endfunction : build_phase
 
   //==========================================================================
