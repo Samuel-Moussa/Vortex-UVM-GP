@@ -123,6 +123,95 @@ else
 fi
 
 # -----------------------------------------------------------------------------
+# 4b. EUR (TOGGLE) — the icache is instantiated READ-ONLY, so its write-data
+#     payload is elaborated but structurally undrivable.  See OBS-033.
+#
+#     VX_socket.sv:106 instantiates the icache with `.WRITE_ENABLE (0)`. The cache
+#     generic is fully parameterised, so `req_data.data` (CS_LINE_WIDTH = 512 b),
+#     its byte-enables, and the per-bank copies of both still EXIST as nets on
+#     every interface hop — they are simply never driven. Measured on the clean
+#     1CL bank of 2026-08-15: the icache subtree holds 22,730 of the design's
+#     85,957 missing toggle bins (26.4% of the whole toggle gap) at 55.7%, while
+#     the larger dcache sits at 89.0%.
+#
+#     WHY THIS IS STRUCTURAL AND NOT A STIMULUS GAP — the counter-check that
+#     matters: on the SAME interface, `rsp_data.data` toggles 45-46 times on every
+#     one of its 512 bits. The read/fill path is fully exercised; only the write
+#     direction is dead. A read-only cache cannot issue a write, at any config,
+#     under any program.
+#
+#     This is the SAME citation already accepted for FUNCTIONAL coverage in
+#     commit 5c4b70f (icache `cp_rw.wr` ignore_bins). The toggle bins produced by
+#     that identical tie-off were never waived, so every bank to date reported a
+#     structural impossibility as an uncovered feature.
+#
+#     ⚠ SCOPE DISCIPLINE — three things are deliberately NOT excluded here:
+#       (1) the DCACHE write-data path. Write-through (`DCACHE_WRITEBACK=0`) is a
+#           DIFFERENT mechanism and the dcache write port is genuinely driven.
+#       (2) `mem_req_buf` / `mem_rsp_queue` internal `data_in`/`data_out`, even
+#           though they measure 100% dead. Those buffers degenerate to passthrough
+#           (`MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1)`, VX_cache.sv:105, and
+#           `ICACHE_MRSQ_SIZE 0`, VX_config.vh:577), and the passthru branch shows
+#           the alias signature `genblk1/__unused = 47` vs `genblk2/__unused = 0`
+#           — i.e. those nets may be ALIASES of live nets. Excluding an alias of a
+#           covered net would hide real coverage. Left in, pending investigation.
+#       (3) toggle in the icache scope wholesale (`-code t -recursive`). That would
+#           drop COVERED bins too. Every rule below names a specific dead field.
+#
+#     Emitted per socket over the real topology, so it scales to any NCL/NC.
+# -----------------------------------------------------------------------------
+NUM_SOCKETS=$(( (NC + SOCKET_SIZE - 1) / SOCKET_SIZE ))
+echo "# --- EUR: icache is WRITE_ENABLE(0) -> write-data payload structurally dead (OBS-033) ---"
+for (( cl=0; cl<NCL; cl++ )); do
+  for (( sk=0; sk<NUM_SOCKETS; sk++ )); do
+    IC="${TOP}/g_clusters[${cl}]/cluster/g_sockets[${sk}]/socket/icache"
+    for node in req_data.data req_data.byteen per_bank_mem_req_data per_bank_mem_req_byteen mem_req_byteen; do
+      echo "coverage exclude -scope {${IC}} -recursive -togglenode {${node}} -reason EUR"
+    done
+  done
+done
+echo
+
+# -----------------------------------------------------------------------------
+# 4c. EUR (TOGGLE) — UUID upper field bits above the topology bound.  See OBS-034.
+#
+#     VX_uuid_gen.sv:40-41 defines the uuid EXACTLY as:
+#         GNW_WIDTH = UUID_WIDTH - 32          (= 12, since UUID_WIDTH = 44)
+#         g_wid     = (CORE_ID << NW_BITS) + wid
+#         uuid      = { g_wid[GNW_WIDTH-1:0], counter[31:0] }
+#
+#     So uuid[31:0] is a per-warp instruction COUNTER and uuid[43:32] is a global
+#     warp id. The largest g_wid the topology can ever produce is
+#         ((TOTAL_CORES-1) << NW_BITS) + (NUM_WARPS-1)
+#     and every bit above that is tied to 0 BY THE CONFIG — not by stimulus. The
+#     measured per-bit toggle profile at 1CL/1C/4W matches the formula exactly:
+#     bit32 = 37, bit33 = 1, bits 34..43 = 0 (g_wid maxes out at 3).
+#
+#     ⚠ THE COUNTER HIGH BITS ARE **NOT** WAIVED, AND THAT IS DELIBERATE.
+#     Measured: uuid[0..17] toggle (46,46,...,7,7,2,1), uuid[18:31] are all 0.
+#     Toggling bit k needs 2^k retired instructions ON ONE WARP (bit 31 => ~2.1e9),
+#     so no run we will ever execute can reach them. But "infeasible" is NOT
+#     "structurally dead": a long enough program WOULD toggle them, and this file's
+#     stated principle is that reachable-but-untested coverage is never excluded.
+#     They stay in the denominator and are reported as the irreducible residual.
+#     Do not "clean this up" — the asymmetry is the honest part.
+# -----------------------------------------------------------------------------
+NW_BITS=1; while (( (1 << NW_BITS) < NW )); do NW_BITS=$(( NW_BITS + 1 )); done
+(( NW <= 1 )) && NW_BITS=0
+MAX_GWID=$(( ((TOTAL_CORES - 1) << NW_BITS) + (NW - 1) ))
+GWID_BITS=0; while (( (1 << GWID_BITS) <= MAX_GWID )); do GWID_BITS=$(( GWID_BITS + 1 )); done
+UUID_HI=43            # UUID_WIDTH-1, VX_gpu_pkg.sv:66 (NDEBUG undefined => 44)
+UUID_LO=$(( 32 + GWID_BITS ))
+echo "# --- EUR: uuid g_wid bits above the topology bound (OBS-034) ---"
+echo "# NW_BITS=${NW_BITS} TOTAL_CORES=${TOTAL_CORES} -> max g_wid=${MAX_GWID} -> needs ${GWID_BITS} bits"
+if (( UUID_LO <= UUID_HI )); then
+  echo "coverage exclude -scope {${TOP}} -recursive -togglenode {uuid[${UUID_HI}:${UUID_LO}]} -reason EUR"
+else
+  echo "# (topology needs all ${GWID_BITS} g_wid bits -> nothing structurally dead here)"
+fi
+echo
+
+# -----------------------------------------------------------------------------
 # 5. Structural AXI SVA cover-directives (tb/vortex_axi_if.sv g_full_axi_checks).
 #    These are the DIRECTIVE MIRROR of the AXI covergroup coverpoints already waived
 #    in commit 148ff78 (cp_burst / cp_len / cp_bresp / cp_rresp), with the SAME proof.
