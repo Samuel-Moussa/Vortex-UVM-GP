@@ -1,5 +1,5 @@
 QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
-Start time: 02:23:37 on Aug 16,2026
+Start time: 02:58:57 on Aug 16,2026
 vcover report -code bcesft -details bank_1CL_1C_4W_4T/merged.ucdb 
 Coverage Report by instance with details
 
@@ -2739,7 +2739,7 @@ Branch totals: 2 hits of 2 branches = 100.00%
 Condition Coverage:
     Enabled Coverage              Bins   Covered    Misses  Coverage
     ----------------              ----      ----    ------  --------
-    Conditions                      21        21         0   100.00%
+    Conditions                      23        22         1    95.65%
 
 ================================Condition Details================================
 
@@ -2765,6 +2765,22 @@ Condition totals: 2 of 2 input terms covered = 100.00%
 ----------------Focused Condition View-------------------
 Line       166 Item    1  (warp_ctl_if.valid && warp_ctl_if.barrier.valid)
 Condition totals: 2 of 2 input terms covered = 100.00%
+
+----------------Focused Condition View-------------------
+Line       168 Item    1  (~warp_ctl_if.barrier.is_global && (barrier_ctrs[warp_ctl_if.barrier.id] == warp_ctl_if.barrier.size_m1))
+Condition totals: 1 of 2 input terms covered = 50.00%
+
+                                                             Input Term   Covered  Reason for no coverage   Hint
+                                                            -----------  --------  -----------------------  --------------
+                                          warp_ctl_if.barrier.is_global         N  '_1' not hit             Hit '_1'
+  (barrier_ctrs[warp_ctl_if.barrier.id] == warp_ctl_if.barrier.size_m1)         Y
+
+     Rows:       Hits  FEC Target                                                               Non-masking condition(s)      
+ ---------  ---------  --------------------                                                     -------------------------     
+  Row   1:          4  warp_ctl_if.barrier.is_global_0                                          (barrier_ctrs[warp_ctl_if.barrier.id] == warp_ctl_if.barrier.size_m1)
+  Row   2:    ***0***  warp_ctl_if.barrier.is_global_1                                          -                             
+  Row   3:          4  (barrier_ctrs[warp_ctl_if.barrier.id] == warp_ctl_if.barrier.size_m1)_0  ~warp_ctl_if.barrier.is_global
+  Row   4:          4  (barrier_ctrs[warp_ctl_if.barrier.id] == warp_ctl_if.barrier.size_m1)_1  ~warp_ctl_if.barrier.is_global
 
 ----------------Focused Condition View-------------------
 Line       245 Item    1  (warp_ctl_if.valid && warp_ctl_if.wspawn.valid)
@@ -32136,7 +32152,7 @@ Toggle Coverage      =      69.93% (228 of 326 bins)
 Branch Coverage:
     Enabled Coverage              Bins      Hits    Misses  Coverage
     ----------------              ----      ----    ------  --------
-    Branches                        22        10        12    45.45%
+    Branches                        12        10         2    83.33%
 
 ================================Branch Details================================
 
@@ -32149,11 +32165,7 @@ Branch Coverage for instance /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_s
     57                                   2060080     Count coming in to CASE
     59              1                    2057072     
     64              1                       3008     
-    69              1                    ***0***     
-    75              1                    ***0***     
-    80              1                    ***0***     
-    88              1                    ***0***     
-Branch totals: 2 hits of 6 branches = 33.33%
+Branch totals: 2 hits of 2 branches = 100.00%
 
 ------------------------------------IF Branch------------------------------------
     60                                   2057072     Count coming in to IF
@@ -32166,24 +32178,6 @@ Branch totals: 1 hit of 2 branches = 50.00%
     65              1                         47     
                                             2961     All False Count
 Branch totals: 2 hits of 2 branches = 100.00%
-
-------------------------------------IF Branch------------------------------------
-    71                                   ***0***     Count coming in to IF
-    71              1                    ***0***     
-                                         ***0***     All False Count
-Branch totals: 0 hits of 2 branches = 0.00%
-
-------------------------------------IF Branch------------------------------------
-    76                                   ***0***     Count coming in to IF
-    76              1                    ***0***     
-                                         ***0***     All False Count
-Branch totals: 0 hits of 2 branches = 0.00%
-
-------------------------------------IF Branch------------------------------------
-    84                                   ***0***     Count coming in to IF
-    84              1                    ***0***     
-                                         ***0***     All False Count
-Branch totals: 0 hits of 2 branches = 0.00%
 
 ------------------------------------IF Branch------------------------------------
     96                                     80223     Count coming in to IF
@@ -32207,7 +32201,7 @@ Branch totals: 1 hit of 2 branches = 50.00%
 Condition Coverage:
     Enabled Coverage              Bins   Covered    Misses  Coverage
     ----------------              ----      ----    ------  --------
-    Conditions                       7         2         5    28.57%
+    Conditions                       5         2         3    40.00%
 
 ================================Condition Details================================
 
@@ -32217,22 +32211,6 @@ Condition Coverage for instance /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/
 ----------------Focused Condition View-------------------
 Line       65 Item    1  (counter == ((2 ** 6) - 1))
 Condition totals: 1 of 1 input term covered = 100.00%
-
-----------------Focused Condition View-------------------
-Line       76 Item    1  ((counter == ((2 ** 6) - 1)) && flush_ready)
-Condition totals: 0 of 2 input terms covered = 0.00%
-
-                   Input Term   Covered  Reason for no coverage   Hint
-                  -----------  --------  -----------------------  --------------
-  (counter == ((2 ** 6) - 1))         N  No hits                  Hit '_0' and '_1'
-                  flush_ready         N  No hits                  Hit '_0' and '_1'
-
-     Rows:       Hits  FEC Target                     Non-masking condition(s)      
- ---------  ---------  --------------------           -------------------------     
-  Row   1:    ***0***  (counter == ((2 ** 6) - 1))_0  -                             
-  Row   2:    ***0***  (counter == ((2 ** 6) - 1))_1  flush_ready                   
-  Row   3:    ***0***  flush_ready_0                  (counter == ((2 ** 6) - 1))   
-  Row   4:    ***0***  flush_ready_1                  (counter == ((2 ** 6) - 1))   
 
 ----------------Focused Condition View-------------------
 Line       101 Item    1  (state != 0)
@@ -32261,7 +32239,7 @@ Condition totals: 0 of 3 input terms covered = 0.00%
 Statement Coverage:
     Enabled Coverage              Bins      Hits    Misses  Coverage
     ----------------              ----      ----    ------  --------
-    Statements                      17        12         5    70.58%
+    Statements                      12        12         0   100.00%
 
 ================================Statement Details================================
 
@@ -32272,12 +32250,7 @@ Statement Coverage for instance /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/
   File /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/cache/VX_cache_flush.sv
     55              1                    2060080     
     56              1                    2060080     
-    61              1                    ***0***     
     66              1                         47     
-    72              1                    ***0***     
-    77              1                    ***0***     
-    85              1                    ***0***     
-    90              1                    ***0***     
     95              1                      80223     
     97              1                         94     
     98              1                         94     
@@ -35403,7 +35376,7 @@ Toggle Coverage      =      68.30% (194 of 284 bins)
 Branch Coverage:
     Enabled Coverage              Bins      Hits    Misses  Coverage
     ----------------              ----      ----    ------  --------
-    Branches                        15         4        11    26.66%
+    Branches                         5         4         1    80.00%
 
 ================================Branch Details================================
 
@@ -35415,35 +35388,13 @@ Branch Coverage for instance /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_s
 ------------------------------------CASE Branch------------------------------------
     130                                  1662288     Count coming in to CASE
     132             1                    1662288     
-    142             1                    ***0***     
-    147             1                    ***0***     
-    151             1                    ***0***     
-    162             1                    ***0***     
-Branch totals: 1 hit of 5 branches = 20.00%
+Branch totals: 1 hit of 1 branch = 100.00%
 
 ------------------------------------IF Branch------------------------------------
     133                                  1662288     Count coming in to IF
     133             1                    ***0***     
                                          1662288     All False Count
 Branch totals: 1 hit of 2 branches = 50.00%
-
-------------------------------------IF Branch------------------------------------
-    136                                  ***0***     Count coming in to IF
-    136             1                    ***0***     
-                                         ***0***     All False Count
-Branch totals: 0 hits of 2 branches = 0.00%
-
-------------------------------------IF Branch------------------------------------
-    154                                  ***0***     Count coming in to IF
-    154             1                    ***0***     
-                                         ***0***     All False Count
-Branch totals: 0 hits of 2 branches = 0.00%
-
-------------------------------------IF Branch------------------------------------
-    166                                  ***0***     Count coming in to IF
-    166             1                    ***0***     
-                                         ***0***     All False Count
-Branch totals: 0 hits of 2 branches = 0.00%
 
 ------------------------------------IF Branch------------------------------------
     174                                      188     Count coming in to IF
@@ -35455,7 +35406,7 @@ Branch totals: 2 hits of 2 branches = 100.00%
 Statement Coverage:
     Enabled Coverage              Bins      Hits    Misses  Coverage
     ----------------              ----      ----    ------  --------
-    Statements                      33        22        11    66.66%
+    Statements                      22        22         0   100.00%
 
 ================================Statement Details================================
 
@@ -35477,17 +35428,6 @@ Statement Coverage for instance /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/
     127             1                    1662288     
     128             1                    1662288     
     129             1                    1662288     
-    134             1                    ***0***     
-    135             1                    ***0***     
-    135             2                    ***0***     
-    137             1                    ***0***     
-    149             1                    ***0***     
-    153             1                    ***0***     
-    155             1                    ***0***     
-    156             1                    ***0***     
-    159             1                    ***0***     
-    165             1                    ***0***     
-    167             1                    ***0***     
     173             1                        188     
     175             1                         94     
     176             1                         94     
@@ -46280,7 +46220,7 @@ Statement Coverage for instance /VX_gpu_pkg --
     919             1                   18441224     
 
 
-Total Coverage By Instance (filtered view): 89.54%
+Total Coverage By Instance (filtered view): 89.87%
 
-End time: 02:23:40 on Aug 16,2026, Elapsed time: 0:00:03
+End time: 02:59:01 on Aug 16,2026, Elapsed time: 0:00:04
 Errors: 0, Warnings: 0
