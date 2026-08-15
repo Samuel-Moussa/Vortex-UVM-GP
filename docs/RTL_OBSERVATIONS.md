@@ -1470,6 +1470,31 @@ reach AXI — previously invisible), `cp_route_slot` **25%** (slots 0-3 only), `
 That 25% is the honest signal the waivers were destroying: the design has 16 MSHR entries and this
 stimulus reaches 4. Both Gate-0 guards re-proven RED at `0x800075d8` after the change.
 
+**FOLLOW-UP (same session) — the first replacement was itself config-blind, and the DUT said so.**
+`cp_route_slot` was written as "which tag-buffer slot", but the tag buffer is **not always
+elaborated**. Verified from the UCDB hierarchy (`vcover report -recursive`), not by inference:
+
+| config | `g_tag_buf` instance | read `id` actually carries |
+|---|---|---|
+| 1CL/1C | **absent** | raw `mem_req_tag` (`VX_axi_adapter.sv:170`, `g_none`) |
+| 2CL/2C | **present**, one per port, each with its own `allocator/free_slots_sel` | `{tbuf_waddr, req_xbar_sel}` (`:282`) |
+
+The RTL gate is `NEEDED_TAG_WIDTH > TAG_WIDTH_OUT` (`:149`), i.e.
+`MAX(SUB_LDATAW,0) + NUM_PORTS_IN_BITS > 0`; with `SUB_LDATAW <= 0` for this AXI configuration it
+reduces to `MEM_PORTS > 1`.
+
+**How the mistake surfaced — the measurement contradicted the model.** The allocator is strictly
+lowest-free (`VX_allocator.sv:49`, a `VX_priority_encoder` over `free_slots_n`), so slot 15 can only
+be issued when slots 0..14 are ALL occupied. The 1CL run reported `{0,2,3,7,11,15}` covered with
+1,4,5,6 at **zero** — impossible for a genuine slot index, and therefore proof the field was being
+mis-decoded rather than under-stimulated. `cp_route_slot`/`cross_port_slot` are now gated on
+`TAG_BUF_PRESENT`, and the build logs which branch it took.
+
+**Lesson, third instance of the same class in one session:** a coverage bin is a CLAIM about what a
+signal means. Here the claim was true at 2CL and false at 1CL — the same trap as the original
+waivers, committed while fixing them. When bins appear in a pattern the hardware could not
+produce, suspect the decode before suspecting the stimulus.
+
 ⚠ **The banked 2026-08-15 AXI numbers are not comparable across this change** (the denominator and
 the questions both changed). The banks are preserved; re-measure before quoting the AXI block.
 

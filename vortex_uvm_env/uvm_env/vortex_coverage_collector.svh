@@ -214,6 +214,29 @@ class vortex_coverage_collector extends uvm_component;
   localparam int TAG_BUF_SZ = 16;
   localparam int SLOT_W     = $clog2(TAG_BUF_SZ);
 
+  // ⚠ THE TAG BUFFER IS NOT ALWAYS ELABORATED — and when it is absent the read
+  // `id` means something COMPLETELY DIFFERENT (verified from the UCDB
+  // hierarchy, not inferred):
+  //   1CL: /dut/axi_adapter has NO tag_buf instance      -> VX_axi_adapter.sv:170
+  //        `g_none` branch: mem_rd_req_tag = mem_req_tag (the RAW cache tag)
+  //   2CL: /dut/axi_adapter/g_tag_buf[0..1]/g_enabled/tag_buf/allocator exists
+  //        -> `g_enabled`: arid = {tbuf_waddr, req_xbar_sel} (a real slot index)
+  // The RTL condition is NEEDED_TAG_WIDTH > TAG_WIDTH_OUT (:149), i.e.
+  // MAX(SUB_LDATAW,0) + NUM_PORTS_IN_BITS > 0. SUB_LDATAW is a Vortex_axi
+  // localparam that is <= 0 for this AXI configuration (confirmed: at 1CL, where
+  // NUM_PORTS_IN_BITS==0, the buffer is absent), so the condition reduces to
+  // MEM_PORTS > 1 here.
+  //
+  // HOW WE KNEW IT WAS WRONG: under a lowest-free allocator
+  // (VX_allocator.sv:49, VX_priority_encoder over free_slots_n) slot 15 can only
+  // be handed out when slots 0..14 are ALL busy — so a covered set of
+  // {0,2,3,7,11,15} with 1,4,5,6 at zero is structurally impossible for a real
+  // slot index. That measured contradiction is what exposed the mis-decode.
+  // Binning a field whose meaning changes with the config is exactly the
+  // OBS-030 failure this rewrite existed to remove, so the slot coverpoints are
+  // gated on the buffer actually being there.
+  localparam bit TAG_BUF_PRESENT = (MEM_PORTS > 1);
+
   // -------------------------------------------------------------------------
   // Compile-time hardware config (from +define+NUM_* — the SAME values this run
   // is built/elaborated with; see the I2 topology asserts). These drive
@@ -324,9 +347,13 @@ class vortex_coverage_collector extends uvm_component;
     // requires TAG_BUF_SZ concurrent outstanding reads on that port — the same
     // condition as cache_event_cg.cp_mshr_stall.stall, so one directed
     // MSHR-saturating kernel drives both.
+    // Only meaningful when the tag buffer exists (see TAG_BUF_PRESENT above).
+    // When it does not, every bin is ignored so the coverpoint contributes
+    // nothing rather than reporting a decode of a field that isn't there.
     cp_route_slot : coverpoint ((current_axi.id >> PORT_SEL_W) & (TAG_BUF_SZ - 1))
         iff (current_axi.trans_type == axi_transaction::AXI_READ) {
       bins slot[] = {[0:TAG_BUF_SZ-1]};
+      ignore_bins no_tag_buffer = {[0:TAG_BUF_SZ-1]} with (!TAG_BUF_PRESENT);
     }
 
     // --- WRITE path: mem_req_tag, no port select (VX_axi_adapter.sv:261) -----
@@ -754,6 +781,18 @@ class vortex_coverage_collector extends uvm_component;
     `uvm_info("COVERAGE",
       $sformatf("AXI route decode: AXI_ID_W=%0d UUID_W=%0d ROUTE_W=%0d | MEM_PORTS=%0d PORT_SEL_W=%0d | TAG_BUF_SZ=%0d SLOT_W=%0d",
                 AXI_ID_W, UUID_W, ROUTE_W, MEM_PORTS, PORT_SEL_W, TAG_BUF_SZ, SLOT_W), UVM_LOW)
+
+    // Record whether the adapter's tag buffer is elaborated in THIS build. It is
+    // config-dependent (absent at 1CL, present per-port at 2CL) and it decides
+    // whether the read `id` carries a slot index or a raw cache tag, so it must
+    // be visible in the log next to any slot-coverage number.
+    // VERIFY against the design, never against this message:
+    //   vcover report -recursive <ucdb> | grep g_tag_buf
+    `uvm_info("COVERAGE",
+      $sformatf("AXI tag buffer %s (MEM_PORTS=%0d) -> cp_route_slot/cross_port_slot %s",
+                TAG_BUF_PRESENT ? "PRESENT" : "ABSENT", MEM_PORTS,
+                TAG_BUF_PRESENT ? "ACTIVE (slot index is real)"
+                                : "IGNORED (read id is the raw cache tag)"), UVM_LOW)
   endfunction : build_phase
 
   //==========================================================================
