@@ -68,6 +68,21 @@ CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
 ### ▶▶ RESUME HERE — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
 
+**⏳ A RE-RUN IS IN FLIGHT RIGHT NOW (started 2026-08-15 ~04:45).** 1CL suite running detached
+(`setsid`, own SID — survives a session exit), log:
+`/tmp/claude-1000/-home-samuel-ubuntu22-Vortex-UVM-GP/69210dfb-660d-4751-9578-61d1c46bcd08/scratchpad/suite_1cl_v2.log`
+(per-test logs in `vortex_uvm_env/results/run_suite_logs/`). **2CL has NOT been started yet.**
+*On resume:* check `grep "SUITE VERDICT" <log>`; if finished, **BANK IMMEDIATELY** —
+`mv cov/bank_1CL_1C_4W_4T cov/bank_1CL_1C_4W_4T_prescale_20260814 && mkdir cov/bank_1CL_1C_4W_4T &&
+cp cov/merged.ucdb cov/merged_raw.ucdb cov/bank_1CL_1C_4W_4T/ && cp -r cov/report cov/staging
+cov/bank_1CL_1C_4W_4T/`, verify by RE-READING the copy (`vcover report -summary <copy>`), THEN run
+2CL with `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 bash scripts/run_suite.sh` and bank it the same way.
+⚠ `run_suite` merges into `cov/merged.ucdb`, so an UNBANKED result is destroyed by the next
+config's merge. Archive `results/run_suite_logs/` before each run — it is overwritten.
+*Compare against:* 1CL **91.08% / 398-403** and 2CL **88.69% / 944-1095** (the pre-scaling banks).
+Questions this run answers: (a) do the 84 per-core bins fill at 2CL, (b) does `cp_mshr_stall.stall`
+move now 4 cores contend, (c) 1CL should barely change.
+
 **STATE: both banks clean and quotable. A re-run is IN FLIGHT to measure the kernel scaling.**
 
 | bank | programs | total | covergroup bins | instances |
