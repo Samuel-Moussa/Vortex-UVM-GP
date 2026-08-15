@@ -112,10 +112,28 @@ if [[ -x "$GEN_EXCLUDE" ]]; then
     EXCLUDE_DO="${COV_DIR}/coverage_exclude.gen.do"
     echo "Generating config-aware exclusions for ${COV_NCL}CL/${COV_NC}C/${COV_NW}W/${COV_NT}T -> $EXCLUDE_DO"
     "$GEN_EXCLUDE" "$COV_NCL" "$COV_NC" "$COV_NW" "$COV_NT" > "$EXCLUDE_DO"
+    # Split the generated .do by WAIVER CLASS, because the two classes have
+    # fundamentally different semantics and only one of them is hits-invariant:
+    #
+    #   EOTH = third-party IP (cvfpu, HardFloat). That code IS executed; we exclude
+    #          it because it is not the Vortex DUT and we do not claim to verify it.
+    #          Removing it LEGITIMATELY drops covered bins.
+    #   EUR  = structurally-dead logic (tied-off buses, read-only icache, unenterable
+    #          FSMs, vacuous assertions). These bins CANNOT be hit, so removing them
+    #          must change the denominator ONLY.
+    #
+    # Applying them in two stages is what makes the gate below meaningful.
+    grep    -- '-reason EOTH' "$EXCLUDE_DO" > "${COV_DIR}/excl_thirdparty.do" || true
+    grep -v -- '-reason EOTH' "$EXCLUDE_DO" > "${COV_DIR}/excl_structural.do" || true
+    STAGE1_UCDB="${COV_DIR}/merged_stage1.ucdb"
     vsim -viewcov "$RAW_UCDB" -c -do "
-        do ${EXCLUDE_DO};
+        do ${COV_DIR}/excl_thirdparty.do;
+        coverage save ${STAGE1_UCDB};
+        quit -f;" 2>&1 | tee "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error" || true
+    vsim -viewcov "$STAGE1_UCDB" -c -do "
+        do ${COV_DIR}/excl_structural.do;
         coverage save ${MERGED_UCDB};
-        quit -f;" 2>&1 | tee "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error|excluded" || true
+        quit -f;" 2>&1 | tee -a "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error|excluded" || true
     # NOTE: `grep -c` prints "0" AND exits 1 when there are no matches, so the old
     # `|| echo 0` fired IN ADDITION to grep's own output and set HNE to the two-line
     # string "0\n0". `[[ "0\n0" -eq 0 ]]` is then a syntax error, which took the
@@ -128,6 +146,36 @@ if [[ -x "$GEN_EXCLUDE" ]]; then
     HNE=$(grep -c "had no effect" "${COV_DIR}/exclude_apply.log" 2>/dev/null) || HNE=0
     [[ "${HNE:-0}" -eq 0 ]] || echo "WARN: $HNE exclusion line(s) had no effect (stale path for this config?)"
     [[ -f "$MERGED_UCDB" ]] || { echo "ERROR: exclusion/save failed"; exit 1; }
+
+    # ---- 3b. HITS-INVARIANT GATE (blocking) ---------------------------------
+    # A STRUCTURAL exclusion removes bins that could never be hit. It must therefore
+    # change the DENOMINATOR ONLY: the number of COVERED bins must be byte-identical
+    # before and after. If covered bins drop, the waiver ate real coverage — the
+    # number goes UP while the verification got WEAKER, which is the exact failure
+    # mode this project must never ship.
+    #
+    # This is not hypothetical. On 2026-08-16 it caught two over-exclusions in one
+    # session: a `-linerange` spanning an FSM (reachable and dead lines interleave,
+    # -3 branch hits) and a `-code c` waiver of `(init_valid | flush_valid)` (Questa
+    # cannot waive ONE FEC input term, only the whole condition: -2 cond hits at 1CL,
+    # -4 at 2CL). Both looked correct and both reported 0 "had no effect".
+    #
+    # "had no effect" only proves a waiver MATCHED something. This proves it matched
+    # the RIGHT something. Keep both.
+    hits_of() {   # $1=ucdb -> "<category> <covered>" per code/cvg category
+        vcover report -summary "$1" 2>/dev/null | awk '
+            /^ *(Assertions|Branches|Conditions|Statements|Toggles|Directives) /{print $1, $3}'
+    }
+    RAW_HITS=$(hits_of "$STAGE1_UCDB")
+    NEW_HITS=$(hits_of "$MERGED_UCDB")
+    if [[ "$RAW_HITS" != "$NEW_HITS" ]]; then
+        echo "ERROR: exclusions changed COVERED bin counts — a waiver is eating real coverage."
+        echo "       A structural waiver may only shrink the denominator, never the hits."
+        diff <(echo "$RAW_HITS") <(echo "$NEW_HITS") | sed 's/^/       /'
+        echo "       Offending .do: ${EXCLUDE_DO}"
+        exit 1
+    fi
+    echo "OK: hits-invariant holds — exclusions shrank the denominator only."
 else
     echo "WARN: $GEN_EXCLUDE missing/not-exec — merging WITHOUT exclusions (cvfpu in denominator!)"
     cp "$RAW_UCDB" "$MERGED_UCDB"

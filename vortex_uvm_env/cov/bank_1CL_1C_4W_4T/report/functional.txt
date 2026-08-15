@@ -1,5 +1,5 @@
 QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
-Start time: 02:23:36 on Aug 16,2026
+Start time: 02:58:56 on Aug 16,2026
 vcover report -cvg -details bank_1CL_1C_4W_4T/merged.ucdb 
 Coverage Report by instance with details
 
@@ -3284,5 +3284,5 @@ TOTAL COVERGROUP COVERAGE: 99.79%  COVERGROUP TYPES: 19
 
 Total Coverage By Instance (filtered view): 99.79%
 
-End time: 02:23:37 on Aug 16,2026, Elapsed time: 0:00:01
+End time: 02:58:57 on Aug 16,2026, Elapsed time: 0:00:01
 Errors: 0, Warnings: 0

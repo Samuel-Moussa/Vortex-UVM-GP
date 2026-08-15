@@ -47,6 +47,69 @@ coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_socke
 # NW_BITS=2 TOTAL_CORES=4 -> max g_wid=15 -> needs 4 bits
 coverage exclude -scope {/vortex_tb_top/dut/vortex} -recursive -togglenode {uuid[43:36]} -reason EUR
 
+# --- EUR: icache flush FSM is structurally unenterable (OBS-035) ---
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 134 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 135 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 136 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 137 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 142 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 147 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 149 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 151 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 153 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 154 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 155 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 156 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 159 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 162 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 165 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 166 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 167 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 61 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 69 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 71 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 72 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 75 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 76 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 77 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 80 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 84 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 85 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 88 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 90 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 134 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 135 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 136 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 137 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 142 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 147 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 149 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 151 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 153 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 154 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 155 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 156 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 159 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 162 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 165 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 166 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/cache_init} -linerange 167 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 61 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 69 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 71 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 72 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 75 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 76 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 77 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 80 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 84 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 85 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 88 -reason EUR
+coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/cache_flush} -linerange 90 -reason EUR
+
+# --- EUR: rlast assertion is vacuous under a single-beat master ---
+coverage exclude -srcfile /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/tb/vortex_axi_if.sv -linerange 507 -reason EUR ;# assert_rlast_on_last_beat
+
 # --- EUR: structural AXI cover-directives (restricted master; mirror of 148ff78) ---
 coverage exclude -srcfile /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/tb/vortex_axi_if.sv -linerange 755 -reason EUR ;# aw_burst_incr  (awburst hardwired FIXED)
 coverage exclude -srcfile /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/tb/vortex_axi_if.sv -linerange 757 -reason EUR ;# aw_burst_wrap  (awburst hardwired FIXED)

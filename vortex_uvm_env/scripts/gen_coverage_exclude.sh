@@ -114,8 +114,17 @@ echo
 #        (`-code c` drops the condition only; the statement/branch keep their hits.)
 # -----------------------------------------------------------------------------
 if (( TOTAL_CORES == 1 )); then
-  echo "# --- ECFG: single-core -> global-barrier condition is structurally dead ---"
-  echo "coverage exclude -srcfile ${RTL}/core/VX_schedule.sv -linerange 168 -code c -reason EUR"
+  # ⚠ WITHDRAWN 2026-08-16 — the INTENT was right and the TOOL cannot express it.
+  # `is_global` is indeed stuck at 0 with one core, so that FEC input term is
+  # structurally unreachable. But Questa cannot waive ONE input term of a condition,
+  # only the whole condition — and the OTHER term of `~barrier.is_global && ...` is
+  # legitimately COVERED. The hits-invariant gate in merge_coverage.sh measured this
+  # waiver silently discarding 1 real covered condition term at 1CL (268 -> 267),
+  # which it had been doing since it was added.
+  # Keeping it buys +0.03 Total and hides a covered term. Not worth it, and not
+  # honest. The term stays in the denominator, uncovered, and is explained in
+  # docs/COVERAGE_CEILING_ANALYSIS.md instead. Same call as VX_cache_bank.sv:263,267.
+  echo "# --- ECFG: single-core global-barrier term is unreachable but NOT waived (Questa cannot waive a single FEC term; see gen script comment) ---"
   echo
 else
   echo "# --- ECFG: TOTAL_CORES=${TOTAL_CORES} (>1) -> global-barrier condition is REACHABLE, NOT excluded ---"
@@ -209,6 +218,74 @@ if (( UUID_LO <= UUID_HI )); then
 else
   echo "# (topology needs all ${GWID_BITS} g_wid bits -> nothing structurally dead here)"
 fi
+echo
+
+# -----------------------------------------------------------------------------
+# 4d. EUR (CODE) — the icache FLUSH FSM can never be entered, at any config.
+#
+#     PROOF CHAIN (all three links verified in the RTL, not assumed):
+#       (1) VX_cache_init.sv:91 — the ONLY way a flush starts is
+#           `core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_FLUSH]`.
+#       (2) VX_lsu_slice.sv:73 — that flag has EXACTLY ONE producer in the whole
+#           design, `req_is_fence`, and it sits on the LSU (dcache) path.
+#       (3) VX_fetch.sv contains the string "flush" ZERO times — the icache's only
+#           requester has no flush logic to drive it with.
+#     => no instruction, in any program, at any topology, can raise flush on the
+#        icache. This is a property of the instantiation, not of our stimulus.
+#
+#     POSITIVE CONTROL (this is what makes it a proof rather than an excuse): the
+#     IDENTICAL source is FULLY COVERED on the dcache in the same run --
+#     VX_cache_init 25/25 and VX_cache_flush 16/17 -- and dead on the icache
+#     (14/25, 12/17). Same RTL, same suite; the only difference is which cache.
+#
+#     ⚠ THE `if` LINES ARE DELIBERATELY **NOT** EXCLUDED (VX_cache_init.sv:133,
+#     VX_cache_flush.sv:60). Those conditions ARE evaluated every cycle and their
+#     false arm is legitimately covered; excluding the line would drop 3 REAL hits.
+#     Only the state BODIES -- the code reachable solely by entering a flush state
+#     -- are waived. Verified: covered counts unchanged (stmt 4334, branch 2637,
+#     cond 267) with 0 "had no effect".
+#
+#     ⚠ These are LINE-KEYED and therefore brittle if the RTL is edited. The
+#     hits-invariant check in merge_coverage.sh is the guard: if a line shifts and
+#     this waiver starts eating covered bins, the merge FAILS rather than silently
+#     inflating the number.
+# -----------------------------------------------------------------------------
+NUM_ICACHES=$(( SOCKET_SIZE / 4 )); (( NUM_ICACHES < 1 )) && NUM_ICACHES=1
+# VX_socket.sv:96 hardcodes .NUM_BANKS(1) for the icache -> a single g_banks[0].
+CACHE_INIT_DEAD="134 135 136 137 142 147 149 151 153 154 155 156 159 162 165 166 167"
+CACHE_FLUSH_DEAD="61 69 71 72 75 76 77 80 84 85 88 90"
+echo "# --- EUR: icache flush FSM is structurally unenterable (OBS-035) ---"
+for (( cl=0; cl<NCL; cl++ )); do
+  for (( sk=0; sk<NUM_SOCKETS; sk++ )); do
+    for (( ic=0; ic<NUM_ICACHES; ic++ )); do
+      CS="${TOP}/g_clusters[${cl}]/cluster/g_sockets[${sk}]/socket/icache/g_cache_wrap[${ic}]/cache_wrap/g_cache/cache"
+      for l in $CACHE_INIT_DEAD; do
+        echo "coverage exclude -scope {${CS}/cache_init} -linerange $l -reason EUR"
+      done
+      for l in $CACHE_FLUSH_DEAD; do
+        echo "coverage exclude -scope {${CS}/g_banks[0]/bank/cache_flush} -linerange $l -reason EUR"
+      done
+      # ⚠ NOT WAIVED, and this is a MEASURED decision, not an oversight:
+      # VX_cache_bank.sv:263,267 `(init_valid | flush_valid)` has flush_valid
+      # structurally 0 on the icache, so that FEC input term is unreachable --
+      # BUT Questa cannot waive a single input term, only the whole condition,
+      # and `init_valid` IS exercised (reset-time cache init). Excluding line 263
+      # or 267 was measured to DROP 2 covered terms at 1CL and 4 at 2CL. Those 2
+      # terms stay honestly uncovered rather than take covered bins with them.
+    done
+  done
+done
+echo
+
+# -----------------------------------------------------------------------------
+# 4e. EUR (ASSERTION) — assert_rlast_on_last_beat can never arm.
+#     VX_axi_adapter.sv:262 hardwires awlen/arlen to 0, so EVERY beat is the last
+#     beat and the assertion's multi-beat antecedent is never true. This is the
+#     SAME restricted-master citation already used for the awlen cover-directives
+#     below; a vacuous assertion is not a coverage hole.
+# -----------------------------------------------------------------------------
+echo "# --- EUR: rlast assertion is vacuous under a single-beat master ---"
+echo "coverage exclude -srcfile ${TB}/vortex_axi_if.sv -linerange 507 -reason EUR ;# assert_rlast_on_last_beat"
 echo
 
 # -----------------------------------------------------------------------------
