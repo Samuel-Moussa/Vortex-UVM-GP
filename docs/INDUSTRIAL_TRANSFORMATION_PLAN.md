@@ -123,7 +123,23 @@ config's merge. Archive `results/run_suite_logs/` before each run — it is over
 
 ---
 
-### ▶▶ COVERAGE-GAP PUSH — 2026-08-15 (AFTER the post-scaling banks). NOT YET RE-BANKED.
+### ▶▶ COVERAGE-GAP PUSH — 2026-08-15
+**⏳⏳ IN FLIGHT RIGHT NOW (2026-08-15 ~19:45): FULL 1CL SUITE, gap-push build.**
+Detached (`setsid`, SID 4778), log:
+`/tmp/claude-1000/-home-samuel-ubuntu22-Vortex-UVM-GP/69210dfb-660d-4751-9578-61d1c46bcd08/scratchpad/suite_1cl_gap.log`
+This is the FIRST suite containing the AXI route re-model (OBS-030), the config-aware
+`cp_mshr_stall` waiver (OBS-031) and the 3 new kernels (`multicore_isa`, `lmem_stress`,
+`mshr_flood`) — 47 programs, was 44.
+*On resume:* `grep "SUITE VERDICT" <log>`; when done **BANK IMMEDIATELY** —
+`mv cov/bank_1CL_1C_4W_4T cov/bank_1CL_1C_4W_4T_postscale_20260815 && mkdir cov/bank_1CL_1C_4W_4T &&
+cp cov/merged.ucdb cov/merged_raw.ucdb cov/bank_1CL_1C_4W_4T/ && cp -r cov/report cov/staging cov/bank_1CL_1C_4W_4T/`
+then verify by RE-READING the copy, then run 2CL
+(`CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 bash scripts/run_suite.sh`) and bank it the same way.
+⚠ `run_suite` merges into `cov/merged.ucdb` — an UNBANKED result is destroyed by the next merge.
+*Compare against:* 1CL **91.07% / 398-403** and 2CL **90.54% / 962-1095** (post-scaling banks).
+**EXPECT THE NUMBER TO MOVE BOTH WAYS** — three false ignore_bins removed (adds reachable bins to
+the denominator) vs real new coverage from the 3 kernels. Do not tune it.
+ (AFTER the post-scaling banks). NOT YET RE-BANKED.
 
 **Nothing below is in the banks yet.** The two banked configs predate all of it; the AXI block of
 those banks is no longer comparable (see OBS-030). Full evidence in `docs/RTL_OBSERVATIONS.md`
