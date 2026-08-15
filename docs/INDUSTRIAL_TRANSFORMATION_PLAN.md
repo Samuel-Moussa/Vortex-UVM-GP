@@ -121,6 +121,73 @@ config's merge. Archive `results/run_suite_logs/` before each run — it is over
 
 **STATE: both configs re-run post-scaling, banked, and verified by re-reading the copies.**
 
+---
+
+### ▶▶ COVERAGE-GAP PUSH — 2026-08-15 (AFTER the post-scaling banks). NOT YET RE-BANKED.
+
+**Nothing below is in the banks yet.** The two banked configs predate all of it; the AXI block of
+those banks is no longer comparable (see OBS-030). Full evidence in `docs/RTL_OBSERVATIONS.md`
+**OBS-030 / OBS-031 / OBS-032**, which were NOT previously indexed here.
+
+**WHAT LANDED**
+
+| commit | change |
+|---|---|
+| `d9cd75c` | AXI route re-modelled by decoded sub-field; `cp_num_clusters` added; dead `SINGLE_CORE` retired |
+| `6433857` | 3 gap-directed kernels + config-aware `cp_mshr_stall` waiver; hardcoded config ceilings removed |
+| `e29e836` | `cp_route_slot` gated on tag-buffer presence |
+| `927be95` `e342861` `f60aa8c` | OBS-030 / OBS-031 / OBS-032 |
+
+**MEASURED (individually, per the "verify the gap is hit before running the suite" rule)**
+* `multicore_isa` — **all 8 per-core target bins covered** (`czeq`,`czne`,`lb`,`lh`,`sb`,`sh`,
+  `<bar,{uniform,partial[3],partial[2]}>`, `<pred,{...}>`). Zicond emitted from a kernel for the
+  FIRST time: the compiler cannot produce it at `-march=rv32imaf` (verified 0 occurrences in three
+  existing ELFs), so it is inline `.insn` encoded from `VX_gpu_pkg.sv:168` + `VX_decode.sv:189`.
+* `lmem_stress` — **`VX_local_mem` toggle 57.52% -> 73.19% (+687 bins)**, measured by merging the
+  run into the 1CL bank. First suite kernel to touch the scratchpad at all.
+* `mshr_flood` — 67,207 dcache misses vs 774 hits, **`cp_mshr_stall.stall` still 0**: see OBS-031.
+
+**⚠ OBS-032 — WE HAVE NEVER MEASURED THE RTL's DEFAULT CACHE CONFIGURATION.**
+`scripts/compile.sh:70-73` unconditionally passes
+`+define+{I,D}CACHE_MSHR_SIZE=16 +define+{I,D}CACHE_MREQ_SIZE=16`. `MREQ_SIZE` defaults to **4**
+(`VX_config.vh:633`), so every bank describes a machine with a **4x deeper cache fill queue** than a
+default Vortex build. That queue's almost-full threshold is `MREQ_SIZE - PIPELINE_STAGES`
+(2 by default, **14** as we build it) and it is one of the two terms gating `core_req_ready`
+(`VX_cache_bank.sv:232`) — i.e. it directly controls when a bank stops accepting misses, which is
+exactly what several coverage bins try to observe. Provenance: the initial upload commit, no
+comment, no doc. **It nearly produced a false structural waiver** (the first OBS-031 draft).
+**Disposition OPEN — decide before the paper:** (a) drop the override and re-measure the default,
+or (b) keep it and state it in the bank metadata + the paper's configuration table. Until then,
+every cache back-pressure claim must be qualified with the queue depths we actually built.
+
+**⚠ OPEN QUESTION TO SETTLE AT 2CL — is `cp_route_slot` reachable?**
+The AXI tag buffer is **config-dependent**: absent at 1CL (`g_none`, read `id` = raw cache tag),
+present per-port at 2CL (`g_tag_buf[i]/g_enabled/tag_buf`) — verified from the UCDB hierarchy with
+`vcover report -recursive`, not inferred. So the slot index only MEANS anything at >=2 ports, and
+the coverpoint is now gated on that.
+**Hypothesis, NOT yet established:** the 10 unhit slots may be bounded by the SAME structural limit
+as OBS-031 — the allocator is strictly lowest-free (`VX_allocator.sv:49`), so slot N requires N
+concurrent outstanding reads on that port, and `LSUQ_OUT_SIZE` is 4 at `NUM_THREADS=4`.
+**Do NOT waive on this hypothesis until measured.** The 2CL verification run is what decides it;
+if confirmed it is a config-aware waiver like OBS-031, if not it is a stimulus target.
+
+**▶ NEXT, IN ORDER**
+1. ~~Register the 3 kernels in `run_suite.sh`~~ ✅ done (`runk sim-only` entries).
+2. **2CL verification of the 3 kernels** (in flight) — confirms the 8 per-core bins fill on cores
+   1-3, and answers the `cp_route_slot` question above.
+3. Full 1CL + 2CL sweeps, **banking each immediately**.
+4. Then the paper.
+**DEFERRED — L2/L3.** The suite never enables them (`L2=0 L3=0`), so both levels are PASSTHRU in
+every banked run. OBS-016/017 are FIXED so it is buildable, and OBS-018 already proved the levels
+genuinely elaborate (timing moved 12,215 -> 21,968 cycles on `tcu_test`). It is a THIRD config
+needing its own bank — do it after these two are solid, and verify elaboration with
+`vcover report -recursive | grep l2cache`, never by grepping the sim log (OBS-018 notes `dcache`
+does not appear there either).
+
+**⚠ EXPECT THE HEADLINE TO MOVE BOTH WAYS.** Removing three false `ignore_bins` puts genuinely
+reachable bins back in the denominator (lowers %), while `lmem_stress` and `multicore_isa` add real
+coverage (raises %). The resulting number is more defensible either way; do not tune it.
+
 | bank | programs | total | covergroup bins | instances |
 |---|---|---|---|---|
 | **1CL/1C/4W/4T** (`cov/bank_1CL_1C_4W_4T/`) | **44/44, 0 FAILED** | **91.07%** | 398/403 = 98.75% | 2256 |

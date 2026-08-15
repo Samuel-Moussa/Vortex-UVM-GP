@@ -160,6 +160,26 @@ runk sim-only div_edge 2000000
 # AXI read-flood: mem_stress (12-load bursts) with the slave streaming R back-to-back
 # (+AXI_FLOOD) -> DUT deasserts rready -> assert_r_valid/r_data_stable. Byte-exact.
 runflood mem_stress 4000000
+# ---- gap-directed kernels (added 2026-08-15, each validated against its target) ----
+# multicore_isa: Zicond czeq/czne via inline .insn (the compiler CANNOT emit them --
+# kernels build -march=rv32imaf), sub-word lb/lh/sb/sh, and barrier/predicate SFU ops
+# under peeled thread masks, on EVERY core. Recovers the 8 bins per core that the FIX 1
+# / FIX 2 core gates cost us (riscv-dv and barrier_test are core-0 only) WITHOUT
+# weakening either gate -- coverage from an architecturally-undefined program is not
+# coverage. Measured at 1CL: all 8 target bins covered.
+runk sim-only multicore_isa 500000
+# lmem_stress: the only suite kernel that touches the per-core LOCAL MEMORY scratchpad.
+# Reads its base from VX_CSR_LOCAL_MEM_BASE (hardcoding it is how the first version
+# silently exercised ordinary memory and moved coverage 0.00% -- OBS-029), and carries a
+# non-vacuity guard. Measured: VX_local_mem toggle 57.52% -> 73.19% (+687 bins).
+runk sim-only lmem_stress 500000
+# mshr_flood: same-bank stride (1024B = 16*64, valid for ANY DCACHE_NUM_BANKS<=16) with
+# thread-INTERLEAVED slots so each thread's lines collapse onto ONE 4-way set. Produces
+# 67,207 dcache misses vs 774 hits. It does NOT hit cp_mshr_stall.stall and cannot:
+# OBS-031 proves that bin structurally unreachable while LSUQ_OUT_SIZE (4 at 4 threads)
+# < MSHR_SIZE (16). Kept because the miss/eviction traffic itself is real coverage and
+# because it is the evidence for that waiver.
+runk sim-only mshr_flood 4000000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     400000
 rund functional_memory_test functional_mem  400000
