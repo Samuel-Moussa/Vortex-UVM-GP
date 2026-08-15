@@ -1333,3 +1333,62 @@ because `vx_spawn` distributes tasks CONTIGUOUSLY (`all_tasks_offset = core_id *
 **Disposition: OPEN — TB defect, no DUT implication.** It does not invalidate any PASS/FAIL result
 (every kernel ran a correct, defined program); it means multi-core STIMULUS was far weaker than the
 kernel comments claim, and the per-core coverage deficit at 2CL is ours, not the design's.
+
+---
+
+### OBS-029 (METHODOLOGY LIMIT — READ BEFORE WRITING ANY "VERIFIED BY GOLDEN-MODEL EQUIVALENCE" CLAIM) — differential testing is STRUCTURALLY BLIND to a fault in the stimulus itself
+
+**The claim this bounds.** Our central evidence is *"the DUT's end state is byte-exact against
+SimX."* That is strong evidence about the DUT's **response** to a stimulus. It says **nothing**
+about whether the stimulus was the one we intended.
+
+**Concrete instance (found 2026-08-15 while auditing the execution units).**
+`tcu_mt`/`tcu_test` build their tensor-core operation from a C++ template whose argument is the
+COMPILE-TIME warp width:
+```cpp
+using ctx = vt::wmma_context<NUM_THREADS, vt::bf16, vt::fp32>;   // tileM/tileN are part of the TYPE
+```
+`NUM_THREADS` comes from `VX_config.h`, which is frozen at 4 (OBS-028), and kernels are never
+rebuilt per config. Run the suite at `THREADS=2` or `THREADS=8` and the kernel issues a **4-lane**
+WMMA against different-width hardware.
+
+**Why no checker in the environment can catch it.** The DUT and the golden model execute the
+**same binary**. A mis-compiled kernel is therefore mis-executed *identically* by both:
+- the end-state scoreboard compares DUT memory to SimX memory — **both wrong, both equal ⇒ PASS**;
+- per-instruction lockstep compares DUT retirements to SimX retirements — **same, ⇒ PASS**;
+- the coverage model samples what executed, not what SHOULD have executed ⇒ bins fill, happily.
+⇒ **A green run with 0 mismatches is fully compatible with the kernel having verified nothing.**
+This is not a hole in the scoreboard; it is a property of differential testing. Both sides share
+the stimulus, so a fault in the stimulus is **common-mode** and cancels exactly.
+
+**The general rule.** Equivalence checking can only validate what DIFFERS between the two models.
+Anything SHARED — the program binary, the memory image, the launch geometry, the DCR
+configuration — is outside the comparison by construction, and needs an INDEPENDENT assertion.
+
+**What closes it: assert on the STIMULUS, not the response.** Both TCU kernels now check the
+elaborated geometry at runtime and refuse to run on a mismatch (`9674de0`):
+```c
+if ((int)vx_num_threads() != NUM_THREADS || (int)vx_num_warps() != NUM_WARPS)
+  return 1;    // compiled for a different machine
+```
+Same principle as the `I2` elaboration asserts (UVM params vs DUT params) and the `C1` width
+assert, applied one level up — to the PROGRAM rather than the testbench. Proven non-vacuous:
+`tcu_test` still passes at the compiled geometry (`data_compared=244`).
+
+**Other members of this class already in-tree** (all shared inputs, all outside the compare):
+| shared input | what protects it | status |
+|---|---|---|
+| launch geometry (warps/threads) | the TCU runtime guard above | ✅ `9674de0` |
+| UVM params vs RTL params | `I2` elaboration asserts | ✅ |
+| `VX_MEM_TAG_WIDTH` | `C1` elaboration assert | ✅ |
+| SimX build config vs RTL config | `simx_config.stamp` | ✅ (I3) |
+| **kernel build config vs RTL config** | **nothing** | ⚠ **OPEN — OBS-028** |
+| the program image itself | nothing (a wrong ELF is run faithfully by both) | ⚠ OPEN |
+
+**⇒ CLAIM DISCIPLINE.** Defensible: *"for the stimulus we ran, the DUT's end state and its
+per-instruction retirements match an independent-ish golden model byte-exactly, with
+proven-non-vacuous checkers."* **NOT defensible:** *"equivalence against the golden model proves
+the DUT executed the intended program."* Nothing in an equivalence-based environment can prove
+that; only an assertion on the stimulus can, and we now have one for exactly one shared input.
+**Disposition: OPEN (methodology).** Every remaining row of the table above is a place where a
+green run could still mean nothing. Add to the FW list and to the paper's limitations section.
