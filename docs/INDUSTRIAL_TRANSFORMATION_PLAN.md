@@ -66,6 +66,81 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
+### ▶▶ RESUME HERE — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
+
+**STATE: both banks clean and quotable. A re-run is IN FLIGHT to measure the kernel scaling.**
+
+| bank | programs | total | covergroup bins | instances |
+|---|---|---|---|---|
+| **1CL/1C/4W/4T** (`cov/bank_1CL_1C_4W_4T/`) | **44/44, 0 FAILED** | **91.08%** | 398/403 = 98.75% | 2256 |
+| **2CL/2C/4W/4T** (`cov/bank_2CL_2C_4W_4T/`) | **44/44, 0 FAILED** | **88.69%** | 944/1095 = 86.21% | 8275 |
+
+**⭐ FIRST CLEAN 2CL SWEEP EVER** (previous attempt: 37/45 with 8 FAILED). Stale 2CL bank
+(85.16%) preserved as `bank_2CL_2C_4W_4T_stale_20260710/` — never quote it.
+⚠ Suite is **44 DISTINCT programs**, not 45 — `riscv_pmp_test` was dropped (FW-1b duplicate).
+
+**⭐ THE "EXPECTED" 2CL FAILURES WERE ONE METHODOLOGY BUG, AND ARE GONE.** All four now PASS with
+real non-zero compares: `riscv_no_fence_test` (556 words), `riscv_full_interrupt_test` (787),
+`riscv_mmu_stress_test` (729), `riscv_non_compressed_instr_test` (787).
+**This FALSIFIES this plan's own "EXPECT AT BEST 43/45 — never 45/45 at 2CL"**, which also said not
+to "fix" the first two. Root cause was OBS-027 (riscv-dv single-hart program on every core), not
+inherent SimX weak-coherency. ⇒ **`docs/investigations/SimX_2CL_no_fence_divergence.md` got the
+MECHANISM right and the DISPOSITION wrong** — it filed the divergence as permanently UNVERIFIABLE,
+stopping one question short of asking whether the program was ever MEANT to run on >1 hart.
+**OBS-009's riscv-dv members are RESOLVED.**
+
+**⭐ OBS-028 — KERNELS WERE PINNED TO 1/1/4/4 REGARDLESS OF THE COMMAND LINE.**
+`Vortex/hw/VX_config.h:99-111` hardcodes `NUM_CLUSTERS 1 · NUM_CORES 1 · NUM_WARPS 4 ·
+NUM_THREADS 4`; `common.mk:24` has always honoured `$(CONFIGS)` but **nothing ever passed it**, and
+`Makefile:60` pointed `PROGRAM` at a PREBUILT `.elf`. So `wide_stress` — commented *"Multi-core
+aware"* — computed `TOTAL = NUM_CLUSTERS*NUM_CORES*NUM_WARPS*NUM_THREADS = 16` and ran with
+`per_cluster_busy=01` for its ENTIRE ~1.4M-cycle run at 2CL. **The kernels were not naive, they were
+misinformed: the arithmetic was right and its inputs were frozen.** This, not the DUT and not the
+core-gating fix, is why 84 of the 151 missing 2CL bins sat on cores 1-3 (`cluster0_core0` missing
+**0**, the other three missing **28 each**).
+
+**⭐ OBS-029 — DIFFERENTIAL TESTING IS STRUCTURALLY BLIND TO A FAULT IN THE STIMULUS.**
+`tcu_*` build their WMMA from `wmma_context<NUM_THREADS,…>` — a **TEMPLATE argument**, so tile
+geometry is part of the type and can never be runtime-derived. At the wrong warp width the kernel
+is invalid, and **no checker here can detect it**: DUT and SimX execute the SAME binary, so both are
+wrong identically — end-state compare passes, lockstep passes, coverage fills. **A green run with 0
+mismatches is fully compatible with the kernel having verified nothing.** Only what DIFFERS between
+the models is validated; everything SHARED (binary, memory image, launch geometry, DCR config) is
+common-mode and needs an INDEPENDENT assertion. **Read this before writing any "verified by
+golden-model equivalence" claim.**
+
+**WHAT LANDED (all measured, all committed):**
+| item | commit | evidence |
+|---|---|---|
+| 7 kernels sized from the DEVICE | `81ffa24` `49b19ba` `5a6dde0` `171cc10` `9674de0` | every one `per_cluster_busy` `01→11`, byte-exact, 0 mismatches |
+| `wide_stress` real parallel speed-up | `5a6dde0` | 1,420,210 → **1,172,065 cycles** for the SAME work (−17.5%) |
+| TCU core-dim scaled + geometry guard | `9674de0` | `data_compared` 292 → **740** (2.5×); guard non-vacuous (`tcu_test` still passes) |
+| **per-config PROGRAM build** | `3ffa321` | `kernel-config` + `.kernel_config.stamp`; 10 kernels build at THREADS=2 incl. both TCU templates |
+| coverage exclusion guard repaired | `04db8fd` | `grep -c ... \|\| echo 0` made `HNE="0\n0"` ⇒ the guard could NEVER report a true count |
+| OBS-026 hex misparse corrected | `2b6c1cf` | `bar2_stall` is `0x300`/`0x600` (768/1536), **not** 3/6 — SimX lost ZERO updates, DUT exactly half |
+
+**CONFIG FIDELITY IS NOW CLOSED ON ALL LEGS — every stage propagates AND is guarded:**
+| stage | propagation | guard |
+|---|---|---|
+| RTL | `compile.sh:66-69` `+define+` | I2 assert (`$fatal`) |
+| SimX | `prepare.sh:105,123` `CONFIGS` | `simx_config.stamp` |
+| **program** | `Makefile:88` `KERNEL_CONFIGS` | **`.kernel_config.stamp`, `exit 1` on failure** |
+| UVM | `simulate.sh:26-29` plusargs | I2 assert |
+| coverage | `run_suite.sh:241` `COV_*` | `gen_coverage_exclude` + "had no effect" (repaired) |
+| tag width | — | C1 assert |
+**GATE-0 RE-PROVEN after the per-config rebuild** (rule 5): both guards RED — fault at
+`0x800075d8` detected, dropped store at `0x800075d8` detected via the reverse pass.
+
+**▶ NEXT ACTION:** the re-run is measuring whether the kernel scaling BUYS coverage — (a) do the 84
+per-core bins fill at 2CL, (b) does `cp_mshr_stall.stall` (the only genuine 1CL functional gap,
+icache+dcache) finally move now that 4 cores contend, (c) 1CL should barely change (at one core the
+scaled grids still compute 16). **Bank each config IMMEDIATELY after its merge** — `run_suite`
+merges into `cov/merged.ucdb`, so an unbanked result is destroyed by the next config's merge.
+Only after that: update `docs/PAPER_BASE_EVALUATION.md` + `docs/paper/vortex_uvm_paper.tex`, whose
+headline "100% functional / 43/43 tests / 91.0%" is now wrong on all three counts.
+
+---
+
 ### ▶ THE FOUR FIXES — ✅ ALL FOUR DONE AND MEASURED (2026-08-13)
 
 **Status: COMPLETE. Next action is the TWO BANK RUNS (1CL then 2CL), not these fixes.**
