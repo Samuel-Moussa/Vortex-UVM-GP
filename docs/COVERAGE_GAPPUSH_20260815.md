@@ -41,6 +41,57 @@ is why it moved most.
 
 ---
 
+## 1b. Headline — 2CL/2C/4W/4T
+
+**47 programs staged, 0 FAILED.**
+
+| metric | post-scaling bank | **gap-push bank** | Δ |
+|---|---|---|---|
+| **Total** | 90.54% | **92.67%** | **+2.13** |
+| Conditions | 73.13% | **81.27%** | **+8.14** |
+| Branches | 91.18% | **93.68%** | +2.50 |
+| Statements | 96.88% | **97.82%** | +0.94 |
+| Toggles | 75.85% | **77.80%** | +1.95 |
+| Covergroups (weighted) | 98.13% | **99.52%** | +1.39 |
+| **Covergroup bins (raw)** | 962/1095 = 87.85% | **985/1032 = 95.44%** | **+7.59** |
+| Assertions | 98.59% | 98.59% | 0 |
+| Directives | 100% | 100% | 0 |
+
+At 2CL the raw bin percentage moved **up 7.59 points** — unlike 1CL, where it fell. Both are the
+same effect seen from two configs: the withdrawn waivers were *correct at 1CL* (so removing them
+exposed genuinely-unhit bins) and *wrong at 2CL* (so removing them returned 4,488+ real transactions
+to the count), while `multicore_isa` closed the 24-bin per-core gap that only exists at 2CL.
+
+### Combined, both configs
+
+| | 1CL | 2CL |
+|---|---|---|
+| programs | **47/47, 0 FAILED** | **47/47, 0 FAILED** |
+| Total | **93.09%** (+2.02) | **92.67%** (+2.13) |
+| Covergroup bins | 370/377 = 98.14% | 985/1032 = 95.44% |
+| Covergroups weighted | 99.79% | 99.52% |
+| Instances | 2256 | 8275 |
+
+---
+
+## 2b. Remaining gaps at 2CL — 47 bins, four root causes
+
+| bins | coverpoint | root cause | actionable? |
+|---|---|---|---|
+| 24 | `cp_route_slot` slots 4-15 + `cross_port_slot` | **measured** per-port outstanding-read concurrency is 3 (contiguous {0,1,2}); same requester-width limit as OBS-031 | not without deriving the bound — see §4 |
+| 8 | `cp_write_tag` `tag[4..7]` | write tag values >=64 never occur at 2CL (`ROUTE_W`=7, buckets of 16) | stimulus, low value |
+| 4 | `mem_usage_cp` + `system_mem_cross` | MEM interface idle on AXI runs; **weight 0** by design | no — structural |
+| 2 | `cross_dvg_depth` `<divergent,d[3]>`, `<uniform,d[1]>` | divergence-depth combinations not produced by the current kernels | yes — a directed divergence kernel |
+
+**The 84/42-bin per-core `instr_probe` gap is GONE.** `multicore_isa` closed it: every tracked bin
+is now covered on all four cores with identical counts. That gap dominated the previous 2CL
+analysis and no longer appears.
+
+**`cross_dvg_depth` is the one clean, cheap target left** — 2 bins, ordinary stimulus, no structural
+obstacle. Everything else is either a measured hardware bound or a documented weight-0 row.
+
+---
+
 ## 2. Remaining gaps at 1CL — all seven bins accounted for
 
 | bins | coverpoint | reason | actionable? |
