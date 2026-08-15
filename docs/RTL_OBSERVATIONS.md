@@ -1472,3 +1472,74 @@ stimulus reaches 4. Both Gate-0 guards re-proven RED at `0x800075d8` after the c
 
 ⚠ **The banked 2026-08-15 AXI numbers are not comparable across this change** (the denominator and
 the questions both changed). The banks are preserved; re-measure before quoting the AXI block.
+
+---
+
+## OBS-031 — `cp_mshr_stall.stall` is STRUCTURALLY UNREACHABLE at ≤8 threads: the LSU can never present MSHR_SIZE concurrent misses
+
+**Status of the old claim.** Every prior doc called this bin "a genuine stimulus gap, left honestly
+uncovered" and the 2026-08-15 resume block predicted four contending cores might move it. **That
+was wrong, and it was wrong for a checkable reason.** It is not a stimulus gap; the bin cannot be
+hit at this cache/LSU configuration no matter what a program does.
+
+**What we did.** Built `tests/kernel/mshr_flood`, a kernel designed specifically for this bin:
+stride 1024 B (= 16 x 64 B, so every access lands in the SAME bank for any `DCACHE_NUM_BANKS` 1..16),
+thread-INTERLEAVED slots (`slot(t,c) = c*TOTAL + t`) so each thread's lines share address bits
+[11:10] and collapse onto ONE set, piling ~64 lines onto a single 4-way set (16x oversubscribed).
+
+**It worked as stimulus and still did not hit the bin:**
+
+| measure | result |
+|---|---|
+| dcache `cp_hit` | **774 hits vs 67,207 misses** — the thrash is real |
+| `cp_mshr_stall.stall` | **0** (both icache and dcache) |
+| `cp_route_slot` (AXI tag buffer, 16 slots) | **6/16** — independent confirmation |
+
+Two independent coverpoints agreeing on "~6 outstanding" is what turned this from "try harder" into
+"find the cap".
+
+**Root cause — the request path is narrower than the MSHR, by construction:**
+```
+SIMD_WIDTH     = NUM_THREADS                       (VX_config.vh:349)
+NUM_LSU_LANES  = SIMD_WIDTH                        (:388)
+LSUQ_IN_SIZE   = 2 * (SIMD_WIDTH / NUM_LSU_LANES)  (:426)  == 2 for EVERY config
+LSU_LINE_SIZE  = MIN(NUM_LSU_LANES * XLEN/8, 64)   (:421)
+LSUQ_OUT_SIZE  = MAX(LSUQ_IN_SIZE, LSU_LINE_SIZE / (XLEN/8))   (:431)
+DCACHE_MREQ_SIZE = 4  (:633)   DCACHE_MSHR_SIZE = 16  (:628)
+```
+`VX_cache_bank.sv:231-234` accepts a new core request only when **both** queues have room:
+```systemverilog
+assign core_req_ready = creq_grant
+                     && ~mreq_queue_alm_full   // needed for fill requests
+                     && ~mshr_alm_full         // needed for mshr allocation
+                     && ~pipe_stall;
+```
+and the fill queue asserts almost-full at `MREQ_SIZE - PIPELINE_STAGES` = **4 - 2 = 2** entries
+(`:659`, `PIPELINE_STAGES=2` at `:117`). So the fill queue throttles acceptance at 2 outstanding
+fills, while `LSUQ_OUT_SIZE` caps what the LSU can have in flight at all:
+
+| NUM_THREADS | LSU_LINE_SIZE | **LSUQ_OUT_SIZE** | vs MSHR_SIZE=16 |
+|---|---|---|---|
+| 4 (primary) | 16 | **4** | 4 << 16 → unreachable |
+| 8 | 32 | **8** | 8 < 16 → unreachable |
+| 16 | 64 | **16** | reachable in principle |
+
+Even summing over a shared socket dcache (`SOCKET_SIZE` cores), 2 x 4 = 8 at 2CL — still below 16.
+The icache side is bounded the same way by outstanding fetches (one per warp): 4, or 8 at 2CL.
+
+**⇒ The bin is unreachable for the same reason `cp_ipc_bucket.high_ipc` was: a structural width,
+not a missing test.** It becomes reachable only at `NUM_THREADS>=16` (or with `LSUQ_*`/`MSHR_SIZE`
+overridden), which is exactly the shape of a CONFIG-AWARE waiver this project already uses.
+
+**Bug vs expected:** **expected behaviour / coverage-model over-specification.** The RTL is
+consistent — a 16-entry MSHR simply is not the binding constraint in this configuration.
+
+**Disposition: waive CONFIG-AWARELY (not unconditionally).** Waiving it unconditionally would
+repeat the OBS-030 mistake of baking a one-config claim into a literal. The waiver must be keyed on
+the derived bound so it auto-REACTIVATES when a wider config could reach it.
+
+**Lesson (third time this class has appeared):** the previous two were OBS-030 (route waivers keyed
+to a single-requester layout) and the `high_ipc` bucket. In all three, a bin was called a stimulus
+gap when the real answer was a structural width — and in all three the honest resolution came from
+reading the RTL parameter chain rather than writing a better test. Check the width before writing
+the kernel.
