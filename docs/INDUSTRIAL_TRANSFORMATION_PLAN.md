@@ -68,22 +68,32 @@ CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
 ### ▶▶ RESUME HERE — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
 
-**⏳ A RE-RUN IS IN FLIGHT RIGHT NOW (started 2026-08-15 ~04:45).** 1CL suite running detached
-(`setsid`, own SID — survives a session exit), log:
-`/tmp/claude-1000/-home-samuel-ubuntu22-Vortex-UVM-GP/69210dfb-660d-4751-9578-61d1c46bcd08/scratchpad/suite_1cl_v2.log`
-(per-test logs in `vortex_uvm_env/results/run_suite_logs/`). **2CL has NOT been started yet.**
+**✅ 1CL POST-SCALING RE-RUN DONE AND BANKED (2026-08-15 05:44).** `44 staged, 0 FAILED`.
+**Total 91.07% · covergroup bins 398/403 = 98.75% · 2256 instances** — i.e. **statistically
+identical to the pre-scaling bank** (91.08%, 398/403, 2256). Only toggle moved, 78.42→78.39%
+(`wide_stress` walks a slightly different address pattern at the device-sized grid).
+**This is the EXPECTED result and it is the control for the 2CL measurement:** at 1 cluster / 1
+core, `vx_num_cores()*vx_num_warps()*vx_num_threads()` evaluates to the SAME `total` the hardcoded
+constant used, so the seven scaled kernels emit near-identical stimulus. It confirms the scaling
+changed nothing it should not have ⇒ **any 2CL movement is attributable to the scaling.**
+Pre-scaling 1CL bank preserved at `cov/bank_1CL_1C_4W_4T_prescale_20260814/`; 1CL per-test logs +
+suite log archived to `vortex_uvm_env/results/run_suite_logs_1CL_20260815/`.
+
+**⏳ THE 2CL RE-RUN IS IN FLIGHT RIGHT NOW (started 2026-08-15 05:45).** Detached (`setsid`, own
+SID — survives a session exit), `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4`, log:
+`/tmp/claude-1000/-home-samuel-ubuntu22-Vortex-UVM-GP/69210dfb-660d-4751-9578-61d1c46bcd08/scratchpad/suite_2cl_v2.log`
+(per-test logs in `vortex_uvm_env/results/run_suite_logs/`).
 *On resume:* check `grep "SUITE VERDICT" <log>`; if finished, **BANK IMMEDIATELY** —
-`mv cov/bank_1CL_1C_4W_4T cov/bank_1CL_1C_4W_4T_prescale_20260814 && mkdir cov/bank_1CL_1C_4W_4T &&
-cp cov/merged.ucdb cov/merged_raw.ucdb cov/bank_1CL_1C_4W_4T/ && cp -r cov/report cov/staging
-cov/bank_1CL_1C_4W_4T/`, verify by RE-READING the copy (`vcover report -summary <copy>`), THEN run
-2CL with `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 bash scripts/run_suite.sh` and bank it the same way.
+`mv cov/bank_2CL_2C_4W_4T cov/bank_2CL_2C_4W_4T_prescale_20260814 && mkdir cov/bank_2CL_2C_4W_4T &&
+cp cov/merged.ucdb cov/merged_raw.ucdb cov/bank_2CL_2C_4W_4T/ && cp -r cov/report cov/staging
+cov/bank_2CL_2C_4W_4T/`, then verify by RE-READING the copy (`vcover report -summary <copy>`).
 ⚠ `run_suite` merges into `cov/merged.ucdb`, so an UNBANKED result is destroyed by the next
 config's merge. Archive `results/run_suite_logs/` before each run — it is overwritten.
-*Compare against:* 1CL **91.08% / 398-403** and 2CL **88.69% / 944-1095** (the pre-scaling banks).
-Questions this run answers: (a) do the 84 per-core bins fill at 2CL, (b) does `cp_mshr_stall.stall`
-move now 4 cores contend, (c) 1CL should barely change.
+*Compare against:* 2CL **88.69% / 944-1095** (the pre-scaling bank).
+Questions this run answers: (a) do the **84 per-core `instr_probe` bins on cores 1-3** fill,
+(b) does `cp_mshr_stall.stall` move now that 4 cores contend, (c) does the total beat 88.69%.
 
-**STATE: both banks clean and quotable. A re-run is IN FLIGHT to measure the kernel scaling.**
+**STATE: 1CL re-banked post-scaling (unchanged, as designed). 2CL re-run IN FLIGHT.**
 
 | bank | programs | total | covergroup bins | instances |
 |---|---|---|---|---|
