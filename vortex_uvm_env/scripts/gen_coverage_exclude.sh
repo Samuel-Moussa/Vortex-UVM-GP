@@ -33,6 +33,11 @@ NCL="${1:?need NUM_CLUSTERS}"
 NC="${2:?need NUM_CORES}"
 NW="${3:?need NUM_WARPS}"
 NT="${4:?need NUM_THREADS}"
+# L2/L3 presence. Optional 5th/6th args (default 0 = the historical behaviour, so
+# every existing caller is unchanged). These gate section 3: when a level is
+# ENABLED its cache-side buses are LIVE LOGIC and must NOT be waived as passthru.
+L2="${5:-0}"
+L3="${6:-0}"
 
 RTL="/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl"
 TB="/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/tb"
@@ -92,15 +97,27 @@ echo
 #    never toggle. Surgically drop ONLY the dead if[0] buses (NOT the whole
 #    l2/l3 scope — the passthru mux path IS exercised and must keep its hits).
 # -----------------------------------------------------------------------------
-echo "# --- EUR: L3 passthru dead cache interfaces (per GPU) ---"
-echo "coverage exclude -scope {${TOP}/l3cache/core_bus_cache_if[0]} -recursive -reason EUR"
-echo "coverage exclude -scope {${TOP}/l3cache/mem_bus_cache_if[0]}  -recursive -reason EUR"
+#    ⚠ GATED ON L2/L3: with the level ENABLED, VX_cache_wrap.sv:160 instantiates the
+#    REAL VX_cache storage and these buses carry live traffic. Emitting the waiver
+#    then would delete real coverage — the merge_coverage.sh hits-invariant gate
+#    would catch it and fail the merge, but it must be correct by construction.
+if (( L3 == 0 )); then
+  echo "# --- EUR: L3 passthru dead cache interfaces (per GPU) ---"
+  echo "coverage exclude -scope {${TOP}/l3cache/core_bus_cache_if[0]} -recursive -reason EUR"
+  echo "coverage exclude -scope {${TOP}/l3cache/mem_bus_cache_if[0]}  -recursive -reason EUR"
+else
+  echo "# --- L3 ENABLED: cache-side buses are LIVE, no passthru waiver emitted ---"
+fi
 echo
-echo "# --- EUR: L2 passthru dead cache interfaces (per cluster) ---"
-for (( cl=0; cl<NCL; cl++ )); do
-  echo "coverage exclude -scope {${TOP}/g_clusters[${cl}]/cluster/l2cache/core_bus_cache_if[0]} -recursive -reason EUR"
-  echo "coverage exclude -scope {${TOP}/g_clusters[${cl}]/cluster/l2cache/mem_bus_cache_if[0]}  -recursive -reason EUR"
-done
+if (( L2 == 0 )); then
+  echo "# --- EUR: L2 passthru dead cache interfaces (per cluster) ---"
+  for (( cl=0; cl<NCL; cl++ )); do
+    echo "coverage exclude -scope {${TOP}/g_clusters[${cl}]/cluster/l2cache/core_bus_cache_if[0]} -recursive -reason EUR"
+    echo "coverage exclude -scope {${TOP}/g_clusters[${cl}]/cluster/l2cache/mem_bus_cache_if[0]}  -recursive -reason EUR"
+  done
+else
+  echo "# --- L2 ENABLED: cache-side buses are LIVE, no passthru waiver emitted ---"
+fi
 echo
 
 # -----------------------------------------------------------------------------

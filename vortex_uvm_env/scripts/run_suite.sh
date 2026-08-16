@@ -21,10 +21,17 @@ ENV_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$ENV_ROOT" || exit 1
 
 CLUSTERS="${CLUSTERS:-1}"; CORES="${CORES:-1}"; WARPS="${WARPS:-4}"; THREADS="${THREADS:-4}"
-CFG="CLUSTERS=$CLUSTERS CORES=$CORES WARPS=$WARPS THREADS=$THREADS"
+# L2/L3 are PRESENCE guards handled by the Makefile (Makefile:43-44) and passed to
+# the compile. Before 2026-08-16 they were NOT in CFG, so the suite had no path to
+# build an L2/L3 config at all -- which is why no bank has ever contained a
+# non-PASSTHRU L2 or L3. Verify a bank really has them with
+#   vcover report -recursive <ucdb> | grep l2cache
+# never by grepping the sim log.
+L2="${L2:-0}"; L3="${L3:-0}"
+CFG="CLUSTERS=$CLUSTERS CORES=$CORES WARPS=$WARPS THREADS=$THREADS L2=$L2 L3=$L3"
 LOGDIR="${ENV_ROOT}/results/run_suite_logs"; mkdir -p "$LOGDIR"
 RUNS=()
-echo "### run_suite.sh @ ${CLUSTERS}CL/${CORES}C/${WARPS}W/${THREADS}T"
+echo "### run_suite.sh @ ${CLUSTERS}CL/${CORES}C/${WARPS}W/${THREADS}T L2=${L2} L3=${L3}"
 
 relrun() { local p; p=$(readlink -f results/latest); echo "$(basename "$(dirname "$p")")/$(basename "$p")"; }
 FAILED=0
@@ -305,6 +312,9 @@ echo "=== MERGING ${#RUNS[@]} runs ==="; printf '  %s\n' "${RUNS[@]}"
 # with 1CL exclusions -- e.g. the single-core `is_global` barrier waiver applied to
 # a build where that barrier IS reachable. Pass through the config we actually ran.
 export COV_NCL="$CLUSTERS" COV_NC="$CORES" COV_NW="$WARPS" COV_NT="$THREADS"
+# L2/L3 too: with a level enabled its cache-side buses are LIVE and the generator
+# must not emit the passthru waiver for them (gen_coverage_exclude.sh section 3).
+export COV_L2="$L2" COV_L3="$L3"
 bash scripts/merge_coverage.sh --fresh   >"$LOGDIR/merge.log" 2>&1
 bash scripts/merge_coverage.sh --collect "${RUNS[@]}" >>"$LOGDIR/merge.log" 2>&1
 echo "=== DONE — combined coverage: ==="
