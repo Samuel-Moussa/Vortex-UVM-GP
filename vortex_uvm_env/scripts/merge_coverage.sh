@@ -46,6 +46,10 @@ RESULTS_ROOT="${ENV_ROOT}/results"
 # Override the config via env, e.g.  COV_NCL=2 COV_NC=2 ./merge_coverage.sh
 GEN_EXCLUDE="${SCRIPTS_DIR}/gen_coverage_exclude.sh"
 COV_NCL="${COV_NCL:-1}"; COV_NC="${COV_NC:-1}"; COV_NW="${COV_NW:-4}"; COV_NT="${COV_NT:-4}"
+# L2/L3 presence (0/1). Must match the COMPILE (make sim L2=1 L3=1): with a level
+# enabled its cache-side buses are live logic and the passthru waiver must not be
+# emitted. run_suite.sh exports these; a bare merge defaults to the L2/L3-off build.
+COV_L2="${COV_L2:-0}"; COV_L3="${COV_L3:-0}"
 COV_DIR="${ENV_ROOT}/cov"
 STAGING="${COV_DIR}/staging"
 OUT_DIR="${COV_DIR}/report"
@@ -110,8 +114,8 @@ vcover merge -out "$RAW_UCDB" "${UCDBS[@]}"
 # ---- 3. apply CONFIG-AWARE exclusions once, re-save -------------------------
 if [[ -x "$GEN_EXCLUDE" ]]; then
     EXCLUDE_DO="${COV_DIR}/coverage_exclude.gen.do"
-    echo "Generating config-aware exclusions for ${COV_NCL}CL/${COV_NC}C/${COV_NW}W/${COV_NT}T -> $EXCLUDE_DO"
-    "$GEN_EXCLUDE" "$COV_NCL" "$COV_NC" "$COV_NW" "$COV_NT" > "$EXCLUDE_DO"
+    echo "Generating config-aware exclusions for ${COV_NCL}CL/${COV_NC}C/${COV_NW}W/${COV_NT}T L2=${COV_L2} L3=${COV_L3} -> $EXCLUDE_DO"
+    "$GEN_EXCLUDE" "$COV_NCL" "$COV_NC" "$COV_NW" "$COV_NT" "$COV_L2" "$COV_L3" > "$EXCLUDE_DO"
     # Split the generated .do by WAIVER CLASS, because the two classes have
     # fundamentally different semantics and only one of them is hits-invariant:
     #
