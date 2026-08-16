@@ -1647,6 +1647,43 @@ header is what the analysis had been based on.
 **Bug vs expected:** **TB configuration defect (undocumented divergence from the DUT defaults).**
 Not an RTL bug — the RTL honours the override exactly as designed.
 
+**✅ RESOLVED 2026-08-16 (LATE) — THE HYPOTHESIS BELOW IS MEASURED AND FALSIFIED. READ THIS FIRST.**
+`compile.sh` is now terminal-controlled (`CACHE_MREQ_SIZE` / `CACHE_MSHR_SIZE`, default unchanged at
+16 so every bank stays reproducible), and the experiment was run: `mshr_flood` @1CL, rebuilt at
+`CACHE_MREQ_SIZE=4` (the RTL default), TEST PASSED, compared against the same kernel's run in the
+50-run 1CL bank.
+
+| mshr_flood @1CL | MREQ=16 (banked) | MREQ=4 (RTL default) |
+|---|---|---|
+| Branches | 12565 / 18913 | **12565 / 18913 — identical** |
+| Conditions | 524 / 1707 | **524 / 1707 — identical** |
+| Statements | 20428 / 23461 | **20428 / 23461 — identical** |
+| Toggles | 379395 | 378859 (**fewer**: 32 fewer bins exist in a shallower FIFO) |
+| Total | 56.22% | 56.21% |
+
+**`cp_mshr_stall.stall` did NOT fire at either depth** (`no_stall` is the only bin with hits in both).
+
+**⚠ WHY THE HYPOTHESIS WAS WRONG — a mechanism error worth not repeating.** It conflated two
+different structures. `cp_mshr_stall` samples `perf_mshr_stall = mshr_alm_full`
+(`VX_cache_bank.sv:684`), and that signal is wired to the **MSHR's `.full` port**
+(`VX_cache_bank.sv:494`) — sized by `MSHR_SIZE`. `MSHR_SIZE` is **16, which IS the RTL default**, so
+that coverpoint was never affected by the override at all. `MREQ_SIZE` sizes a *different* queue (the
+fill-request FIFO, `:658`). Note also that despite its name, `mshr_alm_full` is driven by `.full`,
+not an almost-full threshold — the bin needs the MSHR **completely** full, which is harder still.
+⇒ **`cp_mshr_stall.stall` is a genuine stimulus gap exactly as originally documented.** The claim
+that "part of it is a configuration gap" is withdrawn.
+
+**Scope of the result, stated honestly:** one kernel, one config. But it is the kernel purpose-built
+to flood the MSHR (67,207 dcache misses) — the single most likely place for the override to show —
+and it moved *nothing* in branches, conditions or statements. That is strong, cheap evidence.
+
+**Disposition: RESOLVED as option (b).** Keep the depth at 16, now terminal-controlled and
+documented; **state it in the paper's configuration table**. A full re-bank at the RTL default is
+NOT justified — it would cost ~17h of simulation and invalidate comparison with every bank on disk,
+to chase an effect measured at ~0.01% on the most sensitive kernel available.
+
+**The original hypothesis is preserved below for the record.**
+
 **UPDATE 2026-08-16 — the override is actively SUPPRESSING the coverage we spent a session chasing.**
 The maximisation push (`unit_storm`, `storm_big`) targeted condition terms that only evaluate when two
 requests are live at one port in the same cycle. The almost-full gate this override moves from **2 to
