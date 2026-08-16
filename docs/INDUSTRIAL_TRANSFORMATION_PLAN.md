@@ -66,6 +66,69 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
+### ▶▶ RESUME HERE — 2026-08-16 (LATE) · COVERAGE MAXIMISED AND BANKED · ONE RE-RUN IN FLIGHT
+
+**Full analysis: `docs/COVERAGE_MAX_20260816.md`. Evidence: OBS-035 / OBS-036 / OBS-037 / OBS-038,
+and the OBS-032 update.** This block SUPERSEDES the toggle block below it (which is still correct,
+just earlier).
+
+| bank | programs | total | conditions | toggle | cg bins |
+|---|---|---|---|---|---|
+| 1CL/1C/4W/4T | **49/49, 0 FAILED** | **94.71%** (+1.62) | 90.41% | 82.76% | 370/377 |
+| 2CL/2C/4W/4T | **49/49, 0 FAILED** | **94.44%** (+1.77) | 88.43% | 80.33% | 985/1032 |
+
+Previous banks preserved as `cov/bank_{1CL,2CL}_*_prev_20260816/`; logs at
+`results/run_suite_logs_{1CL,2CL}_max_20260816/`.
+
+**⚠ ONE THING IS IN FLIGHT** — a 1CL re-run (**50** programs, adding `storm_big`) is executing. If it
+is gone when you resume, check `results/latest` and the log for `SUITE VERDICT`; if no verdict was
+reached, the 49-program banks above remain the truth. **Do NOT start 2CL until 1CL is banked** —
+`run_suite` merges into `cov/merged.ucdb` and an unbanked result is destroyed by the next merge.
+
+**THREE NEW KERNELS**, each verified against its target before any suite ran:
+* `isa_probe` — M-mode CSR read/write + `fclass.s`/`fmv.x.w`/`fmsub.s`/`fnmsub.s`. CSR reads are
+  OR-accumulated **and stored**, so a wrong value fails the scoreboard instead of passing silently.
+  MISA/MVENDORID/MARCHID/MIMPID deliberately never read — see **OBS-036**.
+* `unit_storm` — first kernel producing real internal back-pressure; **13 of 24** missing condition
+  terms at 1CL (lmem response path + wctl `rsp_buf`).
+* `storm_big` — 33KB hot `.text` interleaved with data traffic (a second memory stream `unit_storm`
+  cannot make, since its loop stays resident in the 16KB icache). **+4 condition terms at 2CL.**
+
+**⚠⚠ THE MEMORY-PRESSURE RESULT — DO NOT "OPTIMISE" THESE KERNELS BY ENLARGING THEIR TABLES.**
+Measured twice, independently: `unit_storm` 4KB→64KB table went **13 → 11** terms (LOST
+`wctl_unit/rsp_buf`); `storm_big` 4KB→64KB went **+4 → +0**. More memory pressure made coverage
+WORSE. Mechanism: these bins need two requests live at one port in the SAME cycle. A large working
+set misses to DRAM, every warp blocks, nothing issues, and requests arrive spread thin — each fully
+drained before the next. Total traffic up, *concurrent* traffic down. **Contention comes from ISSUE
+DENSITY, not miss volume.** Both kernels carry this in-source with the measured numbers.
+
+**NEW SAFETY NET — `merge_coverage.sh` HITS-INVARIANT GATE (blocking).** Exclusions are now applied
+in two stages split by reason code (EOTH third-party first, then structural), and the merge **fails
+hard** if any structural exclusion changes a COVERED bin count. It caught two real defects on its
+first run: a waiver written that same session, and a **pre-existing** one (`VX_schedule.sv:168
+-code c`) that had been silently discarding a covered condition term since it was added — now
+withdrawn. **Root cause worth remembering: Questa's FEC cannot waive a single input term of a
+condition** — waiving `(init_valid | flush_valid)` discards the whole expression including its
+covered rows.
+
+**LEFT UNCOVERED AND DELIBERATELY NOT WAIVED** (both would need a bound derived from RTL params, and
+waiving on "we could not hit it" is the OBS-030 mistake): the AXI read-stability assertions
+(**OBS-038** — survive flood + congestion, `pass=0`) and the `SIZE==0` elastic-buffer port nodes
+(4,667 dead nodes, 12.7% of the toggle gap, but 97 nodes on the SAME ports are live ⇒ Questa alias
+artifact, not dead logic).
+
+**▶ NEXT, in this order:** (1) bank the in-flight 1CL, (2) re-run + bank 2CL with `storm_big`,
+(3) L2/L3 plumbing — `run_suite.sh:24` never passes `L2`/`L3` to `make`, `merge_coverage.sh:47`
+never forwards them, and `gen_coverage_exclude.sh:95-102` waives the L2/L3 cache-side buses
+**unconditionally** (would waive LIVE logic once enabled — the new gate would catch it, but it
+should be correct by construction), (4) **OBS-032** — drop `MREQ_SIZE` to the RTL default 4 and
+re-measure, (5) the L2/L3 third bank, (6) the paper.
+**⚠ Never edit `run_suite.sh` / `merge_coverage.sh` / `gen_coverage_exclude.sh` while a suite is
+running** — bash reads a script incrementally from disk, and the latter two are invoked at the end
+of the run to produce the bank.
+
+---
+
 ### ▶▶ RESUME HERE — 2026-08-16 · TOGGLE ROOT-CAUSED AND WAIVED · NOTHING IN FLIGHT
 
 **Full analysis: `docs/COVERAGE_TOGGLE_20260816.md`. Evidence: OBS-033 / OBS-034.**
