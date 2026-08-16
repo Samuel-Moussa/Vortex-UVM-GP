@@ -1884,3 +1884,31 @@ and (b) `inst_alu_is_czero` existing-but-unused is mildly suspicious given Zicon
 decoded (`VX_decode.sv:186-190`) — someone may have intended a Zicond fast-path that never landed.
 **Disposition: OPEN (informational).** Not waived yet: 8 statement items, and a waiver keyed to
 "nothing calls it" is one refactor away from being wrong.
+
+---
+
+## OBS-038 — `assert_r_valid_stable` / `assert_r_data_stable` survive the strongest stimulus we can build; left uncovered, NOT waived
+
+**What we saw.** These two AXI read-channel stability assertions (`vortex_axi_if.sv:383,386`) have
+never passed in any bank. Session 10 attributed it to the DUT read buffer being deep enough that
+`+AXI_FLOOD` alone never forces `rready` low, and left them "honestly uncovered".
+
+**2026-08-16: retried with a strictly stronger stimulus and they still do not arm.**
+`unit_storm` under `+AXI_FLOOD` at 2CL — i.e. the slave streaming read responses back-to-back
+*while* the core's response path is genuinely congested (that kernel is the first one that provably
+back-pressures the internal buffers, +81 condition terms at 2CL). Measured on that run:
+`assert_r_valid_stable` **pass=0**, `assert_r_data_stable` **pass=0**. Test PASSED, 0 errors.
+
+**Why this is not yet a waiver.** `m_axi_rready[i] = rsp_xbar_ready_in[i]`
+(`libs/VX_axi_adapter.sv:332`) — unlike `m_axi_bready`, which is hardwired to 1 (`:313`, already
+waived on that basis), `rready` is a real net that CAN drop. To waive these honestly we would have
+to prove the read-response buffer depth is >= the maximum number of concurrent outstanding reads,
+making the drop structurally impossible. That is the same shape of argument as OBS-031 (requester
+width < MSHR depth) and is plausible — `cp_route_slot` measures only 3 concurrent reads per port —
+but it has NOT been derived from RTL parameters, and waiving on an unproven bound is exactly the
+mistake OBS-030 records.
+
+**Disposition: OPEN, left uncovered.** Worth 2 assertion bins (~0.11 Total each at 1CL, where there
+are only 127 assertion bins — the highest per-bin value in the whole metric). Next step if pursued:
+derive the read-response buffer depth and the true outstanding-read bound, then either waive
+config-awarely or build a stimulus that exceeds the depth. **Do not waive on "we could not hit it".**
