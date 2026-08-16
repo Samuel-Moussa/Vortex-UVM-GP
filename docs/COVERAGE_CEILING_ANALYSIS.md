@@ -133,3 +133,64 @@ work (making buffers and arbiters back-pressure is exercising the design, not ga
 raise the number without verifying one additional thing, and it violates this project's own rule
 that only structurally-dead coverage is excluded. The gap between ~96% and 100% is the honest part
 of the report, and it should be stated in the paper rather than closed.**
+
+---
+
+# Addendum — the 2CL picture, and where the remaining leverage really is
+
+Measured from `cov/bank_2CL_2C_4W_4T/merged.ucdb` (total **93.07%**).
+
+## 2CL conditions: 217 missing terms, and 84% of them are TWO expressions
+
+| terms | expression | class |
+|---|---|---|
+| **128** | `VX_stream_buffer.sv:59 (valid_in \|\| flow_out)` | needs a consumer that will not accept |
+| **55** | `VX_priority_arbiter` / `VX_rr_arbiter (grant_valid && grant_ready)` | needs a grant while the consumer is not ready |
+| 10 | `VX_cache_flush` state/counter terms | structural (icache) |
+| 8 | `VX_lsu_slice` fence terms | reachable |
+| 4 + 4 + 4 | `VX_schedule` global barrier · `VX_decode funct3[1:0]!=0` · `VX_cache_bank` | mixed |
+
+Compare 1CL (24 + 10). **The stream-buffer class scales with the topology** — more cores, more
+sockets, more buffer instances, and every added instance is starved the same way.
+
+**Both leading classes require the SAME physical condition: back-pressure.**
+`flow_out = ready_out || ~valid_out` (`VX_stream_buffer.sv:54`), so the `valid_in` term can only be
+the deciding input when `ready_out == 0 && valid_out == 1` — the buffer is holding data the consumer
+will not take. Identically, `grant_valid` can only decide `(grant_valid && grant_ready)` when
+`grant_ready == 0`. **Nothing in either class is covered until the design is genuinely congested.**
+
+⇒ this is the opposite of a metric-chasing target. It is flow-control logic the suite has never
+stressed, and covering it means actually exercising it.
+
+**Potential:** 183 of 217 terms. If fully covered, 2CL conditions go 81.54% → ~97% and Total gains
+**~+1.5 points**; 1CL gains ~+1.0. That makes it the single biggest honest lever remaining, larger
+than everything else on the roadmap combined.
+
+## Revised category ranking (2CL)
+
+| category | now | pts if 100% | realistic |
+|---|---|---|---|
+| Toggles | 79.47% | 2.93 | hard — 51% is realism-limited datapath |
+| **Conditions** | **81.54%** | **2.64** | **~1.5 reachable via back-pressure** |
+| Branches | 94.05% | 0.85 | partly closed by `isa_probe` |
+| Statements | 98.03% | 0.28 | partly closed by `isa_probe` |
+| Assertions | 98.87% | 0.16 | 2 need deep AXI read back-pressure |
+| Covergroups | 99.52% | 0.07 | 2 `cross_dvg_depth` bins |
+
+## What "unreachable" means here — three distinct classes, do not conflate them
+
+1. **Structurally dead** — the hardware cannot do it, at any config, under any program.
+   *Icache `WRITE_ENABLE(0)` payload; icache flush FSM (one producer, on the dcache path);
+   `rlast` under a single-beat master.* Proven, and proven with a positive control where possible
+   (identical source fully covered on the dcache). **Waived.**
+2. **Arithmetically unreachable** — reachable in principle, impossible in practice by a margin no
+   engineering can close. *uuid counter bit 31 needs 2^31 instructions on one warp.* Caps toggle at
+   98.43% and Total at 99.78%. **Not waived** — it is live logic, and "infeasible" is not "dead".
+3. **Unreachable under the verification contract** (OBS-036) — the hardware executes it correctly,
+   we know exactly how to hit it, but the golden model provably disagrees, so any test that covers
+   it must abandon end-state/lockstep equivalence. *`MISA`/`MVENDORID`/`MARCHID`/`MIMPID` reads.*
+   **Not waived.** This class is a property of the METHOD, not of the DUT or of our effort, and it
+   is the one most worth stating explicitly in the paper.
+
+Class 1 is a denominator correction. Classes 2 and 3 are the honest residual and should be reported,
+not closed.
