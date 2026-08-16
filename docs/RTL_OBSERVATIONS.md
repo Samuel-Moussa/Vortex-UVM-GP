@@ -1765,3 +1765,85 @@ part IS realism-limited rather than structural and must NOT be waived.
 **Disposition: OPEN.** Recommended: exclude uuid bits at or above the run-length bound with the
 bound *derived* (from retired-instruction count), never hardcoded, and state the residual in the
 paper. Do NOT set `NDEBUG`.
+
+---
+
+## OBS-035 — the icache FLUSH FSM is elaborated but can never be entered, at any config
+
+**What we saw.** `VX_cache_init.sv` and `VX_cache_flush.sv` account for 16 statement and 16 branch
+misses plus 7 condition terms in the 1CL bank — and every one of them is in the **icache**.
+
+**Proof chain, all three links read in the RTL:**
+1. `VX_cache_init.sv:91` — a flush can only start via
+   `core_bus_in_if[i].req_data.flags[MEM_REQ_FLAG_FLUSH]`.
+2. `VX_lsu_slice.sv:73` — that flag has **exactly one producer in the entire design**,
+   `req_is_fence`, and it sits on the LSU (dcache) path.
+3. `VX_fetch.sv` contains the string `flush` **zero times** — the icache's only requester has no
+   flush logic to drive it with.
+
+**Positive control — this is what makes it a proof rather than an excuse.** The *identical source*
+is **fully covered on the dcache in the same run**: `VX_cache_init` 25/25, `VX_cache_flush` 16/17;
+and dead on the icache: 14/25, 12/17. Same RTL, same suite, same stimulus — the only variable is
+which cache instantiates it.
+
+**Disposition: WAIVED, config-aware** (`gen_coverage_exclude.sh` §4d), emitted per socket over the
+real topology. **Only the state BODIES are waived, not the `if` lines** (`VX_cache_init.sv:133`,
+`VX_cache_flush.sv:60`) — those conditions are evaluated every cycle and their false arm is
+legitimately covered; excluding them was measured to drop 3 real hits.
+
+**Two Questa traps found here, both silent — record them, they will recur:**
+* `coverage exclude -scope … -recursive -srcfile …` **does nothing and reports no error.** The scope
+  must name the FSM instance directly.
+* Excluding a whole `-linerange` across an FSM drops covered bins, because reachable and unreachable
+  lines interleave. Nothing in the tool warns you.
+⇒ this is why `merge_coverage.sh` now has a **blocking hits-invariant gate**: a structural waiver may
+shrink the denominator only, never the covered count.
+
+---
+
+## OBS-036 — SimX does not model the machine-identification CSRs, so four RTL lines are unreachable *under our methodology* rather than merely untested
+
+**What we saw.** Four `VX_csr_data.sv` read arms stay uncovered even with a directed CSR kernel:
+`MVENDORID`, `MARCHID`, `MIMPID` (`:189,190,…`) and `MISA` (`:181`).
+
+**Root cause — the two models return different values, by construction:**
+| CSR | RTL | SimX |
+|---|---|---|
+| `MISA` | `{2'(CLOG2(XLEN/16)), 30'(MISA_STD)}` (`VX_csr_data.sv:182`) | **0** (`emulator.cpp:484`) |
+| `MVENDORID`/`MARCHID`/`MIMPID` | `VENDOR_ID`/`ARCHITECTURE_ID`/`IMPLEMENTATION_ID` | **0** — no case at all; the default silently returns 0 for the whole `0xF00-0xFFF` hw-id range (`emulator.cpp:518-522`) |
+
+⇒ any instruction that reads them writes back a value the golden model provably cannot reproduce.
+Under end-state compare that only matters if the value is stored; **under `LOCKSTEP=1` it is a
+guaranteed per-instruction mismatch**. So covering these lines requires shipping a kernel that
+cannot run under the strongest checker in the project.
+
+**This is a distinct and important class.** They are not structurally dead — the hardware genuinely
+executes them — so waiving them would be dishonest. They are not a stimulus gap either — we know
+exactly how to hit them. They are **unreachable while end-state/lockstep equivalence is the
+verification contract.** That distinction belongs in the paper: it is a property of the METHOD, not
+of the DUT or of our effort. `tests/kernel/isa_probe` therefore deliberately does not read them.
+
+**⚠ ASYMMETRY WITH A BITE — `csrw misa` (0x301):** SimX *ignores* the write (`emulator.cpp:638`)
+but the RTL does **not** list MISA among its accepted write addresses, so it falls through to
+`VX_csr_data.sv:149 ASSERT(0, "invalid CSR write address")` and kills the run. This is exactly the
+`csrw 0x301` that `prepare.sh` sed-strips from every riscv-dv program — the same defect rediscovered
+from the RTL side, and confirmation that the strip is load-bearing rather than cosmetic.
+**Disposition: OPEN** (golden-model fidelity gap; harmless today because we route around it).
+
+---
+
+## OBS-037 — `VX_gpu_pkg` ships functions with no reachable caller
+
+While chasing the last `VX_gpu_pkg.sv` statement misses:
+* `inst_fpu_is_class` (`:367`) and `inst_fpu_is_mvxw` (`:371`) — the **only** callers are
+  `VX_fpu_dsp.sv:339,340,343`. The build selects **`FPU_FPNEW`** (cvfpu), so `VX_fpu_dsp` is never
+  elaborated and these bodies can never execute. **Structurally dead, keyed to the FPU choice.**
+* `inst_alu_is_czero` (`:223`) and `inst_sfu_is_wctl` (`:392`) — **no caller anywhere in the RTL.**
+  Verified by grepping every `.sv`/`.vh`; the only occurrence is the definition itself.
+
+Not a functional bug — dead code in a package costs nothing at synthesis. Worth recording because
+(a) it explains statement misses that look like a stimulus gap and would otherwise soak up effort,
+and (b) `inst_alu_is_czero` existing-but-unused is mildly suspicious given Zicond IS implemented and
+decoded (`VX_decode.sv:186-190`) — someone may have intended a Zicond fast-path that never landed.
+**Disposition: OPEN (informational).** Not waived yet: 8 statement items, and a waiver keyed to
+"nothing calls it" is one refactor away from being wrong.
