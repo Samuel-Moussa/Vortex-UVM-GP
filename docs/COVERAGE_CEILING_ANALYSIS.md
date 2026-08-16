@@ -194,3 +194,43 @@ than everything else on the roadmap combined.
 
 Class 1 is a denominator correction. Classes 2 and 3 are the honest residual and should be reported,
 not closed.
+
+---
+
+# Correction — the toggle residual is mostly DOUBLE-COUNTING, not realism-limited datapath
+
+An earlier pass in this document (and the first summary of it) attributed **51% of the toggle
+residual to "core datapath operand high bits — realism-limited"**. A finer classification of all
+44,726 remaining dead nodes at 1CL shows that was **wrong, and wrong in a way that overstates how
+much stimulus could ever buy**:
+
+| share | nodes | class |
+|---|---|---|
+| **57.1%** | 25,560 | **buffer / port payload vectors** — packed concatenations passing through elastic buffers, pipe registers and arbiters. Duplicates of activity already counted on the source nets |
+| **26.7%** | 11,933 | **genuinely distinct datapath / control bits** — the only part stimulus can actually address |
+| 7.2% | 3,233 | uuid counter bits [18:31] — arithmetically unreachable |
+| 4.8% | 2,155 | icache write-path residue under names the OBS-033 waiver did not enumerate |
+| 2.4% | 1,092 | PC bits — `PC[1:0]` structural (4-byte align), high bits small-program |
+| 1.7% | 753 | `__unused` tie-off nets |
+
+**The evidence for the top row is direct, not inferred** (OBS-033 resolution): on a `SIZE == 0`
+elastic buffer, `assign valid_out = valid_in` guarantees identical toggling, yet Questa reports
+**valid_in = 0 and valid_out = 47**; and on the same instance the 654-bit `data_in`/`data_out` read
+zero while their constituent nets `mem_req_addr` (12/26 bits live) and `mem_req_tag` (22/48 live)
+demonstrably toggle. 116 such passthru instances exist at 1CL.
+
+**Two consequences, and the second is the one that matters:**
+1. The reachable share of the toggle gap is **roughly half what the earlier reading implied**. Only
+   ~26.7% is even addressable by better stimulus, which is consistent with the measured returns of
+   `wide_stress` (+0.6%) and `toggle_stress` (+0.02%) — those kernels were fighting a denominator
+   that is majority duplicate.
+2. **This is NOT waivable**, for a reason worth stating plainly: 97 nodes on those same passthru
+   ports ARE live, so Questa's attribution is inconsistent. A uniform rule would delete covered bins
+   (and trip the hits-invariant gate); an outcome-based rule would be exclusion-by-result, the exact
+   dishonesty this project forbids. See the OBS-033 resolution.
+
+**⇒ The correct way to report our toggle figure is with the caveat attached, not with the number
+adjusted.** Roughly 57% of the reported toggle *gap* is the by-instance metric counting the same
+physical activity more than once. The design is better exercised than 82.16% suggests, and we cannot
+prove by how much without classifying the covered bins the same way — so we state the composition
+and leave the number alone.
