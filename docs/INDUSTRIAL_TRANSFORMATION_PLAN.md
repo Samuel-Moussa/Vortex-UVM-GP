@@ -72,18 +72,30 @@ CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 and the OBS-032 update.** This block SUPERSEDES the toggle block below it (which is still correct,
 just earlier).
 
-| bank | programs | total | conditions | toggle | cg bins |
-|---|---|---|---|---|---|
-| 1CL/1C/4W/4T | **49/49, 0 FAILED** | **94.71%** (+1.62) | 90.41% | 82.76% | 370/377 |
-| 2CL/2C/4W/4T | **49/49, 0 FAILED** | **94.44%** (+1.77) | 88.43% | 80.33% | 985/1032 |
+**✅ BOTH BANKS FINAL — 50 PROGRAMS, 50/50 STAGED, 0 FAILED AT BOTH. NOTHING IN FLIGHT.**
 
-Previous banks preserved as `cov/bank_{1CL,2CL}_*_prev_20260816/`; logs at
-`results/run_suite_logs_{1CL,2CL}_max_20260816/`.
+| bank | total | conditions | branches | toggle | cg bins | instances |
+|---|---|---|---|---|---|---|
+| 1CL/1C/4W/4T | **94.72%** | 90.41% | 95.09% | 82.83% | 370/377 = 98.14% | 2256 |
+| 2CL/2C/4W/4T | **94.55%** | **88.77%** | 95.71% | 80.47% | **989/1032 = 95.83%** | 8275 |
 
-**⚠ ONE THING IS IN FLIGHT** — a 1CL re-run (**50** programs, adding `storm_big`) is executing. If it
-is gone when you resume, check `results/latest` and the log for `SUITE VERDICT`; if no verdict was
-reached, the 49-program banks above remain the truth. **Do NOT start 2CL until 1CL is banked** —
-`run_suite` merges into `cov/merged.ucdb` and an unbanked result is destroyed by the next merge.
+Both hits-invariant verified, 0 "had no effect", each checked by RE-READING the banked copy (not the
+live file). Banks at `cov/bank_{1CL_1C_4W_4T,2CL_2C_4W_4T}/`; the 49-program predecessors are
+`..._49prog_20260816/` and the pre-maximisation ones `..._prev_20260816/`; logs at
+`results/run_suite_logs_{1CL,2CL}_storm_20260816/`.
+
+**`storm_big`'s contribution is CONFIG-ASYMMETRIC and that is the expected result**, not a
+disappointment: **+4 cg bins and +0.34 conditions at 2CL, ~0 at 1CL** (1CL moved only toggle,
+82.76→82.83, from its 33KB resident `.text`). The terms it targets live in the dcache core-arbiter
+response switch (`g_core_arb[0]/core_arb/g_rsp_select/rsp_switch/g_out_buf[0..1]`), which is not a
+contended structure at one cluster.
+
+⚠ **BANKING FOOTGUN, HIT ONCE TONIGHT:** the banking commands were run from the repo ROOT instead of
+`vortex_uvm_env/`, which silently created a stray empty `cov/bank_2CL_2C_4W_4T` at the root and
+banked nothing. `set -e` did NOT abort it. Nothing was lost (the real bank was untouched), but the
+verify step is what caught it. **Always bank with ABSOLUTE paths, and always verify by re-reading
+the copy** — the verify is not ceremony, it is the only thing that distinguishes "banked" from
+"created an empty directory".
 
 **THREE NEW KERNELS**, each verified against its target before any suite ran:
 * `isa_probe` — M-mode CSR read/write + `fclass.s`/`fmv.x.w`/`fmsub.s`/`fnmsub.s`. CSR reads are
