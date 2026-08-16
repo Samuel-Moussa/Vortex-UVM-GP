@@ -214,6 +214,18 @@ runk sim-only isa_probe 500000
 # nothing and losing wctl_unit/rsp_buf, because the warps stalled on memory instead of
 # issuing densely. For flow-control coverage, ISSUE DENSITY beats memory volume.
 runk sim-only unit_storm 2000000
+# storm_big: ~33 KB of hot .text (96 noinline fns, runtime-indexed with a coprime stride
+# so prefetch cannot hide the miss) executed INTERLEAVED with the same independent
+# local-memory + resident-global traffic unit_storm uses. Creates a SECOND memory stream
+# (instruction fetch) concurrent with the data stream, which unit_storm cannot do because
+# its loop stays resident in the 16 KB icache (VX_config.vh:557).
+# MEASURED at 2CL standalone (PASSED, 0 errors): +4 condition terms the full 49-program
+# bank did not have — dcache g_core_arb/g_rsp_select/rsp_switch/g_out_buf[0..1].
+# ⚠ ITS 4 KB DATA TABLE MUST NOT BE ENLARGED. A 64 KB variant measured +0 terms (strictly
+# worse), the second confirmation of the unit_storm v3 result: past a point memory
+# pressure REMOVES contention because every warp stalls instead of issuing. Contention
+# comes from ISSUE DENSITY, not miss volume.
+runk sim-only storm_big 6000000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     400000
 rund functional_memory_test functional_mem  400000
