@@ -92,3 +92,57 @@ for a METHODOLOGY reason: `prepare.sh` rewrites `ecall`->`ebreak` and strips `mr
 TB's primary completion trigger so fetching one ends the run, and kernels exit via `tmc x0`
 (OBS-024). Covering it means terminating before the exit code is written — trading a valid
 end-state compare for ~0.04 Total points. Same class as OBS-036.
+
+---
+
+## Result — 2CL/2C/4W/4T, 49 programs, 0 FAILED
+
+| category | 2026-08-15 | **now** | Δ |
+|---|---|---|---|
+| **TOTAL** | 92.67% | **94.44%** | **+1.77** |
+| Conditions | 81.27% | **88.43%** | **+7.16** |
+| Branches | 93.68% | **95.64%** | +1.96 |
+| Toggles | 77.80% | **80.33%** | +2.53 |
+| Statements | 97.82% | **98.29%** | +0.47 |
+| Assertions | 98.59% | **98.87%** | +0.28 |
+| Covergroup bins | 985/1032 = 95.44% | 985/1032 = 95.44% | — |
+
+Conditions: **959 -> 1040 covered terms (+81)**. That is `unit_storm` scaling exactly as predicted —
+the starved buffers are per-core, so a mechanism worth +15 terms at one core is worth ~5x that at
+four. It is the largest single-category gain of the whole effort.
+
+Gate verified on the final 2CL merge: covered counts byte-identical across the structural stage,
+0 "had no effect".
+
+## Both configs, final
+
+| bank | programs | TOTAL | conditions | branches | toggles |
+|---|---|---|---|---|---|
+| 1CL/1C/4W/4T | **49/49, 0 FAILED** | **94.71%** (+1.62) | 90.41% (+5.11) | 95.09% | 82.76% |
+| 2CL/2C/4W/4T | **49/49, 0 FAILED** | **94.44%** (+1.77) | 88.43% (+7.16) | 95.64% | 80.33% |
+
+Previous banks preserved as `cov/bank_{1CL,2CL}_*_prev_20260816/`; suite logs at
+`results/run_suite_logs_{1CL,2CL}_max_20260816/`.
+
+## Where the ceiling now sits
+
+The pre-work estimate in `COVERAGE_CEILING_ANALYSIS.md` was ~96-97% with the back-pressure campaign
+as the main lever. That campaign is now partially done (13 of 24 terms at 1CL, 81 terms at 2CL) and
+delivered +1.6/+1.8. The remaining honest levers, in value order:
+
+1. **Back-pressure at the buffers `unit_storm` does not reach** — `mem_arb/rsp_switch` (needs
+   simultaneous icache+dcache responses), `dcache/core_rsp_queue`, `alu/pe_switch`,
+   `sfu dispatch buf_out`. ~10 terms at 1CL, ~50 at 2CL. Worth ~+0.5 / ~+1.0.
+   ⚠ The measured lesson applies: **issue density, not memory volume**.
+2. **TCU dispatch buffer** (`g_buffers[4]`, EX_TCU=4) — needs back-to-back WMMA. Requires a kernel
+   built on `tcu_mt`'s exact template instantiation (OBS-029).
+3. **AXI read back-pressure** for `assert_r_valid_stable`/`assert_r_data_stable` — 2 bins, but
+   assertions have only 127 bins at 1CL so each is worth ~0.11 Total. Try `unit_storm` under
+   `+AXI_FLOOD`: flood alone was measured insufficient (the DUT read buffer is deep), but flood
+   plus a congested response path has not been tried.
+4. Toggle — the residual is **57% duplicate buffer payload vectors** and only ~27% addressable
+   (see the correction section). Expect very poor returns per unit of effort.
+
+**100% remains impossible for the three reasons in the ceiling analysis**, unchanged: the 44-bit uuid
+counter (arithmetically unreachable, caps Total at 99.78%), realism-limited datapath bits, and the
+OBS-036 class where the golden model provably disagrees.
