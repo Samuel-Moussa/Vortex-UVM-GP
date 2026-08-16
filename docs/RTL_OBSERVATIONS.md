@@ -1766,6 +1766,43 @@ part IS realism-limited rather than structural and must NOT be waived.
 bound *derived* (from retired-instruction count), never hardcoded, and state the residual in the
 paper. Do NOT set `NDEBUG`.
 
+**RESOLUTION of the OBS-033 open item — the `mem_req_buf` / `mem_rsp_queue` "100% dead" buffers
+(2026-08-16). They are NOT a coverage hole, and they are NOT waivable. Both halves matter.**
+
+*Why they are not a hole.* `VX_elastic_buffer.sv:34-41` — when `SIZE == 0` the module degenerates to
+```systemverilog
+assign valid_out = valid_in;
+assign data_out  = data_in;
+assign ready_in  = ready_out;
+```
+The icache takes that branch because `MEM_REQ_BUF_ENABLE = (NUM_BANKS != 1)` (`VX_cache.sv:105`) and
+`VX_socket.sv:96` hardcodes `.NUM_BANKS(1)`. The ports are therefore electrically identical to their
+source. **Measured proof that the activity IS counted, just under a different name:** on the same
+instance, `mem_req_addr`/`mem_req_addr_w` have **12 of 26 bits live** and `mem_req_tag`/`mem_req_tag_w`
+have **22 of 48 live**, while the 654-bit `data_in`/`data_out` — which are precisely the
+concatenation of those nets plus the (structurally dead, OBS-033) write payload — report zero.
+Even more directly: `assign valid_out = valid_in` *guarantees* identical toggling, and Questa reports
+**valid_in = 0, valid_out = 47**. That asymmetry is impossible physically and is the tool's alias
+attribution.
+
+*Scale.* Design-wide at 1CL there are **116 `SIZE == 0` elastic-buffer instances carrying 4,667 dead
+port nodes = 9,334 toggle bins = 12.7% of the entire remaining toggle gap.**
+
+*Why we still do NOT waive it.* **97 nodes on those same ports ARE live** — Questa's attribution is
+inconsistent, landing on the port in some instances and on the source net in others. So:
+* a UNIFORM rule ("all `SIZE==0` buffer ports") removes 97 covered nodes and trips the
+  hits-invariant gate in `merge_coverage.sh`;
+* an OUTCOME-based rule ("the dead ones") is exclusion-by-result — precisely the dishonest pattern
+  this project forbids, and the thing that made OBS-030 wrong.
+Bit-range exclusions derived from the `DATAW` concatenation would be exact but hardcode offsets into
+a packing that can change — the OBS-030 failure mode again.
+
+**⇒ Left in the denominator, deliberately, and STATED instead.** The correct reading of our toggle
+number is: *~12.7% of the reported toggle gap is the by-instance metric counting the same physical
+activity twice.* That belongs in the paper as a caveat on the metric, not as a waiver on the design.
+This is also the cleanest available measurement of how much Questa's by-instance toggle model
+inflates a design that passes wide payloads through many zero-size buffers.
+
 ---
 
 ## OBS-035 — the icache FLUSH FSM is elaborated but can never be entered, at any config
