@@ -1922,3 +1922,47 @@ mistake OBS-030 records.
 are only 127 assertion bins — the highest per-bin value in the whole metric). Next step if pursued:
 derive the read-response buffer depth and the true outstanding-read bound, then either waive
 config-awarely or build a stimulus that exceeds the depth. **Do not waive on "we could not hit it".**
+
+---
+
+## OBS-039 — the suite's "N staged" is a RUN count, not a distinct-program count, and 4 runs merge under one test-record name
+
+**What we saw.** Every merge emits 5 suppressible errors:
+```
+** Error (suppressible): (vcover-6854) Multiple test data records with the same name
+Test data records named 'regression_test_kernel'        are from different simulations.   (x3)
+Test data records named 'kernel_launch_test_vecadd_lite' are from different simulations.
+Test data records named 'kernel_launch_test_mem_stress'  are from different simulations.
+```
+Measured on the 2CL bank of 2026-08-16 (`results/run_suite_logs_2CL_storm_20260816/merge.log`).
+
+**Cause — three distinct mechanisms, all in `scripts/run_suite.sh`:**
+1. `runr` (`:81`) runs `regression_test` **four times** with four different `PROGRAM_KIND`s, but the
+   UCDB test record is keyed on `PROGRAM_NAME`, which is left at its default `kernel` for all four
+   ⇒ 4 runs → 1 name → 3 collisions.
+2. `runthr vecadd_lite` (`:62`) re-runs a program `runk` already ran, under `+AXI_THROTTLE`.
+3. `runflood mem_stress` (`:65`) does the same under `+AXI_FLOOD`.
+   In (2) and (3) the *program* is identical and only the TB mode differs, so the name collides.
+
+**Does it corrupt the bank? No — and this was checked, not assumed.** `vcover merge` unions the
+coverage regardless; the warning is about **test-record identity**, not coverage data. The staged
+files themselves are uniquely named (`<date>_run_<hhmmss>_<test>.ucdb`, 50 files for 50 runs) and
+all 50 are consumed. Every banked number stands.
+
+**What it DOES cost — per-test attribution.** `-testextract` / per-test hit data cannot separate the
+throttled `vecadd_lite` from the plain one, the flooded `mem_stress` from the plain one, or the four
+`regression_test` kinds from each other. Anything of the form *"which test covered this bin"* is
+ambiguous for those 6 runs.
+
+**⚠ CONSEQUENCE FOR THE PAPER — do not write "50 programs".** The suite's `SUITE VERDICT: 50 staged`
+counts **runs**. Of those, 2 are re-runs of an existing program under a different TB mode and 4 are
+one test entry under 4 program kinds. State it as *"50 simulation runs"* and count distinct programs
+separately — the same class of error as FW-1b, where `riscv_pmp_test` and
+`riscv_non_compressed_instr_test` were counted as 2 results for 1 byte-identical program.
+
+**Bug vs expected:** **TB bookkeeping defect (cosmetic for coverage, material for claims).**
+
+**Disposition: OPEN.** Cheap fix: pass a distinguishing `-testname` suffix for the throttle/flood
+variants and the `PROGRAM_KIND` for regression runs. Until then, the errors are expected output and
+their ABSENCE would be the surprising result. Do not "fix" by suppressing the message — it is the
+only signal that the run count and the program count differ.
