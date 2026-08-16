@@ -180,6 +180,20 @@ runk sim-only lmem_stress 500000
 # < MSHR_SIZE (16). Kept because the miss/eviction traffic itself is real coverage and
 # because it is the evidence for that waiver.
 runk sim-only mshr_flood 4000000
+# isa_probe: the M-mode CSR read/write path and the FP misc/fused-multiply decode — the
+# largest REACHABLE code-coverage holes left in the 2026-08-16 bank. Measured standalone
+# at 1CL before being added here (PASSED, 188 words byte-exact, 0 errors):
+#   VX_csr_data.sv  19 of 28 missing branch items now covered (:104,132,135-143,196-203)
+#   VX_decode.sv    FCLASS/FMV.X.W decode (:447-455) covered
+# The 9 that remain are each accounted for and are NOT stimulus gaps:
+#   :134 SATP write   — inert only while VM_ENABLE is off; skipped on purpose
+#   :149 invalid-write ASSERT default — reachable only by a write that fails the run
+#   :167-170,181,189,190 machine-ID CSRs — OBS-036: SimX returns 0 where the RTL returns
+#        real IDs, so reading them is a guaranteed LOCKSTEP mismatch. Unreachable while
+#        end-state/lockstep equivalence is the verification contract.
+# Every CSR it touches was checked in BOTH models first; MISA is excluded because SimX
+# ignores the write but the RTL asserts on it (the csrw 0x301 prepare.sh strips). Fast.
+runk sim-only isa_probe 500000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     400000
 rund functional_memory_test functional_mem  400000
