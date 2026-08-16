@@ -67,10 +67,27 @@ if [[ $NO_COMPILE -eq 0 ]]; then
     COMPILE_OPTS="$COMPILE_OPTS +define+NUM_CORES=$NUM_CORES"
     COMPILE_OPTS="$COMPILE_OPTS +define+NUM_WARPS=$NUM_WARPS"
     COMPILE_OPTS="$COMPILE_OPTS +define+NUM_THREADS=$NUM_THREADS"
-    COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MSHR_SIZE=16"
-    COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MSHR_SIZE=16"
-    COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MREQ_SIZE=16"
-    COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MREQ_SIZE=16"
+    # ── L1 queue depths (OBS-032) ────────────────────────────────────────────
+    # These were hardcoded and undocumented since the initial upload. Measured
+    # against the RTL defaults in Vortex/hw/rtl/VX_config.vh:
+    #   MSHR_SIZE  RTL default 16 (:567, :628)  -> our 16 is a NO-OP
+    #   MREQ_SIZE  RTL default  4 (:572, :633)  -> our 16 is 4x DEEPER
+    # MREQ_SIZE is the fill-request FIFO depth; its almost-full threshold is
+    # MREQ_SIZE - PIPELINE_STAGES (VX_cache_bank.sv:659) = 2 at the RTL default
+    # but 14 as we build it, and that gate is one of the two terms in
+    # core_req_ready (VX_cache_bank.sv:232) -- i.e. it decides when a bank stops
+    # accepting misses. So this override directly weakens the back-pressure that
+    # several coverage bins exist to observe (see cp_mshr_stall.stall: 0 hits
+    # against 5,131,366 no_stall in every bank to date).
+    # Now terminal-controlled. DEFAULT IS UNCHANGED (16) so every existing bank
+    # stays reproducible; set CACHE_MREQ_SIZE=4 to build the RTL default config.
+    CACHE_MSHR_SIZE="${CACHE_MSHR_SIZE:-16}"
+    CACHE_MREQ_SIZE="${CACHE_MREQ_SIZE:-16}"
+    COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MSHR_SIZE=$CACHE_MSHR_SIZE"
+    COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MSHR_SIZE=$CACHE_MSHR_SIZE"
+    COMPILE_OPTS="$COMPILE_OPTS +define+ICACHE_MREQ_SIZE=$CACHE_MREQ_SIZE"
+    COMPILE_OPTS="$COMPILE_OPTS +define+DCACHE_MREQ_SIZE=$CACHE_MREQ_SIZE"
+    print_info "L1 queue depths: MSHR=$CACHE_MSHR_SIZE MREQ=$CACHE_MREQ_SIZE (RTL defaults 16/4 — OBS-032)"
 
     # ── Cache hierarchy (terminal-controlled: make L2=1 L3=1 / --l2=1 --l3=1) ──
     # These are PRESENCE guards in the RTL — defined with NO value. L2/L3 are the
