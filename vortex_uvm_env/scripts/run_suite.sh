@@ -194,6 +194,26 @@ runk sim-only mshr_flood 4000000
 # Every CSR it touches was checked in BOTH models first; MISA is excluded because SimX
 # ignores the write but the RTL asserts on it (the csrw 0x301 prepare.sh strips). Fast.
 runk sim-only isa_probe 500000
+# unit_storm: the FIRST kernel that produces genuine internal BACK-PRESSURE. Targets
+# the single biggest honest code-coverage lever left — 24 of 46 missing condition
+# terms at 1CL (128 of 217 at 2CL) are one expression, VX_stream_buffer.sv:59
+# `(valid_in || flow_out)`, whose `valid_in` term can ONLY decide the result when
+# flow_out == 0, i.e. a buffer holds data the consumer will not take. Nothing covers
+# it until the design is actually congested, which is why no amount of running longer
+# had touched it.
+# Mechanism: per iteration, 4 INDEPENDENT local-memory loads to consecutive words
+# (LMEM_NUM_BANKS = NUM_LSU_LANES, VX_config.vh:681, so they hit 4 banks at once and
+# contend at one output arbiter), 2 global loads, 2 vx_pred WCTL ops, a csrr and FP
+# work — all independent, so the single commit port (ISSUE_WIDTH=1) becomes the
+# bottleneck and congestion propagates backwards.
+# MEASURED at 1CL standalone (PASSED, 188 words byte-exact, 0 errors): 13 of the 24
+# terms covered — the whole local-memory path (lmem_arb rsp_arb, rsp_xbar arbs 0-3,
+# lmem_adapter arbiter) plus sfu wctl_unit/rsp_buf.
+# ⚠ DO NOT "improve" THIS BY ADDING MEMORY PRESSURE. A 64 KB-table variant (4x the
+# dcache, prime strides, real misses) was measured and scored WORSE: 11 terms, gaining
+# nothing and losing wctl_unit/rsp_buf, because the warps stalled on memory instead of
+# issuing densely. For flow-control coverage, ISSUE DENSITY beats memory volume.
+runk sim-only unit_storm 2000000
 # ---- directed tests ----
 rund axi_memory_test        axi_traffic     400000
 rund functional_memory_test functional_mem  400000
