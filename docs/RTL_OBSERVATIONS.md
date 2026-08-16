@@ -1647,6 +1647,16 @@ header is what the analysis had been based on.
 **Bug vs expected:** **TB configuration defect (undocumented divergence from the DUT defaults).**
 Not an RTL bug — the RTL honours the override exactly as designed.
 
+**UPDATE 2026-08-16 — the override is actively SUPPRESSING the coverage we spent a session chasing.**
+The maximisation push (`unit_storm`, `storm_big`) targeted condition terms that only evaluate when two
+requests are live at one port in the same cycle. The almost-full gate this override moves from **2 to
+14** (`VX_cache_bank.sv:659`) is one of the two terms in `core_req_ready` (`:232`) — i.e. the exact
+back-pressure signal those bins observe. We built a machine 4x less likely to back-pressure and then
+wrote kernels to force it to back-pressure. That also reframes `cp_mshr_stall.stall`, which has **0
+hits against 5,131,366 `no_stall`** across every bank: it has been reported as a stimulus gap, but
+part of it is a *configuration* gap. ⚠ This is a HYPOTHESIS with a mechanism, not a measurement — the
+experiment (drop to the RTL default 4, re-run, diff) has NOT been run. Do not quote it as a result.
+
 **Disposition: OPEN.** Options, in preference order: (a) delete the override and re-measure, so we
 verify the default configuration; (b) keep it, but make it terminal-controlled like `L2`/`L3` and
 state it in the bank metadata and the paper's configuration table. What must NOT continue is an
