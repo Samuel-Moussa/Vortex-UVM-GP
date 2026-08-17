@@ -85,7 +85,17 @@ endif
 # The stamp records the flags the .elf was ACTUALLY built with — the same trick as
 # Vortex/sim/simx/simx_config.stamp (I3) — so an unchanged config costs nothing and
 # a changed one can never be silently skipped.
-KERNEL_CONFIGS := -DNUM_CLUSTERS=$(CLUSTERS) -DNUM_CORES=$(CORES) -DNUM_WARPS=$(WARPS) -DNUM_THREADS=$(THREADS)
+# KERNEL_EXTRA_CONFIGS: per-program compile defines (e.g. cache_tier's phase enables).
+# It MUST go through KERNEL_CONFIGS rather than being passed to the kernel Makefile as
+# a separate variable, for two reasons measured on 2026-08-16:
+#  1. the rule below invokes the kernel Makefile with CONFIGS="$$want" ON THE COMMAND
+#     LINE, and a command-line variable overrides a makefile's `CONFIGS +=`. So
+#     `make ... CT_P1=1` through this path SILENTLY DROPS the flag — the kernel builds
+#     with every phase off, then runs and passes while verifying nothing (OBS-029).
+#     Proven: `-DCT_P1=1` present without a command-line CONFIGS, absent with one.
+#  2. the stamp records $(KERNEL_CONFIGS), so folding the extras in here is also what
+#     makes a phase change force a rebuild instead of reusing a stale .elf.
+KERNEL_CONFIGS := -DNUM_CLUSTERS=$(CLUSTERS) -DNUM_CORES=$(CORES) -DNUM_WARPS=$(WARPS) -DNUM_THREADS=$(THREADS) $(KERNEL_EXTRA_CONFIGS)
 ifneq ($(PROGRAM_KIND),)
     KERNEL_SRC_DIR := $(REGRESSION_DIR)/$(PROGRAM_KIND)
     KERNEL_ELF     := $(REGRESSION_DIR)/$(PROGRAM_KIND)/kernel.elf

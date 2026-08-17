@@ -187,6 +187,32 @@ runk sim-only lmem_stress 500000
 # < MSHR_SIZE (16). Kept because the miss/eviction traffic itself is real coverage and
 # because it is the evidence for that waiver.
 runk sim-only mshr_flood 4000000
+
+# cache_tier: the ONLY kernel that targets the SHARED hierarchy (L2 per cluster, L3
+# per GPU) rather than L1. Every other kernel's working set stays inside the socket.
+# It works by REUSE -- touch a span sized to a level, then re-read it, which is what
+# turns fills into HITS (tag match / way select). Three phases, spans expressed as
+# RATIOS of the real geometry from VX_config.h: P1 = 1/2 of L1, P2 = 8x L1, P3 = 3/2
+# of L2 (~1.5MB through Ramulator, which is why the budget is 20M for a MEASURED
+# 6,305,000 cycles -- >3x margin).
+#
+# ⚠ THE PHASES MUST BE PASSED VIA KERNEL_EXTRA_CONFIGS, NOT AS CT_P1=1 ON THE MAKE
+# LINE. Makefile:106 invokes the kernel Makefile with CONFIGS="$want" on the COMMAND
+# LINE, and a command-line variable overrides the kernel Makefile's `CONFIGS +=`, so
+# CT_P1=1 would be SILENTLY DROPPED -- the kernel would build with every phase off,
+# then run and PASS while verifying nothing (OBS-029). KERNEL_EXTRA_CONFIGS folds into
+# KERNEL_CONFIGS, which is also what the stamp records, so a phase change forces a
+# rebuild instead of reusing a stale .elf.
+#
+# Verified 2026-08-16 @2CL L2=1 L3=1 BEFORE being registered here: TEST PASSED,
+# data_compared=196,868 words byte-exact (the largest real compare in the suite),
+# 0 errors, and all four shared-cache instances covered on BOTH hit and miss --
+# L2 cluster0 15,268 hits / cluster1 15,323 / L3 bank0 13,464 / bank1 14,304.
+# At L2=0 L3=0 both levels are PASSTHRU (VX_cache_wrap.sv:160 builds the storage only
+# when PASSTHRU==0), so the phases still run as plain memory traffic -- harmless, and
+# the end-state compare still applies.
+runct() { echo "=== sim-only kernel cache_tier (L2/L3 phases) ==="; KERNEL_EXTRA_CONFIGS="-DCT_P1=1 -DCT_P2=1 -DCT_P3=1" make sim-only TEST=kernel_launch_test PROGRAM_NAME=cache_tier $CFG TIMEOUT="$1" >"$LOGDIR/k_cache_tier.log" 2>&1; stage $?; }
+runct 20000000
 # isa_probe: the M-mode CSR read/write path and the FP misc/fused-multiply decode — the
 # largest REACHABLE code-coverage holes left in the 2026-08-16 bank. Measured standalone
 # at 1CL before being added here (PASSED, 188 words byte-exact, 0 errors):
