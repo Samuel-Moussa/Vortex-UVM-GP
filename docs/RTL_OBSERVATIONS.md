@@ -2006,7 +2006,7 @@ only signal that the run count and the program count differ.
 
 ---
 
-## OBS-040 — THE DUT RTL IS LOCALLY MODIFIED: X-masking initializers and two WEAKENED assertions (undisclosed until now)
+## OBS-040 — THE DUT RTL IS LOCALLY MODIFIED IN 18 FILES, INCLUDING X-MASKING INITIALIZERS AND TWO WEAKENED ASSERTIONS
 
 **Class:** VERIFICATION-INTEGRITY (DUT modified by us) · **Disposition: OPEN — must be
 disclosed in any paper or report** · **Found:** 2026-08-17, cross-checking the bring-up issue
@@ -2047,12 +2047,68 @@ assertion on reset — `&& !reset` — which suppresses the spurious reset-windo
 disabling the check under X during normal operation, and without touching register
 initialization at all. That is a strictly narrower change than the one in the tree.
 
-**Disposition: OPEN.** Required actions, in order: (a) disclose in the paper's methodology
-that this file is patched; (b) replace the `$isunknown` guards with a reset gate and remove
-the declaration initializers; (c) re-run one config and confirm the assertions stay silent for
-the right reason. Until (b), no claim of the form "we verified unmodified upstream Vortex" is
-accurate, and the X-prop future-work item must note that the DUT currently masks X in this
-module.
+**⚠ WIDENED 2026-08-17 — IT IS NOT ONE FILE, IT IS EIGHTEEN.** A full read-only diff of the local
+tree against upstream `7a52ee5` (clone in scratch, nothing modified) shows **18 modified RTL files**,
+introduced by `e840370` "RTL modifications for DPI issue with questa21" and `9662521` "Converted
+Vortex to local folder". Classified by real code lines vs commented-out dead blocks:
+
+| file | code | note |
+|---|---|---|
+| `tcu/VX_tcu_fedp_bhf.sv` | 193 | substantial, unreviewed in this register |
+| `tcu/VX_tcu_fedp_dpi.sv` | 111 | substantial |
+| `tcu/VX_tcu_fedp_dsp.sv` | 32 | |
+| `libs/VX_pending_size.sv` | 17 | **the assertion weakening, below** |
+| `tcu/VX_tcu_fp.sv` | 16 | |
+| `tcu/VX_tcu_pkg.sv` | 11 | |
+| `VX_gpu_pkg.sv` | 9 | |
+| `VX_config.vh` | 7 | **`STALL_TIMEOUT` fix + `SIMD_WIDTH` change** |
+| `libs/VX_mem_scheduler.sv` | 6 | |
+| `cache/VX_cache_bypass.sv` | 6 | |
+| `tcu/VX_tcu_top.sv`, `tcu/VX_tcu_uops.sv`, `fpu/VX_fpu_pkg.sv`, `core/VX_operands.sv` | 1–2 each | |
+| `fpu/VX_fpu_{sqrt,fma,div}.sv`, `fpu/VX_fpu_define.vh` | **0** | ~300 lines of COMMENTED-OUT dead code only |
+
+**Two further undisclosed changes found by the same diff:**
+* **`SIMD_WIDTH` was changed** from `` `MIN(`NUM_THREADS, 16) `` to `` `NUM_THREADS ``
+  (`VX_config.vh`). This alters a structural datapath parameter. No entry exists for it anywhere;
+  it is recorded here for the first time.
+* **OBS-011 IS ALREADY FIXED IN-TREE and its own disposition is STALE.** `VX_config.vh` now defines
+  `STALL_TIMEOUT_SCALE (4 ** (L2_ENABLED + L3_ENABLED))`, with a comment citing OBS-011 — yet
+  OBS-011 still reads *"open — needs-RTL-fix … left as an upstream-reportable RTL observation"*.
+  **Upstream fixed the same bug independently** (`VX_gpu_pkg.sv:224` at HEAD:
+  `100000 * (1 << (L2+L3))` — a shift rather than our `4 **`), which is external corroboration that
+  the finding was real. OBS-011's disposition line is left untouched pending a decision; do not
+  quote it as open.
+
+**PRECISE STATEMENT OF WHY THE `VX_pending_size` CHANGE IS WEAKER** (upstream text verified at both
+`7a52ee5` and HEAD — they are identical there, so this divergence is entirely ours):
+1. **The X-guard disables the check where it matters most.** BOTH versions already sit in the
+   `else` branch of `if (reset)`, so the reset window is *already* excluded upstream. The actual
+   ISSUE-3 trigger is that `reset` itself is X at time 0: `if (X)` takes the ELSE path, the assert
+   evaluates with X operands, and X is not true, so it fires. Our guard suppresses that — but it
+   also means `incr`/`decr` going X **during normal operation** (undriven control, disconnected
+   port, mis-parameterised instance — i.e. a REAL defect) now evaluates to literal `1` and PASSES.
+   Upstream would have caught it. The narrower correct fix is to gate on reset/X-on-reset, not on
+   the data inputs.
+2. **The declaration initializers hide reset failures and diverge sim from silicon.** Upstream
+   leaves `empty_r`/`full_r`/`size_r` X until reset assigns them, so a broken or absent reset shows
+   as X propagating out — visible. Ours forces `empty=1, full=0, size=0` at time 0: a plausible,
+   healthy-looking idle state. A module never reached by reset would look CORRECT in our simulation
+   and wrong in upstream's. Declaration initializers are also a simulation construct — ASIC flops
+   power up unknown regardless — so the bench is blind to a class of bug that is real in hardware.
+   This matters more than usual because X-propagation analysis is already ABSENT from this campaign.
+
+Neither change is unreasonable as bring-up engineering. What is wrong is that they were undisclosed,
+and that they weaken checkers in a project whose central claim is that its checkers can fail.
+
+**⚠ RTL IS TO BE LEFT AS IS (decision, 2026-08-17).** No revert, no re-fix. This entry is the
+disclosure, not a work item. Consequently the papers and any report MUST describe the DUT as
+"Vortex `7a52ee5` with 18 locally modified RTL files (see OBS-040)", never as unmodified upstream,
+and the X-propagation future-work item must state that this module currently masks X.
+
+**Disposition: OPEN (DISCLOSURE REQUIRED, RTL UNCHANGED BY DECISION).** Required actions: (a) disclose in the paper's methodology
+that the DUT is patched, naming the 18 files; (b) NOT a code change — the RTL stays as
+is by decision; (c) ensure the X-prop future-work item notes that this module masks X. No claim of
+the form "we verified unmodified upstream Vortex" is accurate.
 
 ---
 
