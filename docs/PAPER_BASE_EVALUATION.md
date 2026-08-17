@@ -12,6 +12,77 @@ or a banked report. Nothing here is asserted without a citable artifact.
 
 ---
 
+# ⚠️ SUPERSEDING RESULT BLOCK — 2026-08-17 (READ BEFORE QUOTING ANY NUMBER)
+
+**The 2026-07-16 audit below remains valid FOR THE BANKS THAT EXISTED THEN.** It is a dated
+snapshot and is deliberately not rewritten — rewriting an audited document in place would
+destroy the guarantee that made it worth auditing. Every headline number it states has since
+been superseded by a later bank. Quote THIS block.
+
+| Metric | 1CL/1C/4W/4T | 2CL/2C/4W/4T |
+|---|---|---|
+| Covergroup bins (raw) | **370/377 = 98.14%** | **989/1032 = 95.83%** |
+| Covergroup (weighted) | 99.79% | 99.52% |
+| Statement | 98.10% | 98.32% |
+| Branch | 95.09% | 95.71% |
+| Condition | 90.41% | 88.77% |
+| Toggle | 82.83% | 80.47% |
+| Assertion | 96.85% | 98.87% |
+| Directive | 100.00% | 100.00% |
+| **Total** | **94.72%** | **94.55%** |
+| Runs staged / failed | **50 / 0** | **50 / 0** |
+| Coverage instances | 2,256 | 8,275 |
+
+Banked 2026-08-16 at `cov/bank_{1CL_1C_4W_4T,2CL_2C_4W_4T}/`, logs at
+`results/run_suite_logs_{1CL,2CL}_storm_20260816/`. Both verified by RE-READING the banked
+copy, not the live file. Total is still Questa's unweighted 7-category mean.
+
+**Corrections this block makes to the audit below — all of them material:**
+
+1. **"100% functional" was never raw-bin coverage.** It was the *weighted* covergroup metric,
+   which excludes three weight-0 red herrings by design. Raw bins were 374/377 then and are
+   370/377 now (the denominator moved when the coverage model was rewritten). **State both, or
+   state "weighted" explicitly** — an unqualified "100% functional coverage" is the single most
+   attackable claim in the old text.
+2. **"43/43 tests" is wrong twice.** It is a count of *runs*, not distinct programs, and two
+   riscv-dv entries (`riscv_pmp_test`, `riscv_non_compressed_instr_test`) are **byte-identical
+   programs** (FW-1b) — one program counted twice. The current suite is **50 runs**, of which
+   two re-run one program under a different bus mode and four are one test entry under four
+   program kinds (OBS-039). **Say "50 simulation runs", never "50 programs".**
+3. **"40/42 at 2CL, 2 = golden-model limits" is FALSIFIED.** All four historical 2CL failures
+   now pass with real byte-exact compares; they were ONE methodology defect (OBS-027), not four
+   divergences. The current result is **50/50, 0 FAILED, at BOTH configurations.**
+4. **The toggle root-cause named the wrong cache.** The old text blames the write-through
+   dcache. Measured: the **icache** is 51,340 bins / 22,730 missing / 55.7% versus dcache
+   86,604 / 9,524 / 89.0% — **26.4% of the entire toggle gap from one subtree**, because
+   `VX_socket.sv:106` instantiates it with `.WRITE_ENABLE(0)`. Positive control: `rsp_data.data`
+   toggles 45–46× on all 512 bits, so the read path is alive and only the write direction is
+   dead. The "~78% is the structural ceiling" conclusion was also too pessimistic — toggle is
+   now 82.83% / 80.47% after config-aware waivers plus real stimulus.
+5. **A merge-time integrity gate now exists** and did not when the audit was written.
+   `merge_coverage.sh` applies exclusions in two stages split by justification class and
+   **fails the merge** if a structural exclusion changes any COVERED bin count. It caught two
+   real defects on first execution, one of which had been silently discarding a covered
+   condition term for weeks. Any coverage number produced before that gate existed was
+   unverified in this respect.
+
+**New evidence available to the paper that post-dates the audit:**
+- **196,868 words byte-exact** in a single end-state compare (`cache_tier`, 2CL with L2+L3
+  enabled) — 6× the previous largest, 0 errors.
+- **The shared cache hierarchy exercised for the first time**: L2 (both clusters) and L3 (both
+  banks) hit paths covered, 13,464–15,323 hits per instance. Every prior bank had both levels
+  as pure passthrough.
+- **A published negative result**: enlarging a kernel's working set 16× *reduced* contention
+  coverage (13→11 terms, and +4→+0 in a second independent experiment). Contention comes from
+  issue density, not miss volume.
+- **OBS-032 resolved by measurement, hypothesis falsified**: the testbench's 4×-deeper cache
+  fill queue was suspected of suppressing back-pressure coverage; rebuilding at the RTL default
+  produced **bit-identical branch, condition and statement counts**. The suspected coverpoint is
+  sized by a different parameter that already matched the RTL default.
+- **A third configuration (L2+L3 enabled) is being banked**; do not quote it until it lands.
+
+---
+
 # ✅ VERIFICATION STATEMENT (audit of this document, 2026-07-16)
 
 Every claim in this document was re-verified against primary artifacts on 2026-07-16
@@ -76,8 +147,10 @@ Every claim in this document was re-verified against primary artifacts on 2026-0
   kernels and constrained-random RISC-V programs; the correctness verdict is a byte-exact
   final-memory comparison against **SimX** (Vortex's own functional simulator) integrated
   as a golden reference via **DPI-C co-simulation**.
-- Headline results: **100% functional coverage, 91.00% total coverage (primary config),
-  43/43 tests passing, 0 unexplained failures**; a second full coverage bank at a scaled
+- Headline results (**UPDATED 2026-08-16** — the old line read "100% functional / 91.00% /
+  43/43", which is superseded and, on the first two counts, misleading; see the superseding
+  block at the top): **98.14% of covergroup bins (99.79% weighted), 94.72% total coverage on
+  the primary configuration, 50/50 simulation runs passing, 0 failures**; a second full bank at a scaled
   multi-cluster configuration (85.16% total).
   - *Evidence:* `docs/Coverage_Report_2026-07-10.md` (banked report, both configs);
     coverage banks `vortex_uvm_env/cov/bank_1CL_1C_4W_4T/` and `bank_2CL_2C_4W_4T/`.
@@ -207,6 +280,10 @@ The bench itself was audited and repaired before any metric was trusted:
   `r_valid/r_data_stable` reachable-but-not-hit, left honestly uncovered).
 
 ## 7. Coverage results (per-config banks, never blended)
+
+> ⚠️ **SUPERSEDED — this table is the 2026-07-10 bank.** Current banked numbers are in the
+> superseding block at the top of this document (1CL **94.72%**, 2CL **94.55%**, 50/50 runs
+> passing at both). Kept for provenance: it is the bank the 2026-07-16 audit verified.
 
 | Metric | 1CL/1C/4W/4T (primary) | 2CL/2C/4W/4T (scale) |
 |---|---|---|
