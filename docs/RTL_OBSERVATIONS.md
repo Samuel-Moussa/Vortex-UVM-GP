@@ -2003,3 +2003,91 @@ separately — the same class of error as FW-1b, where `riscv_pmp_test` and
 variants and the `PROGRAM_KIND` for regression runs. Until then, the errors are expected output and
 their ABSENCE would be the surprising result. Do not "fix" by suppressing the message — it is the
 only signal that the run count and the program count differ.
+
+---
+
+## OBS-040 — THE DUT RTL IS LOCALLY MODIFIED: X-masking initializers and two WEAKENED assertions (undisclosed until now)
+
+**Class:** VERIFICATION-INTEGRITY (DUT modified by us) · **Disposition: OPEN — must be
+disclosed in any paper or report** · **Found:** 2026-08-17, cross-checking the bring-up issue
+report against this register.
+
+**What we saw.** `Vortex/hw/rtl/libs/VX_pending_size.sv` differs from upstream. The change was
+made in **`ee11d66`** ("Add GLIBCXX fix documentation and enhance memory model integration") —
+i.e. it rode in on an unrelated bring-up commit and was never logged here. Two edits:
+
+```
+-        reg empty_r, alm_empty_r;            -- no initializer (X until reset)
++        reg empty_r     = 1'b1;              -- declaration initializer
++        reg alm_empty_r = 1'b1;
++        logic [SIZEW-1:0] size_r = '0;
+
+-  `ASSERT((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r), ("counter overflow"));
++  `ASSERT((!$isunknown(incr) && !$isunknown(decr)) ? (...) : 1, ("counter overflow"));
+```
+(The original lines are retained in-file as a commented "REVERT lines 85-86 back to:" block.)
+
+**Why it matters — three separate problems.**
+1. **The assertions are WEAKENED, not fixed.** They now evaluate to `1` (pass) whenever `incr`
+   or `decr` is unknown. The reset window where they were firing is exactly the window where
+   the inputs are X, so the checks are disabled precisely where they used to fire. A real
+   overflow occurring while any input is X is now invisible.
+2. **The declaration initializers MASK X-STATE.** Initializing state at declaration is a
+   simulation-only convenience with no synthesis meaning; it hides uninitialized-state
+   behaviour. This is the same class of bug that X-propagation analysis exists to find, and
+   we have already recorded X-prop as ABSENT from this campaign — so this is worse than a
+   gap, it is an active suppression in the DUT.
+3. **It contradicts the stated provenance.** Every document, including the papers, describes
+   the design under verification as "RTL pin `7a52ee5`". The RTL we simulate is that pin
+   **plus an undisclosed local patch to a checker**. A verification result must state what
+   was verified; "upstream Vortex" is currently not an accurate description of the DUT.
+
+**The correct fix** (the bring-up report's own recommendation, ISSUE 3) is to gate the
+assertion on reset — `&& !reset` — which suppresses the spurious reset-window firing WITHOUT
+disabling the check under X during normal operation, and without touching register
+initialization at all. That is a strictly narrower change than the one in the tree.
+
+**Disposition: OPEN.** Required actions, in order: (a) disclose in the paper's methodology
+that this file is patched; (b) replace the `$isunknown` guards with a reset gate and remove
+the declaration initializers; (c) re-run one config and confirm the assertions stay silent for
+the right reason. Until (b), no claim of the form "we verified unmodified upstream Vortex" is
+accurate, and the X-prop future-work item must note that the DUT currently masks X in this
+module.
+
+---
+
+## OBS-041 — REFUTED: changing `MREQ_SIZE` does NOT cascade into cache banks or memory port width
+
+**Class:** DOCUMENTATION CORRECTION (an inherited claim, measured false) · **Disposition:
+CLOSED — refuted with citations** · **Found:** 2026-08-17.
+
+**The claim.** The bring-up issue report (§P1, "Queue Size Changes: The RTL Cascade You
+Haven't Tested") states that raising `ICACHE_MREQ_SIZE`/`DCACHE_MREQ_SIZE`/`DCACHE_MRSQ_SIZE`
+from 4 to 16 "cascaded through arbitration logic … `DCACHE_NUM_REQS` scales based on
+`DCACHE_MREQ_SIZE`, which ultimately redefines `DCACHE_NUM_BANKS` and subsequently
+`L1_MEM_PORTS`", changing top-level port array widths. If true, every bank taken with our
+`MREQ_SIZE=16` override would describe a structurally different machine.
+
+**It is false. Two independent lines of evidence.**
+
+*Static, by citation:*
+```
+VX_gpu_pkg.sv:818   DCACHE_NUM_REQS  = `NUM_LSU_BLOCKS * DCACHE_CHANNELS
+VX_config.vh:618    DCACHE_NUM_BANKS = `MIN(DCACHE_NUM_REQS, 16)
+VX_config.vh:664/666 L1_MEM_PORTS    = `MIN(DCACHE_NUM_REQS | DCACHE_NUM_BANKS,
+                                            `PLATFORM_MEMORY_NUM_BANKS)
+```
+`DCACHE_NUM_REQS` is a function of LSU blocks and cache channels. **No definition of
+`DCACHE_NUM_REQS`, `DCACHE_NUM_BANKS` or `L1_MEM_PORTS` references `MREQ_SIZE` anywhere in the
+RTL.** The dependency chain the claim describes does not exist.
+
+*Dynamic, by measurement (the OBS-032 experiment):* `mshr_flood` rebuilt at
+`CACHE_MREQ_SIZE=4` versus the banked 16 produced **bit-identical branch (12565/18913),
+condition (524/1707) and statement (20428/23461) counts**. A change in memory port width
+could not leave those identical.
+
+**⚠ The nearby claim that IS true, and should not be lost with the refuted one:**
+`DCACHE_MSHR_SIZE` *does* feed `DCACHE_MEM_TAG_WIDTH` (`VX_gpu_pkg.sv:833`), so **MSHR** depth
+genuinely does affect a top-level width. It is harmless here only because we set it to 16,
+which is already the RTL default (`VX_config.vh:628`) — i.e. that override is a no-op. Anyone
+changing `MSHR_SIZE` must expect real structural consequences. See OBS-032.
