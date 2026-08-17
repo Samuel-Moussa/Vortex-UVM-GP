@@ -70,8 +70,8 @@ instruction-granularity verifiable (residual~0 over 5{,}432 retirements
 on the flagship case), with a precisely characterized soundness boundary
 at asynchronous interrupt timing. Every verdict class is proven
 non-vacuous by permanent fault-injection tests. The environment achieves
-100\% functional and 91.0\% total coverage on the primary configuration
-(43/43 tests) and 85.2\% at two clusters, using only machine-generated,
+98.1\% covergroup-bin and 94.7\% total coverage on the primary
+configuration (50/50 runs) and 94.6\% at two clusters, using only machine-generated,
 RTL-cited structural exclusions. Beyond the methodology, we report the
 defects and limitations the flow exposed in \emph{both} models: RTL
 findings including a JALR target-LSB ISA deviation whose skewed PC
@@ -139,7 +139,7 @@ with \code{file:line} evidence and a disposition---including a
 reference-model fetch bug found \emph{by} the lockstep, demonstrating
 that a lockstep flow verifies the golden model as much as the DUT.
 \item \textbf{Honest coverage closure} (Section~\ref{sec:coverage}):
-100\%/91.0\% (functional/total) on the primary configuration using only
+98.1\%/94.7\% (covergroup bins/total) on the primary configuration using only
 machine-generated, per-configuration, RTL-cited structural exclusions,
 with unreachable-versus-unhit distinguished by evidence and structural
 ceilings root-caused rather than waived.
@@ -688,21 +688,27 @@ Table~\ref{tab:coverage} summarizes the two banked configurations.
 \toprule
 Metric & 1CL/1C/4W/4T & 2CL/2C/4W/4T \\
 \midrule
-Functional (covergroups) & \textbf{100.0\%} & 92.5\% \\
-Statement & 97.1\% & 96.2\% \\
-Branch & 91.2\% & 89.7\% \\
-Condition & 76.4\% & 69.6\% \\
-Toggle & 78.7\% & 74.3\% \\
-Assertion & 93.8\% & 74.0\% \\
+Covergroup bins (raw) & 370/377 = 98.1\% & 989/1032 = 95.8\% \\
+Covergroup (weighted) & 99.8\% & 99.5\% \\
+Statement & 98.1\% & 98.3\% \\
+Branch & 95.1\% & 95.7\% \\
+Condition & 90.4\% & 88.8\% \\
+Toggle & 82.8\% & 80.5\% \\
+Assertion & 96.9\% & 98.9\% \\
 Directive & 100.0\% & 100.0\% \\
 \midrule
-\textbf{Total} & \textbf{91.0\%} & \textbf{85.2\%} \\
-Tests passing & 43/43 & 40/42\textsuperscript{a} \\
+\textbf{Total} & \textbf{94.7\%} & \textbf{94.6\%} \\
+Runs passing & 50/50 & 50/50 \\
+Coverage instances & 2\,256 & 8\,275 \\
 \bottomrule
-\multicolumn{3}{l}{\footnotesize\textsuperscript{a}The two exceptions
-are reference-model limits, root-caused in} \\
-\multicolumn{3}{l}{\footnotesize Sections~\ref{sec:loadfeed}
-and~\ref{sec:limits}, not DUT failures.}
+\multicolumn{3}{l}{\footnotesize All runs pass at both configurations;
+earlier reported} \\
+\multicolumn{3}{l}{\footnotesize failures were a methodology defect
+(Sec.~\ref{sec:limits}), not} \\
+\multicolumn{3}{l}{\footnotesize DUT divergence. \emph{Runs}, not distinct
+programs: two} \\
+\multicolumn{3}{l}{\footnotesize entries re-run one program under a
+different bus mode.}
 \end{tabular}
 \end{table}
 
@@ -1041,6 +1047,77 @@ integration with seeded regression, graded sign-off, and per-seed
 triage.
 \end{enumerate}
 
+\subsection{Toward tape-out: a categorized roadmap}
+\label{sec:tapeout}
+
+The work reported here is \emph{front-end functional verification} of an
+RTL model. Silicon sign-off requires substantially more, and the two
+categories below are deliberately separated because they demand different
+tooling, different skills, and---critically---different claims. Neither
+list is a statement of partial progress: every item is currently absent
+unless noted.
+
+\subsubsection{Remaining front-end (RTL functional) work}
+\begin{enumerate}
+\item \textbf{Stimulus volume.} The generator is seed-controlled and
+reproducible, but the committed regression runs \emph{one seed per
+profile}. Constrained-random testing at a single seed is directed testing
+in a random costume. Scaling to hundreds of seeds per profile is the
+single highest-return item in this list and costs machine time rather
+than engineering effort.
+\item \textbf{Error and exception verification.} The bus responder
+always returns \texttt{OKAY}; no \texttt{SLVERR}/\texttt{DECERR}
+injection exists, so no error-recovery path is exercised. Architectural
+exception and interrupt stimulus is likewise absent, and must be designed
+around the observation that this design terminates by deasserting a busy
+signal rather than by a breakpoint instruction.
+\item \textbf{Formal property verification} on arbitration-heavy control
+(cache miss-status handling, commit arbitration), where dynamic
+simulation is weakest and state space is small enough for proof.
+\item \textbf{X-propagation and reset randomization.} Uninitialized-state
+bugs are invisible to a two-state functional flow; several unreset
+elements have already been identified structurally but never exercised
+under randomized reset.
+\item \textbf{Configuration-matrix breadth.} Three points are sampled of
+a parameter space spanning cluster, core, warp, thread and cache-tier
+dimensions.
+\item \textbf{Coverage-model provenance.} The functional model is
+self-authored rather than traced to a specification document, so
+coverage closure measures the model, not the specification.
+\item \textbf{Independent SIMT reference.} The scalar base-ISA axis has
+an independent cross-check; the SIMT axis does not, and this is a
+structural ceiling rather than an unfinished task.
+\end{enumerate}
+
+\subsubsection{Back-end and ASIC sign-off work (entirely out of scope here)}
+\begin{enumerate}
+\item \textbf{Gate-level simulation} on the synthesized netlist, then
+with back-annotated timing, to catch synthesis mismatches and
+timing-dependent behavior a register-transfer flow cannot see.
+\item \textbf{Static timing analysis} sign-off across process, voltage
+and temperature corners.
+\item \textbf{Design-for-test:} scan insertion, ATPG pattern generation
+and fault-coverage sign-off, plus memory built-in self-test.
+\item \textbf{Clock- and reset-domain-crossing analysis}, structural and
+functional, including metastability modeling.
+\item \textbf{Lint and structural sign-off} against a synthesis-clean
+rule set.
+\item \textbf{Low-power verification:} power intent, retention and
+isolation checking, and power-aware simulation.
+\item \textbf{Physical-design closure:} floorplan, place and route,
+parasitic extraction, signal- and power-integrity analysis.
+\item \textbf{Equivalence checking} between register-transfer source,
+synthesized netlist and post-layout netlist.
+\item \textbf{Post-silicon:} bring-up plan, characterization, and a
+path from silicon failures back into this regression.
+\end{enumerate}
+
+A useful way to read the two lists: the front-end items would raise the
+strength of the claims made in this paper, whereas the back-end items are
+prerequisites for a different claim entirely---that the design is
+manufacturable and will function in silicon. Nothing in this work speaks
+to the latter.
+
 % =========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
@@ -1057,8 +1134,8 @@ sound region-filtered load compare, and a two-pass load-value feed that
 turned an architecturally-undefined racy multi-core program from
 unverifiable into positively verified (residual 0 over 5{,}432
 retirements), while honestly delimiting its own soundness boundary at
-asynchronous interrupt timing. Coverage closed at 100\% functional /
-91.0\% total on the primary configuration with only machine-generated,
+asynchronous interrupt timing. Coverage closed at 98.1\% covergroup bins /
+94.7\% total on the primary configuration with only machine-generated,
 RTL-cited exclusions.
 
 The checking depth paid for itself in findings on both sides of the
