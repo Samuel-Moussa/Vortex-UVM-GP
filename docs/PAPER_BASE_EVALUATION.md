@@ -131,8 +131,10 @@ Every claim in this document was re-verified against primary artifacts on 2026-0
 | **4. First light** | 2026-03 | **Smoke test SUCCESS 2026-03-16** (`03643d1`); run-script hardening (startup-addr parsing, DPI linking, hex overflow — `c6fa229`, the vacuous-PASS fix); scoreboard/coverage-collector bring-up (`5d30f4e`, `a4626e5`); AXI4-compliance interface refactor (`4518334`); mem_model R-beat checking (`f2f8736`). |
 | **5. Architecture restructure** | 2026-04 → 2026-05 | EBREAK infinite-loop fix + monitor optimization (`9b69d68`); GLIBCXX ABI fix (`ee11d66`); **the major restructure** (`cc83410`, 2026-05-05): tb_top → pure structural wrapper, memory responses fully delegated to UVM agent drivers, clean package hierarchy (= §5.5 of the 43-issue report); XLEN→32 (`0f92090`); SimX arch configurable from scripts (`4dfe44e`). |
 | **6. Trust the bench (Gate-0)** | 2026-06 | Derived widths (`5f19a67`), decoded-EBREAK completion (`a46a109`), real instr count (`b14efc5`), honest error gate (`df6206e`), riscv-dv end-to-end (`5f6ddff`), passive commit probe, INV-1/INV-2 root-causes, negative fault-injection validation. History rewritten 2026-06-28 to strip attribution trailers. |
-| **7. Coverage closure** | 2026-06 → 2026-07-10 | Functional 100% (17 covergroups, `d65441d`/`ff37765`); config-aware exclusion generator (`ae809f4`); two per-config banks; total 79.20→**91.00%** (`199401c`…`6e6a81b`); bidirectional scoreboard (`fe10b83`); 2CL divergence investigation. |
-| **8. Industrial upgrade** | 2026-07-14 → now | RVVI lockstep A0 (`7aac709`) → divergence/multi-core (`eb08c04`) → first-divergence pinpoint (`b029fe7`/`28c84ab`) → SimX fetch-bug fix (`6dfe665`) → RVVI load-bus, residual 0 (`2dd48ea`) → interrupt-timing boundary characterized (`2614ee0`). |
+| **7. Coverage closure** | 2026-06 → 2026-07-10 | *(historical row — these figures are SUPERSEDED, see the top block.)* Weighted covergroup metric 100% (17 covergroups, `d65441d`/`ff37765`); config-aware exclusion generator (`ae809f4`); two per-config banks; total 79.20→**91.00%** (`199401c`…`6e6a81b`); bidirectional scoreboard (`fe10b83`); 2CL divergence investigation. |
+| **8. Industrial upgrade** | 2026-07-14 → 2026-08-06 | RVVI lockstep A0 (`7aac709`) → divergence/multi-core (`eb08c04`) → first-divergence pinpoint (`b029fe7`/`28c84ab`) → SimX fetch-bug fix (`6dfe665`) → RVVI load-bus, residual 0 (`2dd48ea`) → interrupt-timing boundary characterized (`2614ee0`). |
+| **9. Methodology repairs** | 2026-08-07 → 2026-08-15 | B2 scoreboard collapsed to a single source of truth (`f279357`); Spike independent base-ISA audit, 11,076/11,076 agree (`8e1a3b2`); per-config kernel rebuild — kernels had been compiled for one topology regardless of the requested config (OBS-028, `3ffa321`); OBS-027 methodology defect resolved ⇒ the four "expected" 2CL failures all pass with real compares; device-sized grids in 7 kernels. |
+| **10. Coverage maximisation** | 2026-08-16 → 2026-08-17 | Toggle root-caused to the read-only **icache**, not the dcache (OBS-033/034); three targeted kernels (`isa_probe`, `unit_storm`, `storm_big`); **blocking hits-invariant merge gate** which found two waivers deleting real coverage; L2/L3 plumbed end-to-end and their hit paths covered for the first time via `cache_tier` (196,868 words byte-exact); OBS-032 resolved by measurement with the hypothesis falsified; OBS-035…039 filed. **Banks: 1CL 94.72%, 2CL 94.55%, 50/50 runs, 0 failures at both.** |
 
 ---
 
@@ -613,7 +615,7 @@ Closes Part I's two biggest open items.
 | `0984bdf` / `d65441d` / `ff37765` | TCU verification / FPU op-decode / TCU multi-warp + timing waivers |
 | `9fc45ae` `855f61e` `ae809f4` | RTL-cited structural exclusions + config-aware generator |
 | `6692541` | Coverage report (two banks) |
-| `199401c` `dcadb3d` `c525dfd` `6e6a81b` | Total-coverage push: vote_shfl, wide_stress+throttle, div_edge+flood-infra, flood run → 91.00% |
+| `199401c` `dcadb3d` `c525dfd` `6e6a81b` | Total-coverage push: vote_shfl, wide_stress+throttle, div_edge+flood-infra, flood run → 91.00% *(the 2026-07 bank; superseded)* |
 | `554080e` | SimX RVVI export (`simx_retire_t` + cosim DPI) — pre-built enabler for Part II |
 
 ### Key commits (branch / Part II)
@@ -672,6 +674,12 @@ Coverage Report Totals BY INSTANCES: Number of Instances 2247
     Toggles                     425432    334632     90800         1    78.65%
 Total coverage (filtered view): 91.00%
 ```
+
+> ⚠️ **The raw tool output in this appendix is the 2026-07-10 bank, reproduced exactly as the
+> 2026-07-16 audit verified it. It is EVIDENCE OF THAT AUDIT and is deliberately not updated —
+> altering archived tool output would defeat the purpose of archiving it.** For current
+> numbers re-run the same command against the present banks:
+> `vcover report -summary vortex_uvm_env/cov/bank_1CL_1C_4W_4T/merged.ucdb` → total 94.72%.
 
 `vcover report -summary vortex_uvm_env/cov/bank_2CL_2C_4W_4T/merged.ucdb`:
 
