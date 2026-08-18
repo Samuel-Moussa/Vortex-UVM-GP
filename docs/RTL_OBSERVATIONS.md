@@ -2100,6 +2100,38 @@ Vortex to local folder". Classified by real code lines vs commented-out dead blo
 Neither change is unreasonable as bring-up engineering. What is wrong is that they were undisclosed,
 and that they weaken checkers in a project whose central claim is that its checkers can fail.
 
+**✅ MEASURED 2026-08-18 — THE UPSTREAM ORIGINAL WAS TRIED AND IT FAILS. OUR VERSION IS KEPT.**
+The upstream HEAD file (`d76b7f24e`; byte-identical to the pin in this module — upstream has NOT
+changed it) was swapped in, rebuilt at 1CL, and run on `vecadd_lite`:
+
+| result | value |
+|---|---|
+| UVM verdict | `*** TEST PASSED ***`, `UVM_ERROR: 0` |
+| RTL assertions | **12 firings** |
+| Harness verdict | **`TEST FAILED — 12 RTL assertion error(s)`, exit code 2** |
+
+**All 12 fire at 5 ns, 15 ns and 25 ns**, on `icache…bank.mshr_pending_size.g_size_gt1.g_wide_step`
+and the dcache equivalent, lines 85/86. That is the ISSUE-3 signature EXACTLY as reported during
+bring-up, unchanged.
+
+**⚠ A PREDICTION OF MINE WAS WRONG, RECORDED SO IT IS NOT REPEATED:** I expected INV-2 (reset now
+held until the DCR bootstrap handshake, `e8ca365`) to have removed the X-on-reset window that makes
+these fire. **It did not.** The firings are identical in time and location to the original report.
+Do not re-run this experiment expecting a different answer without first changing something about
+the reset or X behaviour at time 0.
+
+**What this changes about the entry above.** Our modification is **not gratuitous** — with the
+upstream file the A5 gate fails EVERY run, so the bench could not operate at all. That is a real
+justification, and it was missing from this entry. What remains true is that our fix is **broader
+than necessary**: it guards on `incr`/`decr` being unknown, which also disables the check during
+normal operation, when an X on those inputs would indicate a genuine defect. The narrower fix — gate
+on `reset` / X-on-`reset`, leaving the data-path check armed — is identified but **NOT tested**, and
+must not be described as validated.
+
+**Decision (2026-08-18): KEEP OURS.** Tried, measured, failed, reverted; `git status` clean, md5
+verified against the pre-swap backup. The full-suite trial was not run because the single smoke test
+already failed the acceptance rule.
+
 **⚠ RTL IS TO BE LEFT AS IS (decision, 2026-08-17).** No revert, no re-fix. This entry is the
 disclosure, not a work item. Consequently the papers and any report MUST describe the DUT as
 "Vortex `7a52ee5` with 18 locally modified RTL files (see OBS-040)", never as unmodified upstream,
