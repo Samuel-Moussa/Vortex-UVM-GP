@@ -45,7 +45,16 @@ stage()  {
     # make normalizes any recipe failure to rc=2, so classify from the transcript:
     # RTL-assert failures leave "# ** Error:" lines; anything else is UVM/verdict.
     local why="UVM/verdict"
-    grep -q "^# \*\* Error" results/latest/logs/simulation.log 2>/dev/null && why="RTL assertion"
+    # OBS-042: the TB's own cycle-budget timeout prints with the SAME "# ** Error:"
+    # prefix Questa uses for RTL assertion failures, so the generic test below cannot
+    # tell them apart and used to blame the DUT for our budget being too small. Test
+    # the timeout signature FIRST and label it as a budget problem, which is what it
+    # is. Never report a TB timeout as an RTL assertion -- that is a DUT accusation.
+    if grep -q "TIMEOUT after [0-9]* cycles" results/latest/logs/simulation.log 2>/dev/null; then
+      why="TIMEOUT (TB cycle budget, NOT the DUT)"
+    elif grep -q "^# \*\* Error" results/latest/logs/simulation.log 2>/dev/null; then
+      why="RTL assertion"
+    fi
     echo "  -> FAILED ($why) — UCDB NOT staged"
     grep -m1 "^# \*\* Error" results/latest/logs/simulation.log 2>/dev/null | sed 's/^/     /'
     FAILED=$((FAILED+1))
@@ -75,7 +84,16 @@ clear_stale_dv_lock(){
     echo "  (clearing stale riscv-dv vlog lock, dead owner pid=$p)"; rm -f "$L"
   fi
 }
-runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=600000 >"$LOGDIR/rv_$1.log" 2>&1; stage $?; }
+# riscv-dv cycle budget. MEASURED 2026-08-18 at 2CL with L2+L3 ENABLED, not guessed
+# (guessing a budget is what produced OBS-042). Actual completion cycles:
+#   jump_stress 638,542 | mmu_stress 755,150 | non_compressed 1,767,248
+#   full_interrupt 1,767,774 | loop 1,930,241 | rand_instr 2,230,168  <- MAX
+# The old value was 600,000: it fit only the two cheapest profiles and was cutting
+# the other four off at roughly a third of their run. The distribution is bimodal
+# (2 near 0.7M, 4 near 1.8-2.2M), so the budget MUST be sized from the max, never
+# from a typical case. 3x the measured max, rounded up.
+RV_TIMEOUT="${RV_TIMEOUT:-6700000}"
+runrv(){ echo "=== sim-only riscv-dv $1 ==="; clear_stale_dv_lock; make sim-only TEST=random_instruction_stress_test PROGRAM="$1" RISCV_DV_REGEN=1 $CFG TIMEOUT=$RV_TIMEOUT >"$LOGDIR/rv_$1.log" 2>&1; stage $?; }
 # regression (Ahmad's MSCRATCH kernel-launch harness): basic verifies DUT-vs-SimX;
 # diverge/sgemm/dogfood run-to-completion co-sim but classify UNVERIFIABLE (spawn).
 runr()  { echo "=== sim-only regression PROGRAM_KIND=$1 ==="; make sim-only TEST=regression_test PROGRAM_KIND="$1" ${2:-} $CFG TIMEOUT=10000000 >"$LOGDIR/r_$1.log" 2>&1; stage $?; }
