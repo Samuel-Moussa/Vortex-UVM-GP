@@ -2232,3 +2232,36 @@ regenerated to hash `732adb3a` in **three separate runs on three different days*
 better, make it per-run like `results/run_suite_logs_<config>_<date>/`, which the banking convention
 already does by hand afterwards). Until then: **check the mtime of any log in that directory before
 drawing a conclusion from it.**
+
+---
+
+## OBS-044 — runs staged TWICE under two different keys when a test is run outside the suite and then collected
+
+**Class:** TB BOOKKEEPING · **Disposition: OPEN (numbers unaffected)** · **Found:** 2026-08-18,
+merging the targeted L2/L3 re-runs.
+
+**What we saw.** After re-running 6 riscv-dv profiles standalone and then calling
+`merge_coverage.sh --collect` on their run directories, `cov/staging/` held **57** UCDBs where 51
+were expected — with **6 exact md5 duplicate pairs**.
+
+**Mechanism — two staging keys for the same run:**
+* `simulate.sh` auto-stages every passing run as `<test>_<program>.ucdb`
+  (e.g. `random_instruction_stress_test_riscv_loop_test.ucdb`).
+* `run_suite.sh` / `merge_coverage.sh --collect` stage by run directory as
+  `<date>_<run>_<test>.ucdb` (e.g. `20260818_run_161951_random_instruction_stress_test.ucdb`).
+Inside the suite this is invisible, because `--fresh` clears staging first and every run arrives by
+one path. Run a test by hand and then collect it, and it is staged under BOTH names.
+
+**Impact: none on coverage, real on bookkeeping.** Coverage is a set union, so merging identical
+data twice cannot change a covered-bin count — verified directly here: the 57-UCDB merge and the
+deduplicated 51-UCDB merge produce **identical** results (total 93.18%, bins 1042/1092). What it
+does corrupt is the run inventory (a bank appearing to contain 57 runs when 51 were executed) and
+it adds `vcover-6854` duplicate-test-record noise (see OBS-039).
+
+**Handling this time:** the 6 auto-staged copies were deleted by name, staging re-verified at 51
+with 0 md5 duplicates, and the bank re-merged from the clean set.
+
+**Disposition: OPEN.** Fix: make the two paths share one key, or have `--collect` skip a run whose
+UCDB is already staged under any key (md5 compare is sufficient and cheap). Until then, after any
+out-of-suite run + collect, check `ls cov/staging/*.ucdb | wc -l` against the expected count and
+`md5sum ... | uniq -d` before banking.
