@@ -2297,3 +2297,69 @@ with 0 md5 duplicates, and the bank re-merged from the clean set.
 UCDB is already staged under any key (md5 compare is sufficient and cheap). Until then, after any
 out-of-suite run + collect, check `ls cov/staging/*.ucdb | wc -l` against the expected count and
 `md5sum ... | uniq -d` before banking.
+
+---
+
+## OBS-045 — THE DISTRIBUTED RESET IS X FOR ONE CLOCK: `VX_reset_relay` registers reset in a flop that nothing resets
+
+**Class:** RTL BUG (X-generating reset distribution) · **Disposition: open — needs-RTL-fix** ·
+**Found:** 2026-08-18, root-causing why upstream's `VX_pending_size` assertions fire (OBS-040).
+
+**What we saw.** With upstream's unmodified `VX_pending_size.sv`, 12 assertions fire at **5 ns,
+15 ns and 25 ns** on `icache…bank.mshr_pending_size` and the dcache equivalent. Top-level reset is
+asserted from time 0 (`vortex_tb_top.sv:54` `logic reset_n = 1'b0;` → `.reset(!reset_n)` = 1), so the
+`if (reset)` in the counter should have taken the reset branch and never evaluated the assertions.
+
+**Root cause.** The cache does not receive the top-level reset directly. `VX_socket.sv:87`:
+```systemverilog
+`RESET_RELAY (icache_reset, reset);      // -> VX_reset_relay #(.N(1), .MAX_FANOUT(0))
+```
+and `VX_reset_relay.sv:25-33` takes the `g_relay` branch (the guard
+`MAX_FANOUT >= 0 && N > (MAX_FANOUT + MAX_FANOUT/2)` is `0>=0 && 1>0` = TRUE, F=1, R=1), which
+**registers** the reset:
+```systemverilog
+`PRESERVE_NET reg [R-1:0] reset_r;        // no initial value
+always @(posedge clk) begin
+    reset_r[i] <= reset;                  // nothing resets THIS flop
+end
+assign reset_o[i] = reset_r[i / F];
+```
+`reset_r` is a flop with **no initializer and no reset**, so `reset_o` is **X from time 0 until the
+first posedge propagates the real reset**. Every module behind a relay therefore sees an UNKNOWN
+reset for at least one clock. `if (X)` takes the ELSE branch, the counter's assertions evaluate with
+X operands, the comparison yields X, and X is not true — so they fire. The 5/15/25 ns pattern is
+successive posedges while the relay chain fills.
+
+**⚠ THIS CORRECTS OBS-040's FRAMING.** That entry treated our `$isunknown` guard as suppressing a
+testbench nuisance. It is not: **upstream's assertion was reporting a real property of the design.**
+Our guard silenced a correct report. The guard is still the reason the bench can run at all
+(measured: upstream's file fails every run), but the thing it silences is a genuine X window, not
+noise.
+
+**Why it matters beyond the assertion.**
+1. **Simulation/silicon divergence.** In simulation the window is X. In silicon the flop powers up
+   at some definite value — possibly the DEASSERTED one, in which case a module behind a relay is
+   briefly NOT held in reset while the rest of the design is. Nothing in this campaign would see it:
+   X-propagation analysis is absent (and our `VX_pending_size` initializers actively mask X).
+2. **It is the OBS-025 pattern again.** OBS-025 already records unreset elements in the DCR
+   broadcast tree, benign only because a condition is false. This is the same class on the CACHE
+   reset path, and it is not benign — it demonstrably produces X.
+3. **Scope.** Every `` `RESET_RELAY `` / `` `RESET_RELAY_EX `` site is affected, not just the icache.
+
+**Fix options.**
+* **(a) Declaration initializer** `reg [R-1:0] reset_r = {R{1'b1}};` — removes the X in simulation
+  only; ASIC flops still power up unknown. This MASKS rather than fixes, and is the same criticism
+  levelled at our `VX_pending_size` change.
+* **(b) Async-assert / sync-deassert synchroniser** (textbook, chosen):
+  ```systemverilog
+  always @(posedge clk or posedge reset)
+      if (reset) reset_r <= '1; else reset_r <= '0;
+  ```
+  `reset_o` asserts immediately whenever `reset` asserts, regardless of flop state, and deasserts
+  synchronously. No X window in simulation OR silicon. Reset asserts one cycle EARLIER than before
+  (strictly more reset, not less).
+
+**Disposition: open — trying (b) 2026-08-18.** Acceptance: with (b) applied, upstream's UNMODIFIED
+`VX_pending_size.sv` must run clean (0 counter assertions) — i.e. the assertions pass for the RIGHT
+reason rather than being guarded off. If that holds, our local `VX_pending_size` modification can be
+retired and the provenance problem in OBS-040 shrinks accordingly.
