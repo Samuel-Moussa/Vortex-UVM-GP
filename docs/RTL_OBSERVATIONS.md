@@ -2359,6 +2359,48 @@ noise.
   synchronously. No X window in simulation OR silicon. Reset asserts one cycle EARLIER than before
   (strictly more reset, not less).
 
+**✅ FIX (b) APPLIED AND VALIDATED 2026-08-18.**
+
+| check | result |
+|---|---|
+| Smoke test (`vecadd_lite`, upstream UNMODIFIED `VX_pending_size`) | **12 counter assertions -> 0**, TEST PASSED |
+| Gate-0 `negative_result_test` `+INJECT_FAULT` | **RED — "checker DETECTED the injected fault at addr=0x800075d8 … Verdicts are not vacuous"** |
+| Gate-0 `negative_dropped_store_test` `+DROP_STORE` | **RED — "DROPPED STORE addr=0x800075d8 DUT(mem)=0x0 SimX=0x600dc0de"** |
+| Full 1CL suite | **51 staged, 0 FAILED**, total **94.72%**, hits-invariant held |
+| Counter assertions across the whole suite | **0** |
+
+The assertions are now ARMED (upstream's own, unguarded) and SILENT, which is a different statement
+from guarded and silent. **Our local `VX_pending_size` modification has been retired** — that file
+now matches upstream byte-for-byte. The modification moved from the CHECKER to the DEFECT.
+
+**⚠ AN UNEXPECTED AND INSTRUCTIVE COVERAGE EFFECT — BRANCH COVERAGE WENT DOWN.**
+
+| | relay fixed (51 runs) | previous (50 runs, X window) |
+|---|---|---|
+| Branches | **2663 / 2817 = 94.53%** | 2673 / 2811 = 95.09% |
+| Toggles | 344,353 = 83.34% | 342,268 = 82.83% |
+| Total | 94.72% | 94.72% |
+
+The +6 branch denominator is this fix's own `if (reset)/else`. The **−10 COVERED branches** is the
+interesting part: during the X-reset cycle, `if (X)` took the ELSE branch, so modules behind a relay
+were executing their NORMAL-OPERATION paths during what should have been reset — and those
+executions were **counted as covered branches**. With reset correct, they are not taken, and that
+coverage disappears. ⇒ **A small part of the previously-banked branch coverage was obtained from a
+state that cannot legitimately occur. 94.53% is the more honest number.**
+
+**⚠ ATTRIBUTION CAVEAT — do not quote these deltas as pure relay-fix effects.** Two variables
+changed between the two banks: the relay fix AND `cache_tier` newly running at 1CL (51 vs 50 runs).
+The toggle rise in particular is more plausibly `cache_tier`'s ~1.5 MB of traffic. A controlled
+one-variable re-run was NOT done.
+
+Bank: `cov/bank_1CL_1C_4W_4T_relayfix_20260818/` · logs `results/run_suite_logs_1CL_relayfix_20260818/`.
+
+**⚠ THE OTHER TWO BANKS (2CL, 2CL+L2/L3) WERE TAKEN ON THE X-WINDOW DESIGN** and have NOT been
+re-run. They remain valid as measurements of that design; they are not comparable to this one on
+branches. Decide before the paper whether to re-bank.
+
+**Disposition: FIXED (local); still present upstream — reportable.** Original text follows.
+
 **Disposition: open — trying (b) 2026-08-18.** Acceptance: with (b) applied, upstream's UNMODIFIED
 `VX_pending_size.sv` must run clean (0 counter assertions) — i.e. the assertions pass for the RIGHT
 reason rather than being guarded off. If that holds, our local `VX_pending_size` modification can be
