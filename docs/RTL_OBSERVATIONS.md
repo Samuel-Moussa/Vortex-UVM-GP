@@ -2196,3 +2196,39 @@ timeout signature *before* the generic `# ** Error` test, and label it `TIMEOUT 
 "RTL assertion"; (b) measure what the riscv-dv profiles actually need with L2+L3 on and set the
 budget to ≥3x that, rather than guessing; (c) only then re-run the L2/L3 bank. Do NOT raise the
 budget blindly — a budget chosen without measurement is what produced this entry.
+
+---
+
+## OBS-043 — `results/run_suite_logs/` is never cleared, so logs from tests that did NOT run in this suite read as current results
+
+**Class:** TB REPORTING HAZARD · **Disposition: OPEN** · **Found:** 2026-08-18, while analysing the
+L2/L3 re-runs — it produced a false finding that had to be retracted.
+
+**What happened.** `rv_riscv_pmp_test.log` sits in `results/run_suite_logs/` and reports a clean run
+of 158,461 cycles. It looks like part of the current bank. It is not: `riscv_pmp_test` was **dropped
+from the suite** as the FW-1b byte-identical duplicate (`eb8a630`), so it has not run since
+**2026-08-12** — the log's mtime. Comparing it against `riscv_non_compressed_instr_test` from the
+2026-08-18 L2/L3 run (1,767,248 cycles) appeared to show an 11x discrepancy between two programs
+FW-1b records as byte-identical, i.e. an apparent refutation of FW-1b. **There is no discrepancy.**
+Two different suites, six days and one whole cache configuration apart.
+
+**Mechanism.** `run_suite.sh` writes each run's transcript to a FIXED filename
+(`$LOGDIR/rv_<test>.log`, `k_<kernel>.log`, ...) and `$LOGDIR` is created with `mkdir -p` but never
+emptied. A file is therefore overwritten only if that same test runs again. Any test removed from
+the suite, renamed, or skipped leaves its last transcript behind indefinitely, indistinguishable by
+name from the current run's output.
+
+**Why it matters.** The banked UCDBs are unaffected — staging is rebuilt per suite with
+`merge_coverage.sh --fresh`, so no stale coverage can enter a bank. The damage is to ANALYSIS: the
+log directory is what we read when root-causing, and it silently mixes runs from different
+configurations. Here it nearly produced a documented "FW-1b refuted" claim from a file that predates
+the configuration under discussion.
+
+**Positive result found by the same check (worth keeping):** `riscv_non_compressed_instr_test`
+regenerated to hash `732adb3a` in **three separate runs on three different days**. Seed control
+(FW-1) is reproducible in practice, not just in principle.
+
+**Disposition: OPEN.** Fix: clear or timestamp `$LOGDIR` at suite start (`rm -f "$LOGDIR"/*.log`, or
+better, make it per-run like `results/run_suite_logs_<config>_<date>/`, which the banking convention
+already does by hand afterwards). Until then: **check the mtime of any log in that directory before
+drawing a conclusion from it.**
