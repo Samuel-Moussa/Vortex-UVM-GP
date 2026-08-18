@@ -2147,3 +2147,52 @@ could not leave those identical.
 genuinely does affect a top-level width. It is harmless here only because we set it to 16,
 which is already the RTL default (`VX_config.vh:628`) — i.e. that override is a no-op. Anyone
 changing `MSHR_SIZE` must expect real structural consequences. See OBS-032.
+
+---
+
+## OBS-042 — the suite reports a TESTBENCH TIMEOUT as "FAILED (RTL assertion)", pointing the blame at the DUT
+
+**Class:** TB REPORTING DEFECT (methodology) · **Disposition: OPEN** · **Found:** 2026-08-18, first
+L2/L3 bank attempt.
+
+**What we saw.** The 2CL + L2 + L3 suite reported `SUITE VERDICT: 45 staged, 6 FAILED`, and every
+one of the six printed:
+```
+  -> FAILED (RTL assertion) — UCDB NOT staged
+```
+All six are riscv-dv (`jump_stress`, `non_compressed_instr`, `loop`, `rand_instr`, `mmu_stress`,
+`full_interrupt`). **Not one is an RTL assertion.** Every one is:
+```
+** Error: [TB_TOP @ 6003845000] TIMEOUT after 600000 cycles!
+```
+
+**Mechanism.** `scripts/run_suite.sh:48` classifies a non-zero make result by grepping the
+transcript:
+```bash
+grep -q "^# \*\* Error" results/latest/logs/simulation.log && why="RTL assertion"
+```
+The TB's own timeout error is printed with the same `# ** Error:` prefix Questa uses for RTL
+assertion failures, so the classifier cannot tell them apart and defaults to blaming the RTL.
+
+**Why this is serious rather than cosmetic.** "FAILED (RTL assertion)" is a DUT accusation. The
+truth here is that OUR cycle budget was too small for a deeper cache hierarchy. Had this line been
+taken at face value in a report or a paper, it would have claimed six design failures that do not
+exist. This is the same class as OBS-027, where a methodology defect masqueraded as four DUT
+divergences and was believed for weeks — and it is the reason that entry insists on reading the
+transcript rather than the verdict label.
+
+**The underlying (benign) cause.** With L2 and L3 enabled, every L1 miss traverses two additional
+cache levels, so the same program needs materially more cycles. The riscv-dv budget is
+`TIMEOUT=600000` (`run_suite.sh`, riscv-dv runners), which sufficed at 2CL with both levels in
+passthrough and does not with them enabled. Same family as the measured budget shortfalls already
+on record (`text_big` 490,468; `barrier_sync_test` 164,602; `wide_stress`).
+
+**Consequence for the bank.** The resulting `93.04%` at 45/51 staged is **NOT a valid bank** and
+must not be quoted: an incomplete merge is not a bank with known exclusions, and the six missing
+runs are exactly the random-stimulus half of the suite.
+
+**Disposition: OPEN.** Fixes, in order: (a) classify the transcript properly — match the TB's
+timeout signature *before* the generic `# ** Error` test, and label it `TIMEOUT (budget)`, never
+"RTL assertion"; (b) measure what the riscv-dv profiles actually need with L2+L3 on and set the
+budget to ≥3x that, rather than guessing; (c) only then re-run the L2/L3 bank. Do NOT raise the
+budget blindly — a budget chosen without measurement is what produced this entry.
