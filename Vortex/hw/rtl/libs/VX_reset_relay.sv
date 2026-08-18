@@ -26,9 +26,25 @@ module VX_reset_relay #(
         localparam F = `UP(MAX_FANOUT);
         localparam R = N / F;
         `PRESERVE_NET reg [R-1:0] reset_r;
+        // OBS-045: this flop previously had NO initial value and NOTHING reset it
+        // (`always @(posedge clk) reset_r[i] <= reset;`), so reset_o was X from
+        // time 0 until the first posedge propagated the real reset. Every module
+        // behind a RESET_RELAY therefore saw an UNKNOWN reset for one clock, an
+        // `if (reset)` took the ELSE branch, and any assertion in that branch
+        // evaluated with X operands -- which is exactly what upstream's
+        // VX_pending_size counter assertions were correctly reporting.
+        // Now an async-assert / sync-deassert reset synchroniser: reset_o asserts
+        // immediately whenever reset asserts, regardless of flop state, and
+        // deasserts synchronously. No X window in simulation OR in silicon.
+        // Reset now asserts one cycle EARLIER than before (strictly more reset,
+        // never less), so no module can observe less reset than it used to.
         for (genvar i = 0; i < R; ++i) begin : g_reset_r
-            always @(posedge clk) begin
-                reset_r[i] <= reset;
+            always @(posedge clk or posedge reset) begin
+                if (reset) begin
+                    reset_r[i] <= 1'b1;
+                end else begin
+                    reset_r[i] <= 1'b0;
+                end
             end
         end
         for (genvar i = 0; i < N; ++i) begin : g_reset_o

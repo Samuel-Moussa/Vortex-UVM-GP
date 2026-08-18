@@ -61,21 +61,14 @@ module VX_pending_size #(
 
     end else begin : g_size_gt1
 
-        // reg empty_r, alm_empty_r;
-        // reg full_r, alm_full_r;
-
-        reg empty_r    = 1'b1;
-        reg alm_empty_r = 1'b1;
-        reg full_r     = 1'b0;
-        reg alm_full_r = 1'b0;
+        reg empty_r, alm_empty_r;
+        reg full_r, alm_full_r;
 
         if (INCRW != 1 || DECRW != 1) begin : g_wide_step
 
             localparam DELTAW = `MIN(SIZEW, `MAX(INCRW, DECRW)+1);
 
-            // logic [SIZEW-1:0] size_n, size_r;
-            logic [SIZEW-1:0] size_n;
-            logic [SIZEW-1:0] size_r = '0;
+            logic [SIZEW-1:0] size_n, size_r;
 
             wire [DELTAW-1:0] delta = DELTAW'(incr) - DELTAW'(decr);
 
@@ -89,11 +82,8 @@ module VX_pending_size #(
                     alm_full_r  <= 0;
                     size_r      <= '0;
                 end else begin
-                     `ASSERT((!$isunknown(incr) && !$isunknown(decr)) ? ((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r)) : 1, ("runtime error: counter overflow"));
-                     `ASSERT((!$isunknown(incr) && !$isunknown(decr)) ? ((DELTAW'(incr) >= DELTAW'(decr)) || (size_n <= size_r)) : 1, ("runtime error: counter underflow"));
-                    // REVERT lines 85-86 back to:
-                   // `ASSERT((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
-                   // `ASSERT((DELTAW'(incr) >= DELTAW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
+                    `ASSERT((DELTAW'(incr) <= DELTAW'(decr)) || (size_n >= size_r), ("runtime error: counter overflow"));
+                    `ASSERT((DELTAW'(incr) >= DELTAW'(decr)) || (size_n <= size_r), ("runtime error: counter underflow"));
                     empty_r     <= (size_n == SIZEW'(0));
                     full_r      <= (size_n == SIZEW'(SIZE));
                     alm_empty_r <= (size_n <= SIZEW'(ALM_EMPTY));
@@ -108,7 +98,7 @@ module VX_pending_size #(
 
             localparam ADDRW = `LOG2UP(SIZE);
 
-            reg [ADDRW-1:0] used_r = '0;
+            reg [ADDRW-1:0] used_r;
 
             wire is_alm_empty   = (used_r == ADDRW'(ALM_EMPTY));
             wire is_alm_empty_n = (used_r == ADDRW'(ALM_EMPTY+1));
