@@ -12,7 +12,84 @@ or a banked report. Nothing here is asserted without a citable artifact.
 
 ---
 
-# ⚠️ SUPERSEDING RESULT BLOCK — 2026-08-17 (READ BEFORE QUOTING ANY NUMBER)
+# ⚠️ SUPERSEDING RESULT BLOCK — 2026-08-19 (READ THIS FIRST; IT SUPERSEDES THE 08-17 BLOCK BELOW)
+
+**THE HEADLINE OF THIS MILESTONE IS AN RTL DEFECT, NOT A COVERAGE NUMBER.**
+
+## Four banks (never blended; each is one consistent compile)
+
+| bank | total | runs | design |
+|---|---|---|---|
+| `bank_1CL_1C_4W_4T_relayfix_20260818` | **94.72%** | **51/51, 0 FAILED** | **reset defect FIXED** |
+| `bank_1CL_1C_4W_4T` | 94.72% | 50/50, 0 FAILED | pre-fix (X window) |
+| `bank_2CL_2C_4W_4T` | 94.55% | 50/50, 0 FAILED | pre-fix (X window) |
+| `bank_2CL_2C_4W_4T_L2L3_20260818` | 93.18% | 51/51, 0 FAILED | pre-fix, **L2+L3 ENABLED** |
+
+**Decision 2026-08-19: the 2CL and L2/L3 banks are NOT being re-run on the fixed design** (~28h to
+chase a sub-1% branch difference while totals are unchanged). They are valid measurements of the
+pre-fix design and are labelled as such. **Do not compare them to the relayfix bank on BRANCHES.**
+
+## OBS-045 — the reset distribution produced an X window (found, fixed, still upstream)
+
+`VX_reset_relay.sv` registered reset in a flop **nothing resets**, so `reset_o` was **X from time 0
+until the first posedge** at EVERY `` `RESET_RELAY `` site. Every module behind a relay saw an
+UNKNOWN reset for one clock; `if (X)` took the ELSE branch. Fixed with an async-assert /
+sync-deassert synchroniser. **The defect is present in the current upstream release** — reportable
+alongside OBS-012.
+
+**The discovery chain is the citable part:** upstream's `VX_pending_size` counter assertions fired
+during bring-up → they were guarded off with `$isunknown` so the bench could run → that guard hid
+the X window for months → restoring the assertion and root-causing it exposed the defect. **Our
+local `VX_pending_size` modification is now RETIRED** (byte-identical to upstream, assertions ARMED
+and SILENT, 12 firings → 0). The modification moved from the CHECKER to the DEFECT.
+
+## ⚠ Fixing the bug LOWERED a coverage number, and the lower number is the correct one
+
+Branches **95.09% → 94.53%** (10 fewer COVERED). During the X-reset cycle, modules behind a relay
+executed their NORMAL-OPERATION paths, and those executions were **counted as covered branches**.
+With reset correct they no longer occur. ⇒ **part of the previously-banked branch coverage came from
+a state that cannot legitimately arise — something no coverage metric can reveal about itself.**
+⚠ Two variables changed (relay fix AND `cache_tier` newly at 1CL), so the delta is INDICATIVE, not
+isolated; a controlled one-variable run was not done. Say so if it is quoted.
+
+## L2/L3 exercised for the first time in the project
+
+Both levels had always been PASSTHRU — the suite had no path from its config to the compile. After
+plumbing it: **all four shared-cache instances covered on hit AND miss** (L2 cluster0 15,268 /
+cluster1 15,323 / L3 bank0 13,464 / bank1 14,304) and a **196,868-word byte-exact** end-state
+compare (`cache_tier`) — 6x the previous largest in the suite. Honest summary: the hierarchy was
+**reached and validated, not thoroughly exercised** (conditions 79.27% there: one kernel of 51
+targets that control logic).
+
+## Other results this milestone
+
+* **Blocking hits-invariant merge gate** — fails the merge if a structural waiver changes a COVERED
+  bin count. Found two real waiver defects, one active for weeks.
+* **Measured `RV_TIMEOUT` = 6.7M** (3x the measured 2,230,168 max). The old 600k was cutting four of
+  six riscv-dv profiles at ~1/3 of their run. **OBS-042:** the suite had been reporting those TB
+  timeouts as *"FAILED (RTL assertion)"* — a DUT accusation for our own budget shortfall.
+* **Negative result (publishable):** enlarging a kernel's working set 16x *reduced* contention
+  coverage (13→11 terms; +4→+0 in a second experiment). Contention comes from **issue density, not
+  miss volume**.
+* **⚠ A vacuous Gate-0 pass was nearly accepted** — the negative tests report PASSED when the
+  injection plusargs are absent, because nothing is injected. **Verify the injection message, never
+  the verdict.** Validated properly: both RED at `0x800075d8`.
+* **RTL provenance: 18 files differ from upstream `7a52ee5`** (OBS-040). `VX_pending_size` left the
+  list; `VX_reset_relay` joined it. Composition improved; the count did not. **Both papers now carry
+  a provenance disclosure section — do not publish without it.**
+* **Upstream comparison:** pin 2025-09-22 vs HEAD 2026-07-29 = 2,127 commits, 302 RTL files, FPU
+  restructured. **OBS-011 was independently fixed upstream** (external corroboration). **OBS-012
+  (JALR LSB) is STILL PRESENT at HEAD** — a live defect in the current release.
+
+## New observations this milestone
+OBS-039 (run count ≠ program count) · OBS-040 (18 modified RTL files) · OBS-041 (refutes the
+inherited MREQ_SIZE port-width claim) · OBS-042 (timeout misreported as RTL assertion) ·
+OBS-043 (stale suite logs; caused a retracted false finding) · OBS-044 (double-staging) ·
+OBS-045 (the reset X window). Corrections to OBS-011, OBS-032, OBS-040.
+
+---
+
+# ⚠️ SUPERSEDING RESULT BLOCK — 2026-08-17 (superseded by the block above; still accurate on the 50-run banks)
 
 **The 2026-07-16 audit below remains valid FOR THE BANKS THAT EXISTED THEN.** It is a dated
 snapshot and is deliberately not rewritten — rewriting an audited document in place would
