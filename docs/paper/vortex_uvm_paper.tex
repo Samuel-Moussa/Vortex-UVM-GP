@@ -76,7 +76,12 @@ RTL-cited structural exclusions. Beyond the methodology, we report the
 defects and limitations the flow exposed in \emph{both} models: RTL
 findings including a JALR target-LSB ISA deviation whose skewed PC
 propagates into architectural results, a non-scaling watchdog macro
-(\code{1**N}), and silent misaligned-access corruption; and
+(\code{1**N}), silent misaligned-access corruption, and a reset relay
+that drives an \emph{unknown} reset for one cycle into every module
+behind it---the last found by restoring an assertion that had been
+guarded off during bring-up, and whose repair \emph{reduced} branch
+coverage because part of that coverage had been obtained from the
+unknown-reset state itself; and
 reference-model findings including a misaligned-fetch bug found by the
 lockstep itself. We close with a prioritized enhancement roadmap for
 both the RTL and the reference model.
@@ -768,7 +773,7 @@ indicative rather than isolated.)
 Every finding is maintained in an evidence-cited register shipped with
 the work (one entry per finding: what was seen, \code{file:line} and/or
 run evidence, classification, disposition). Table~\ref{tab:rtlobs}
-summarizes the RTL findings as R1--R9; the substantive entries follow.
+summarizes the RTL findings as R1--R10; the substantive entries follow.
 
 \begin{table}[t]
 \caption{RTL findings (summary)}
@@ -788,9 +793,66 @@ R6 & One load $\to$ multiple commit records, overlapping masks & Quirk & handled
 R7 & uuid encodes flat core id + warp id & Quirk & exploited (\S\ref{sec:rules}) \\
 R8 & Load data not observable at commit arbiter & Observability & closed (LSU probe) \\
 R9 & Write path fire-and-forget (\code{bready} tied high) & Characteristic & cited exclusion \\
+R10 & Reset relay registers reset in a flop nothing resets; \code{reset\_o} is X for one cycle & Bug (X source) & fixed; still upstream \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{An unknown reset for one cycle, found by restoring a
+silenced assertion (R10)}
+\label{sec:r10}
+
+This finding is reported first because of \emph{how} it was found rather
+than what it is.
+
+The design distributes reset through a relay module. That module registers
+the incoming reset in a flip-flop which has no initial value and which
+nothing resets:
+
+\begin{lstlisting}
+`PRESERVE_NET reg [R-1:0] reset_r;   // no initial value
+always @(posedge clk) begin
+    reset_r[i] <= reset;             // nothing resets THIS flop
+end
+assign reset_o[i] = reset_r[i / F];
+\end{lstlisting}
+
+Its output is therefore unknown from time zero until the first clock edge,
+so every module instantiated behind a relay observes an \emph{unknown reset
+for one cycle}. A reset-conditional in such a module takes its non-reset
+branch---\code{if (X)} is not true---so logic intended to be held in reset
+executes, and any assertion inside that branch evaluates on unknown
+operands.
+
+The path to it is the point. A library counter in the same design ships
+with assertions checking for overflow and underflow. Those assertions fired
+during bring-up, at 5, 15 and 25\,ns, on the instruction- and data-cache
+miss-status counters. They were guarded off---rewritten to skip whenever
+their inputs were unknown---so that the environment could run, and the
+guard stayed for months. Restoring the original assertion and asking why it
+fired produced the diagnosis above. \textbf{The assertion had been correct
+the entire time}: it was reporting a real property of the design, and what
+had been suppressed was the report, not the problem.
+
+We replaced the relay with an asynchronous-assert, synchronous-deassert
+synchronizer, so that the relay output asserts whenever reset asserts
+regardless of flip-flop state. The counter assertions then pass with no
+guard at all---twelve firings become zero---and the local modification to
+the counter was retired in favour of the unmodified upstream file. A
+fifty-one-run regression passes with the assertions armed, and both
+fault-injection guards were re-confirmed to fail on injection. The defect
+is present in the current upstream release.
+
+Two observations generalize beyond this design. First, \textbf{a checker
+disabled to make a bench run is a checker whose findings are lost}, and the
+loss is silent and open-ended: here it was months, and the affected surface
+was every module behind a relay, not merely the one that happened to carry
+an assertion. Second, \textbf{fixing the defect reduced a coverage number}
+(Section~\ref{sec:provenance}): branch coverage fell because modules behind
+a relay had been executing their normal-operation paths during the unknown
+window, and those executions were counted as covered branches. No coverage
+metric can report that some of its own coverage came from a state that
+cannot legitimately arise.
 
 \subsection{JALR does not clear the target LSB (R1)}
 The RISC-V specification requires JALR to clear the least-significant
