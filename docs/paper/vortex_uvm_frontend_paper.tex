@@ -118,9 +118,9 @@ front-end work from back-end sign-off work.
 \subsection{What this paper does not claim}
 \label{sec:notclaim}
 We do not claim the design is verified, nor that it has been stressed.
-Neither is supportable. The randomized generator is seed-controlled and
-reproducible, but the committed regression runs one seed per profile,
-which is directed testing in a random costume. The bus responder always
+Neither is supportable. The randomized generator is seed-controlled, and we
+report a ten-seed sweep below---but that sweep produced no additional
+coverage, which sharpens rather than softens the limitation. The bus responder always
 returns a successful response, so no error-recovery path is exercised.
 There is no architectural exception or interrupt stimulus, no formal
 property verification, and no X-propagation or randomized-reset analysis.
@@ -401,6 +401,36 @@ coverage metric can reveal about itself. We report the lower figure as the
 correct one. (Two variables changed between those measurements, so the delta is
 indicative rather than isolated.)
 
+\subsection{Seed volume: a measured negative result}
+\label{sec:seedfarm}
+
+The committed regression pins one seed per profile, which is reproducible but
+is directed testing in a random costume. To measure what that costs, we swept
+ten seeds across all nine generator profiles---ninety additional runs.
+
+Every generated program was confirmed distinct by content hash before the
+result was interpreted; a seed sweep in which the seed silently fails to take
+effect produces ninety passing runs and is indistinguishable from a working
+one. Program lengths ranged from 4\,432 to 857\,190 cycles, a factor of 190,
+and a factor of four within a single profile.
+
+\textbf{All ninety runs passed}, which is a genuine robustness result: the
+design is demonstrably not tuned to the committed seed. \textbf{Coverage did
+not move.} Against the fifty-one-run baseline, assertion, branch, condition,
+statement and covergroup coverage were bit-identical, and toggle rose by
+0.06\%. Total coverage was unchanged at 94.7\%.
+
+We report this because the obvious remedy for weak randomization---run more
+seeds---was measured here and returned nothing. The binding constraint is the
+generator's \emph{reach}, not its sample count: it emits user-mode integer code
+with machine-mode control-register writes removed, so every seed explores the
+same region of the state space, and coverage saturates inside that region well
+before the tenth seed. No number of seeds reaches the exception paths or error
+responses that remain uncovered; those require different \emph{kinds} of
+stimulus, not more samples of one kind. Accordingly we separate stimulus
+\emph{volume} from stimulus \emph{diversity} in Table~\ref{tab:maturity}, and
+identify diversity as the open axis.
+
 % =========================================================================
 \section{Maturity by Axis}
 \label{sec:maturity}
@@ -426,7 +456,8 @@ Reference-model quality & Good, but \emph{not independent} \\
 Directed stimulus & Good \\
 Configuration breadth & Weak (three points) \\
 Coverage-model provenance & Moderate; not specification-traced \\
-Random stimulus volume & \textbf{Weak} (one seed per profile) \\
+Random stimulus volume & Moderate (10 seeds/profile) \\
+Random stimulus \emph{diversity} & \textbf{Weak} (one generator, one ISA subset) \\
 Error / exception verification & \textbf{Absent} \\
 Formal property verification & \textbf{Absent} \\
 X-propagation / reset randomization & \textbf{Absent} \\
