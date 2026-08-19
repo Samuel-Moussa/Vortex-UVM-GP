@@ -239,8 +239,9 @@ checkers and coverage at the bottom.
 % right: SimX (primary, live over DPI) + Spike (secondary, offline)
 \node[box, right=13mm of dut.east, anchor=west, minimum height=17mm] (simx)
   {\textbf{SimX} functional\\ reference (DPI-C)\\ per-config co-build};
-\node[passive, above=4mm of simx.north, anchor=south, minimum width=30mm] (spike)
-  {\textbf{Spike} independent ISS\\ base-ISA audit (offline)\\ \emph{scalar: warp0/lane0}};
+\node[passive, above=9mm of simx.north, anchor=south, minimum width=34mm] (spike)
+  {\textbf{Spike} independent ISS --- offline\\
+   base-ISA audit \emph{(warp0/lane0)}};
 % probes row: status left, commit mid, LSU right
 \node[passive] (status) at ($(dut.south)+(-19mm,-10mm)$) {status agent};
 \node[passive] (cprobe) at ($(dut.south)+(0mm,-10mm)$)  {commit probe};
@@ -285,13 +286,16 @@ checkers and coverage at the bottom.
   -- ($(ess.south)+(-4mm,0)$);
 % load-value feed back to SimX (lower rail, far-right lane)
 \draw[arr, dotted] ([xshift=8mm]lss.south) -- ++(0,-8mm)
-  -| ($(simx.east)+(5mm,0)$) -- (simx.east);
+  -| ($(simx.east)+(8mm,0)$) -- (simx.east);
 \node[below] at ($(lss.south)+(28mm,-8mm)$)
   {load-value feed (pass 2, \S\ref{sec:loadfeed})};
-% offline Spike audit: trace file out of the RVVI monitor, compared off-line
-\draw[tap] (rvvi.east) -- ++(30mm,0) |- (spike.east)
-  node[pos=0.25, right, font=\tiny, align=left]
-  {\shortstack[l]{\code{+LOCKSTEP\_TRACE}\\ (off by default)}};
+% offline Spike audit: trace exported from the RVVI monitor and compared
+% off-line. Routed in its OWN far-right lane, outside every box, so it never
+% crosses SimX or the load-value-feed lane.
+\coordinate (spikelane) at ($(simx.east)+(20mm,0)$);
+\draw[tap] (rvvi.east) -- ++(6mm,0) -| (spikelane) |- (spike.east);
+\node[font=\tiny, align=left, anchor=west] at ($(spikelane)+(1.5mm,-9mm)$)
+  {\code{+LOCKSTEP\_TRACE}\\ (off by default)};
 \end{tikzpicture}
 \caption{Environment architecture. Solid gray boxes are active UVM
 agents; dashed boxes are passive probes and offline tools (never
@@ -1059,10 +1063,13 @@ extensions) is planned, not done.
 \item \textbf{Unverifiable residue.} A minority of random-program runs
 remain unverifiable due to reference-model aborts; the abort-hardening
 sweep (Section~\ref{sec:enhance}) targets zero.
-\item \textbf{Structural coverage ceilings.} Toggle coverage plateaus
-near 78\% for root-caused structural reasons (write-through
-configuration, constant address high bits); we report the true value
-rather than gaming it.
+\item \textbf{Structural coverage ceilings.} Toggle coverage plateaus in
+the low 80s for root-caused structural reasons---dominated by a
+\emph{read-only instruction cache} whose write-data path is elaborated
+but undrivable (26\% of the whole gap from one subtree), plus
+write-through data caching and constant address high bits. We report the
+true value rather than gaming it, and we corrected our own attribution
+when measurement contradicted it (Section~\ref{sec:coverage}).
 \item \textbf{No trap architecture.} Exception-path verification is
 unimplementable on this DUT (there are no exceptions); the
 corresponding generator profiles are excluded as unimplementable
