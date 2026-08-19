@@ -80,6 +80,28 @@ case "${1:-}" in
               # unique staged name from the run dir, so re-collecting overwrites
               # the same test rather than double-counting it.
               name="$(echo "$r" | tr '/' '_').ucdb"
+              # OBS-044: simulate.sh ALSO auto-stages every passing run, under a
+              # DIFFERENT key (<test>_<program>.ucdb). Inside the suite that is
+              # invisible because --fresh clears staging first and every run
+              # arrives by one path; but running a test by hand and then
+              # collecting it stages the SAME run twice under two names. Coverage
+              # is a set union so the numbers survive, but the run inventory does
+              # not (a bank appearing to hold 57 runs when 51 executed) and it
+              # adds vcover-6854 duplicate-test-record noise. Skip by CONTENT.
+              dup=""
+              if [[ -s "$src" ]]; then
+                  srcsum="$(md5sum "$src" | cut -d" " -f1)"
+                  for existing in "${STAGING}"/*.ucdb; do
+                      [[ -e "$existing" ]] || continue
+                      if [[ "$(md5sum "$existing" | cut -d" " -f1)" == "$srcsum" ]]; then
+                          dup="$(basename "$existing")"; break
+                      fi
+                  done
+              fi
+              if [[ -n "$dup" ]]; then
+                  echo "Skipped (already staged as ${dup}): $r"
+                  continue
+              fi
               cp "$src" "${STAGING}/${name}"
               echo "Staged: $r  ->  ${name}"
           else

@@ -29,7 +29,12 @@ CLUSTERS="${CLUSTERS:-1}"; CORES="${CORES:-1}"; WARPS="${WARPS:-4}"; THREADS="${
 # never by grepping the sim log.
 L2="${L2:-0}"; L3="${L3:-0}"
 CFG="CLUSTERS=$CLUSTERS CORES=$CORES WARPS=$WARPS THREADS=$THREADS L2=$L2 L3=$L3"
-LOGDIR="${ENV_ROOT}/results/run_suite_logs"; mkdir -p "$LOGDIR"
+# OBS-043: this directory was created but NEVER emptied, so a transcript from a
+# test that was later dropped from the suite (or renamed, or skipped) survived
+# indefinitely under a fixed filename and read as part of the CURRENT run. That
+# produced a false "FW-1b refuted" finding from a six-day-old log that predated
+# the configuration under discussion. Clear it, so what is in here is what ran.
+LOGDIR="${ENV_ROOT}/results/run_suite_logs"; rm -rf "$LOGDIR"; mkdir -p "$LOGDIR"
 RUNS=()
 echo "### run_suite.sh @ ${CLUSTERS}CL/${CORES}C/${WARPS}W/${THREADS}T L2=${L2} L3=${L3}"
 
