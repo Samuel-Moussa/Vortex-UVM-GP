@@ -178,11 +178,20 @@ Vortex ships SimX, a functional (non-timing) simulator maintained with
 the RTL. SimX's emulator steps per instruction, returns a retirement
 trace with full SIMT architectural state, and is decoupled from its
 timing model---structurally an RVVI-shaped golden model. Spike cannot
-execute the six SIMT instructions, so SimX is the primary golden model;
-Spike is retained as a planned base-ISA independence audit
-(Section~\ref{sec:enhance}). The consequence---that the golden model is
-maintained by the same project and must itself be treated as a
-verification target---is examined in Section~\ref{sec:reffindings}.
+execute the six SIMT instructions, so SimX is the primary golden model
+and Spike serves as a \emph{secondary, independent} base-ISA
+cross-check. That audit has been carried out: on the same linked ELF,
+Spike, SimX and the DUT retire exactly 11{,}076 architectural
+writebacks and agree on every program counter, destination register and
+value---zero mismatches---with non-vacuity proven by injecting a fault
+at one record and confirming it is named. Its scope is bounded by
+construction and we do not overstate it: Spike is a scalar ISS, so the
+audit covers warp~0 / lane~0 base-ISA execution only and stops at the
+first Vortex custom operation. \textbf{The SIMT axis therefore has no
+independent reference}, and will not obtain one from this direction.
+The consequence---that the primary golden model is maintained by the
+same project and must itself be treated as a verification target---is
+examined in Section~\ref{sec:reffindings}.
 
 \subsection{Related verification flows}
 core-v-verif~\cite{corevverif} established step-and-compare
@@ -227,9 +236,11 @@ checkers and coverage at the bottom.
 \node[agent, below=2.5mm of host] (dcr) {DCR agent (active)};
 \node[agent, below=2.5mm of dcr] (axi) {AXI agent\\(reactive slave)};
 \node[box, below=2.5mm of axi] (mem) {memory model};
-% right: SimX
+% right: SimX (primary, live over DPI) + Spike (secondary, offline)
 \node[box, right=13mm of dut.east, anchor=west, minimum height=17mm] (simx)
   {\textbf{SimX} functional\\ reference (DPI-C)\\ per-config co-build};
+\node[passive, above=4mm of simx.north, anchor=south, minimum width=30mm] (spike)
+  {\textbf{Spike} independent ISS\\ base-ISA audit (offline)\\ \emph{scalar: warp0/lane0}};
 % probes row: status left, commit mid, LSU right
 \node[passive] (status) at ($(dut.south)+(-19mm,-10mm)$) {status agent};
 \node[passive] (cprobe) at ($(dut.south)+(0mm,-10mm)$)  {commit probe};
@@ -277,11 +288,24 @@ checkers and coverage at the bottom.
   -| ($(simx.east)+(5mm,0)$) -- (simx.east);
 \node[below] at ($(lss.south)+(28mm,-8mm)$)
   {load-value feed (pass 2, \S\ref{sec:loadfeed})};
+% offline Spike audit: trace file out of the RVVI monitor, compared off-line
+\draw[tap] (rvvi.east) -- ++(30mm,0) |- (spike.east)
+  node[pos=0.25, right, font=\tiny, align=left]
+  {\shortstack[l]{\code{+LOCKSTEP\_TRACE}\\ (off by default)}};
 \end{tikzpicture}
 \caption{Environment architecture. Solid gray boxes are active UVM
-agents; dashed boxes are passive probes (never checkers); dark boxes
-are the two verdict-rendering scoreboards and coverage. The DUT is the
-bus master; stimulus is a compiled program in the memory model.}
+agents; dashed boxes are passive probes and offline tools (never
+checkers in the run); dark boxes are the two verdict-rendering
+scoreboards and coverage. The DUT is the bus master; stimulus is a
+compiled program in the memory model. \textbf{Two references, with
+different roles:} SimX is the \emph{primary} golden model, stepped live
+over DPI-C, and models SIMT; Spike is a \emph{secondary, independent}
+scalar ISS used offline on an exported retirement trace to cross-check
+the base-ISA subset only (warp~0 / lane~0, stopping at the first custom
+op). SimX is co-designed with the RTL and is therefore not independent;
+Spike is independent but cannot execute a SIMT kernel. Neither
+substitutes for the other, and the SIMT axis has no independent
+reference (\S\ref{sec:limits}).}
 \label{fig:arch}
 \end{figure*}
 
@@ -785,7 +809,7 @@ summarizes the RTL findings as R1--R10; the substantive entries follow.
 ID & Finding & Class & Disposition \\
 \midrule
 R1 & JALR target LSB not cleared; odd PC propagates via AUIPC & Bug (ISA) & needs RTL fix; stimulus sanitized \\
-R2 & \code{STALL\_TIMEOUT} uses \code{1**N} $\equiv$ 1; watchdog never scales & Bug (latent) & needs RTL fix \\
+R2 & \code{STALL\_TIMEOUT} uses \code{1**N} $\equiv$ 1; watchdog never scales & Bug (latent) & fixed; \emph{independently fixed upstream} \\
 R3 & Misaligned access: no trap; silently retargeted/torn & Hazard & expected per SW contract; gated \\
 R4 & Core self-starts from reset; DCRs have no reset value & Hazard & worked around (reset handshake) \\
 R5 & Per-warp out-of-order commit & Quirk & handled (\S\ref{sec:rules}) \\

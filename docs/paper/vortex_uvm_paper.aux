@@ -22,35 +22,35 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-A}}Role-inverted agent architecture}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-B}}Golden-model integration}{2}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-C}}Passive observability layer}{2}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Checkers}{2}{}\protected@file@percent }
-\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Environment architecture. Solid gray boxes are active UVM agents; dashed boxes are passive probes (never checkers); dark boxes are the two verdict-rendering scoreboards and coverage. The DUT is the bus master; stimulus is a compiled program in the memory model.}}{3}{}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Environment architecture. Solid gray boxes are active UVM agents; dashed boxes are passive probes and offline tools (never checkers in the run); dark boxes are the two verdict-rendering scoreboards and coverage. The DUT is the bus master; stimulus is a compiled program in the memory model. \textbf  {Two references, with different roles:} SimX is the \emph  {primary} golden model, stepped live over DPI-C, and models SIMT; Spike is a \emph  {secondary, independent} scalar ISS used offline on an exported retirement trace to cross-check the base-ISA subset only (warp\nobreakspace  {}0 / lane\nobreakspace  {}0, stopping at the first custom op). SimX is co-designed with the RTL and is therefore not independent; Spike is independent but cannot execute a SIMT kernel. Neither substitutes for the other, and the SIMT axis has no independent reference (\S  XI\hbox {}).}}{3}{}\protected@file@percent }
 \newlabel{fig:arch}{{1}{3}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-D}}Checkers}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-E}}Configurability with self-checks}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {III-F}}Protocol assertions}{3}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {IV}Verdicts and Non-Vacuity}{3}{}\protected@file@percent }
 \newlabel{sec:verdicts}{{IV}{3}}
-\@writefile{toc}{\contentsline {section}{\numberline {V}Per-Instruction Lockstep for SIMT}{3}{}\protected@file@percent }
-\newlabel{sec:lockstep}{{V}{3}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Architecture}{3}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Five SIMT-specific alignment rules}{3}{}\protected@file@percent }
-\newlabel{sec:rules}{{\mbox  {V-B}}{3}}
+\@writefile{toc}{\contentsline {section}{\numberline {V}Per-Instruction Lockstep for SIMT}{4}{}\protected@file@percent }
+\newlabel{sec:lockstep}{{V}{4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-A}}Architecture}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-B}}Five SIMT-specific alignment rules}{4}{}\protected@file@percent }
+\newlabel{sec:rules}{{\mbox  {V-B}}{4}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-B}1}Retire order is not program order}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-B}2}The golden model's uuid is not a cross-key}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-B}3}One instruction is not one retirement record}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-B}4}Load data needs its own tap and its own soundness filter}{4}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {V-B}5}Performance-counter CSRs are model-divergent by definition}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Cross-configuration validation}{4}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {VI}Verifying Racy Programs: the Two-Pass Load-Value Feed}{4}{}\protected@file@percent }
-\newlabel{sec:loadfeed}{{VI}{4}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}The problem}{4}{}\protected@file@percent }
 \@writefile{lot}{\contentsline {table}{\numberline {I}{\ignorespaces Lockstep configuration matrix (all lane-exact: 0 mismatches, 0 orphans)}}{4}{}\protected@file@percent }
 \newlabel{tab:matrix}{{I}{4}}
 \@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces The two-pass load-value feed. Only captured racy loads are fed; every other divergence in pass 2 remains an error, so the mechanism cannot mask a DUT bug.}}{4}{}\protected@file@percent }
 \newlabel{fig:feed}{{2}{4}}
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}The mechanism}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {V-C}}Cross-configuration validation}{4}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {VI}Verifying Racy Programs: the Two-Pass Load-Value Feed}{4}{}\protected@file@percent }
+\newlabel{sec:loadfeed}{{VI}{4}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-A}}The problem}{4}{}\protected@file@percent }
 \citation{riscvdv}
 \@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Divergence collapse under the load feed at 2CL/2C/4W/4T. The fenceless case reaches residual 0 (fully verified). The nonzero residuals are the two soundness boundaries of Section\nobreakspace  {}XI\hbox {}: interrupt-delivery timing (7, keying-independent) and control-flow-steering races (15, no fixed point); both end-state compares pass.}}{5}{}\protected@file@percent }
 \newlabel{fig:residual}{{3}{5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-B}}The mechanism}{5}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-C}}Flagship result}{5}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VI-D}}Failure localization}{5}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {VII}Stimulus}{5}{}\protected@file@percent }
@@ -58,12 +58,12 @@
 \@writefile{toc}{\contentsline {section}{\numberline {VIII}Coverage Methodology and Results}{5}{}\protected@file@percent }
 \newlabel{sec:coverage}{{VIII}{5}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-A}}Closure discipline}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-B}}Functional model}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-C}}Results}{5}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-D}}Provenance of the design under verification}{5}{}\protected@file@percent }
-\newlabel{sec:provenance}{{\mbox  {VIII-D}}{5}}
 \@writefile{lot}{\contentsline {table}{\numberline {II}{\ignorespaces Coverage banks (QuestaSim; per-configuration, never blended)}}{6}{}\protected@file@percent }
 \newlabel{tab:coverage}{{II}{6}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-B}}Functional model}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-C}}Results}{6}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {VIII-D}}Provenance of the design under verification}{6}{}\protected@file@percent }
+\newlabel{sec:provenance}{{\mbox  {VIII-D}}{6}}
 \@writefile{lot}{\contentsline {table}{\numberline {III}{\ignorespaces RTL findings (summary)}}{6}{}\protected@file@percent }
 \newlabel{tab:rtlobs}{{III}{6}}
 \@writefile{toc}{\contentsline {section}{\numberline {IX}Findings I: RTL Observations}{6}{}\protected@file@percent }
@@ -74,9 +74,9 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-C}}Non-scaling stall watchdog (R2)}{7}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-D}}Misaligned access: silent corruption, simulation-only detection (R3)}{7}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-E}}Startup protocol hazard}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-F}}Microarchitectural quirks and observability limits}{7}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {section}{\numberline {X}Findings II: Reference-Model Observations}{7}{}\protected@file@percent }
-\newlabel{sec:reffindings}{{X}{7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {IX-F}}Microarchitectural quirks and observability limits}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {X}Findings II: Reference-Model Observations}{8}{}\protected@file@percent }
+\newlabel{sec:reffindings}{{X}{8}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {X-A}}Misaligned instruction fetch (found by lockstep; fixed)}{8}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {X-B}}Abort-on-unknown as an unverifiability source}{8}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {X-C}}Unpopulated retirement uuid}{8}{}\protected@file@percent }
@@ -86,7 +86,7 @@
 \newlabel{sec:limits}{{XI}{8}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XI-A}}Asynchronous interrupt timing}{8}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XI-B}}Control-flow-steering races}{8}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XI-C}}Other limitations}{8}{}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XI-C}}Other limitations}{9}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {XII}Proposed Enhancements}{9}{}\protected@file@percent }
 \newlabel{sec:enhance}{{XII}{9}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XII-A}}RTL (upstream recommendations)}{9}{}\protected@file@percent }
@@ -94,13 +94,13 @@
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XII-C}}Upstream contribution}{9}{}\protected@file@percent }
 \newlabel{sec:upstream}{{\mbox  {XII-C}}{9}}
 \@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XII-D}}Methodology}{9}{}\protected@file@percent }
-\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XII-E}}Toward tape-out: a categorized roadmap}{9}{}\protected@file@percent }
-\newlabel{sec:tapeout}{{\mbox  {XII-E}}{9}}
-\bibcite{vortex-micro}{1}
+\@writefile{toc}{\contentsline {subsection}{\numberline {\mbox  {XII-E}}Toward tape-out: a categorized roadmap}{10}{}\protected@file@percent }
+\newlabel{sec:tapeout}{{\mbox  {XII-E}}{10}}
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {XII-E}1}Remaining front-end (RTL functional) work}{10}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {subsubsection}{\numberline {\mbox  {XII-E}2}Back-end and ASIC sign-off work (entirely out of scope here)}{10}{}\protected@file@percent }
 \@writefile{toc}{\contentsline {section}{\numberline {XIII}Conclusion}{10}{}\protected@file@percent }
 \newlabel{sec:conclusion}{{XIII}{10}}
+\bibcite{vortex-micro}{1}
 \bibcite{vortex-carrv}{2}
 \bibcite{corevverif}{3}
 \bibcite{rvvi}{4}
