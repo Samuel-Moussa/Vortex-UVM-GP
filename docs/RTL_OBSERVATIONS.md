@@ -2415,3 +2415,68 @@ branches. Decide before the paper whether to re-bank.
 `VX_pending_size.sv` must run clean (0 counter assertions) — i.e. the assertions pass for the RIGHT
 reason rather than being guarded off. If that holds, our local `VX_pending_size` modification can be
 retired and the provenance problem in OBS-040 shrinks accordingly.
+
+---
+
+## OBS-046 — FW-1 SEED FARM: 90 additional distinct random programs bought ZERO coverage. Seed volume was not the gap.
+
+**Class:** METHODOLOGY RESULT (negative, and the most useful kind) · **Disposition: closed —
+measured** · **Found:** 2026-08-19.
+
+**What was run.** The committed suite pins `RV_SEED=1`. This swept **seeds 2–11 across all 9
+riscv-dv profiles = 90 additional runs**, taking the campaign from 1 seed per profile to 10.
+Config 1CL/1C/4W/4T on the reset-fixed design.
+
+| | result |
+|---|---|
+| Runs | **90 / 90 PASS, 0 failures** |
+| Distinct programs | **90 / 90**, verified by content hash — no collisions |
+| Cycle range | 4,432 … 857,190 (≈190x spread; 4x within a single profile) |
+
+**Non-vacuity was checked, not assumed.** Per profile, the seed-2 program hash was compared against
+the seed-1 program from the suite: all 9 differ. A seed farm where the seed silently does not take
+effect looks exactly like a successful one — 90 green runs either way.
+
+**⚠ THE COVERAGE RESULT — 90 NEW PROGRAMS MOVED ALMOST NOTHING.**
+
+| metric | suite (51 runs) | suite + seed farm (141 runs) |
+|---|---|---|
+| Assertions | 96.85% | 96.85% |
+| Branches | 94.53% | 94.53% |
+| Conditions | 90.41% | 90.41% |
+| Covergroup bins | 370/377 = 98.14% | 370/377 = 98.14% |
+| Statements | 98.10% | 98.10% |
+| Toggles | 83.34% | **83.40%** |
+| **Total** | **94.72%** | **94.72%** |
+
+Every category is bit-identical except toggle, +0.06%.
+
+**Interpretation — and this corrects a recommendation made in this same session.** Seed volume was
+argued (by me) as "the single highest-return item" for strengthening the campaign. In **coverage**
+terms that was WRONG: the return is ~zero. In **confidence** terms it was right, and that is a
+different and still-valuable claim: 90 programs the DUT had never executed all pass end-state
+equivalence against the golden model, so the design is demonstrably not tuned to the committed seed.
+
+The mechanism is that **the generator's REACH, not its sample count, is the binding constraint.**
+riscv-dv here emits `rv32im` user-mode code with M-mode CSR writes stripped
+(`prepare.sh --target=rv32im` + sed), so every seed explores the same region of the state space.
+Coverage saturated inside that region long before seed 10. **No number of seeds reaches the
+exception paths, error responses, or privileged behaviour that remain uncovered** — those need
+different STIMULUS KINDS, not more samples of the same kind.
+
+**Consequence for claims (use this wording):** *"10 seeds per profile, 90 additional distinct
+programs, 0 failures"* is a defensible constrained-random statement about ROBUSTNESS. It is NOT
+evidence of thoroughness, and it must not be offered as coverage progress — measured, it produced
+none. The remaining stimulus gap is diversity (error/exception axes), not volume.
+
+**Bank:** `cov/bank_1CL_1C_4W_4T_seedfarm_20260819/` (141 staged) · farm log
+`results/seed_farm_logs/seed_farm_results.txt`.
+
+**⚠ SECONDARY DEFECT FOUND — OBS-044 WAS ONLY HALF FIXED.** `simulate.sh` auto-stages under
+`<test>_<program>.ucdb`, a key that is **not unique across seeds**: all ten seeds of a profile write
+the SAME filename, so 81 of the 90 UCDBs were silently overwritten and staging held 60 where 141 was
+expected. Caught only by checking the staged count before merging. Had it gone unnoticed, the merge
+would have run over 60 files, produced a plausible number, and understated the farm — no error, no
+warning. Worked around here by collecting all 90 run directories explicitly (`--collect` uses unique
+`<date>_<run>` keys; the 9 auto-staged ones were correctly skipped as content-duplicates by the
+OBS-044 fix). **The auto-stage key itself still needs a run-unique component.**
