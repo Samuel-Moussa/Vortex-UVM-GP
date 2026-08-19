@@ -350,6 +350,49 @@ than defects, and are recorded as such; a register that only ever records
 bugs is not being maintained honestly.
 
 % =========================================================================
+
+\subsection{Provenance of the design under verification}
+\label{sec:provenance}
+
+The design is an open-source register-transfer model pinned at a specific
+revision, \emph{with eighteen locally modified files}. Most changes are
+simulator-compatibility fixes made during bring-up. We disclose this because a
+verification result is a statement about a specific artifact, and ``upstream,
+unmodified'' would not describe what we ran.
+
+One of those modifications turned out to matter, and its history is instructive.
+A library counter shipped with two assertions checking for overflow and
+underflow. They fired during bring-up and were guarded off---rewritten to skip
+whenever their inputs were unknown---so that the environment could run at all.
+That guard remained for months. On restoring the original assertion and
+root-causing why it fired, we found a genuine defect: the design distributes
+reset through a relay module that \emph{registers} reset in a flip-flop which
+nothing resets. Its output is therefore unknown from time zero until the first
+clock edge, so every module behind a relay observes an unknown reset for one
+cycle; a reset-conditional then takes its non-reset branch and any assertion
+inside evaluates on unknown operands.
+
+We replaced the relay with an asynchronous-assert, synchronous-deassert
+synchronizer. The counter assertions then pass with no guard at all---twelve
+firings become zero---and the local modification to that counter was retired in
+favor of the unmodified upstream file. The defect is present in the current
+upstream release.
+
+Two consequences deserve emphasis. First, \textbf{the assertion had been
+correct}: what was silenced was a real property of the design, not a testbench
+nuisance. A checker that is switched off to make a bench run is a checker whose
+findings are lost, and the cost here was months of an unobserved
+unknown-value window. Second, \textbf{fixing the defect reduced a coverage
+number}. Branch coverage fell from 95.1\% to 94.5\%: during the unknown-reset
+cycle, modules behind a relay had been executing their normal-operation paths,
+and those executions were \emph{counted as covered branches}. With reset
+correct they no longer occur. Part of the previously reported branch coverage
+had been obtained from a state that cannot legitimately arise---which no
+coverage metric can reveal about itself. We report the lower figure as the
+correct one. (Two variables changed between those measurements, so the delta is
+indicative rather than isolated.)
+
+% =========================================================================
 \section{Maturity by Axis}
 \label{sec:maturity}
 
