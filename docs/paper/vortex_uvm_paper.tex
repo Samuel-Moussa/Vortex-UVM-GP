@@ -1108,12 +1108,17 @@ unless noted.
 
 \subsubsection{Remaining front-end (RTL functional) work}
 \begin{enumerate}
-\item \textbf{Stimulus volume.} The generator is seed-controlled and
-reproducible, but the committed regression runs \emph{one seed per
-profile}. Constrained-random testing at a single seed is directed testing
-in a random costume. Scaling to hundreds of seeds per profile is the
-single highest-return item in this list and costs machine time rather
-than engineering effort.
+\item \textbf{Stimulus diversity, not volume.} The generator is
+seed-controlled, and a ten-seed sweep across all nine profiles has since been
+run: ninety additional distinct programs (verified distinct by content hash),
+all passing, and \emph{no measurable coverage gain}---every category
+bit-identical except toggle at $+0.06\%$. That is a robustness result, not a
+coverage one. The binding constraint is the generator's reach: it emits
+user-mode integer code with machine-mode control-register writes removed, so
+every seed explores the same region and coverage saturates inside it. The
+remaining work is stimulus of a different \emph{kind}---privileged and
+exception behaviour, and bus error responses---not more samples of the same
+kind.
 \item \textbf{Error and exception verification.} The bus responder
 always returns \texttt{OKAY}; no \texttt{SLVERR}/\texttt{DECERR}
 injection exists, so no error-recovery path is exercised. Architectural
