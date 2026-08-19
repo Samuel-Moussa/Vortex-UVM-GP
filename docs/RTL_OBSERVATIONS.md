@@ -2141,6 +2141,22 @@ must not be described as validated.
 verified against the pre-swap backup. The full-suite trial was not run because the single smoke test
 already failed the acceptance rule.
 
+**✅ RTL FROZEN — FINAL DECISION 2026-08-19.** The tree keeps its current state and **no further
+RTL review or change is planned**. Specifically:
+* `libs/VX_pending_size.sv` — **upstream, unmodified** (our weakened version retired; assertions
+  armed and silent because the underlying defect is fixed).
+* `libs/VX_reset_relay.sv` — **our async-assert/sync-deassert fix** (OBS-045). A defect fix, and
+  upstream-reportable.
+* The remaining **16 files stay as they are and will NOT be reviewed** — including
+  `tcu/VX_tcu_fedp_bhf.sv` (193 code lines), `tcu/VX_tcu_fedp_dpi.sv` (111), the other TCU files,
+  and the FPU files (whose diffs are ~300 lines of COMMENTED-OUT dead code and 0 code lines).
+**Still 18 files differ from upstream `7a52ee5`** — the COUNT is unchanged from before this session;
+what improved is the COMPOSITION (a defect fix replaced a checker workaround). The papers' provenance
+disclosure must keep saying 18.
+⚠ **Open risk accepted knowingly:** the TCU changes are substantial and undocumented, so any claim
+about TCU verification rests on RTL this register has never described. State that limit if the TCU
+is discussed.
+
 **⚠ RTL IS TO BE LEFT AS IS (decision, 2026-08-17).** No revert, no re-fix. This entry is the
 disclosure, not a work item. Consequently the papers and any report MUST describe the DUT as
 "Vortex `7a52ee5` with 18 locally modified RTL files (see OBS-040)", never as unmodified upstream,
