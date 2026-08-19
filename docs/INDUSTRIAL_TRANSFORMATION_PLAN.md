@@ -66,6 +66,54 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
+### ▶▶ RESUME HERE — 2026-08-19 · RTL DEFECT FOUND AND FIXED (OBS-045) · 4 BANKS · NOTHING RUNNING
+
+**This block supersedes every block below it. Nothing is in flight.**
+
+| bank | total | runs | design |
+|---|---|---|---|
+| `bank_1CL_1C_4W_4T_relayfix_20260818` | **94.72%** | 51/51 | **reset fixed** |
+| `bank_1CL_1C_4W_4T` | 94.72% | 50/50 | X-window |
+| `bank_2CL_2C_4W_4T` | 94.55% | 50/50 | X-window |
+| `bank_2CL_2C_4W_4T_L2L3_20260818` | 93.18% | 51/51 | X-window |
+
+**THE HEADLINE RESULT OF THIS SESSION IS AN RTL DEFECT, NOT A COVERAGE NUMBER (OBS-045).**
+`VX_reset_relay.sv` registered reset in a flop **nothing resets**, so `reset_o` was **X from time 0
+until the first posedge** at EVERY `` `RESET_RELAY `` site (`VX_socket.sv:87` etc.). Modules behind a
+relay saw an unknown reset for a clock; `if (X)` took the ELSE branch. Fixed with an async-assert /
+sync-deassert synchroniser. **Still present upstream — reportable.**
+
+**How it was found — the chain matters more than the fix.** Upstream's `VX_pending_size` assertions
+fired during bring-up → they were guarded off with `$isunknown` so the bench could run → that guard
+hid the X window for months → restoring the assertion and root-causing it exposed the defect.
+**Our local `VX_pending_size` modification is now RETIRED**; that file is byte-identical to upstream
+and its assertions run ARMED and SILENT (12 firings → 0). The modification moved from the CHECKER to
+the DEFECT.
+
+**⚠ FIXING THE BUG MADE A COVERAGE NUMBER GO DOWN, AND THE LOWER NUMBER IS CORRECT.**
+Branches 95.09% → **94.53%** (10 fewer COVERED). During the X-reset cycle, modules behind a relay
+executed their NORMAL-OPERATION paths and those executions COUNTED AS COVERED BRANCHES. With reset
+correct they are not taken. ⇒ part of the previously-banked branch coverage came from a state that
+cannot legitimately occur. **⚠ Two variables changed (relay fix AND `cache_tier` newly at 1CL), so
+do NOT quote these deltas as pure relay-fix effects — a controlled one-variable run was NOT done.**
+
+**Validation:** Gate-0 both RED with injection armed (`+INJECT_FAULT`, `+DROP_STORE`, both detecting
+at `0x800075d8`), full 1CL suite 51/51 0 FAILED, 0 counter assertions suite-wide, hits-invariant held.
+⚠ **A vacuous Gate-0 pass was nearly accepted** — the negative tests report PASSED when the plusargs
+are absent because nothing is injected. **ALWAYS verify the injection message, never the verdict.**
+
+**RTL provenance: still 18 files differ from upstream `7a52ee5`** — `VX_pending_size` left the list,
+`VX_reset_relay` joined it. Composition improved (a defect fix rather than a checker workaround);
+the count did not. See OBS-040.
+
+**▶ NEXT, recommended order:** (1) papers — add the OBS-040/045 disclosure, they are otherwise
+current; (2) **seed volume (FW-1)** — 1 seed/profile is the single largest claim-limiting gap and
+costs machine time, not engineering; (3) OBS-043/044 small TB fixes; (4) report OBS-012 + OBS-045
+upstream. **NOT recommended:** re-banking 2CL / L2/L3 on the fixed design (~28h) — the totals barely
+move; state the caveat instead.
+
+---
+
 ### ▶▶ RESUME HERE — 2026-08-16 (LATE) · COVERAGE MAXIMISED AND BANKED · ONE RE-RUN IN FLIGHT
 
 **Full analysis: `docs/COVERAGE_MAX_20260816.md`. Evidence: OBS-035 / OBS-036 / OBS-037 / OBS-038,
