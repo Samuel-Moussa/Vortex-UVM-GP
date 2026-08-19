@@ -391,9 +391,18 @@ not scattered across per-fix docs.
 - **Impact / handling:** deeper cache hierarchies legitimately lengthen worst-case stall
   latency; a non-scaling watchdog could fire spuriously on large configs (false STALL
   assert), or mask the intent of the guard. Not observed firing falsely in our configs
-  (1CL/2CL small programs). Fix is `10 ** (...)` per the original intent. Left as an
-  upstream-reportable RTL observation; no waiver needed (assertion category unaffected in
-  our banks).
+  (1CL/2CL small programs).
+- **✅ DISPOSITION CORRECTED 2026-08-19 — this entry said "open / needs-RTL-fix / left as
+  upstream-reportable" long after it had been FIXED TWICE. Do not quote it as open.**
+  1. **Fixed in-tree** (found while diffing against upstream): `VX_config.vh` now defines
+     `` `STALL_TIMEOUT_SCALE (4 ** (`L2_ENABLED + `L3_ENABLED)) `` with a comment citing this
+     observation, and `STALL_TIMEOUT` uses it.
+  2. **Fixed INDEPENDENTLY UPSTREAM**, which is external corroboration that the finding was real:
+     at upstream HEAD (`d76b7f24e`) it lives at `VX_gpu_pkg.sv:224` as
+     `(100000 * (1 << (`VX_CFG_L2_ENABLED + `VX_CFG_L3_ENABLED)))` — a SHIFT (2^N) where we used
+     `4 **`. Same defect, same conclusion, arrived at separately.
+  **Status: FIXED (locally and upstream).** Retained as a finding with a track record, not as
+  open work.
 
 ### OBS-012 (RTL BUG — ISA spec deviation) — JALR does not clear the target's LSB; no misaligned-fetch exception; odd PC propagates into architectural results via AUIPC
 - **Class:** RTL BUG (RISC-V unpriv spec, JALR: "target address … setting the
@@ -2260,10 +2269,10 @@ the configuration under discussion.
 regenerated to hash `732adb3a` in **three separate runs on three different days**. Seed control
 (FW-1) is reproducible in practice, not just in principle.
 
-**Disposition: OPEN.** Fix: clear or timestamp `$LOGDIR` at suite start (`rm -f "$LOGDIR"/*.log`, or
-better, make it per-run like `results/run_suite_logs_<config>_<date>/`, which the banking convention
-already does by hand afterwards). Until then: **check the mtime of any log in that directory before
-drawing a conclusion from it.**
+**✅ FIXED 2026-08-19** (`run_suite.sh`): `$LOGDIR` is now `rm -rf`'d and recreated at suite start,
+so what is in it is what ran. The per-run archive copies the banking convention already makes
+(`results/run_suite_logs_<config>_<date>/`) remain the historical record.
+**Standing habit regardless: check the mtime of any log before drawing a conclusion from it.**
 
 ---
 
@@ -2293,10 +2302,11 @@ it adds `vcover-6854` duplicate-test-record noise (see OBS-039).
 **Handling this time:** the 6 auto-staged copies were deleted by name, staging re-verified at 51
 with 0 md5 duplicates, and the bank re-merged from the clean set.
 
-**Disposition: OPEN.** Fix: make the two paths share one key, or have `--collect` skip a run whose
-UCDB is already staged under any key (md5 compare is sufficient and cheap). Until then, after any
-out-of-suite run + collect, check `ls cov/staging/*.ucdb | wc -l` against the expected count and
-`md5sum ... | uniq -d` before banking.
+**✅ FIXED 2026-08-19** (`merge_coverage.sh`): `--collect` now md5-compares each incoming UCDB
+against everything already staged and SKIPS an exact duplicate, printing
+`Skipped (already staged as <name>)`. Content-based, so it works regardless of which key the other
+path used. **Standing habit regardless: check `ls cov/staging/*.ucdb | wc -l` against the expected
+count before banking.**
 
 ---
 
