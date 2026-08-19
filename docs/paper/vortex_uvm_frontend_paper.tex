@@ -339,6 +339,15 @@ comparing 196\,868 memory words byte-exactly against the reference with
 zero errors. This is the largest end-state comparison in the suite by a
 factor of six.
 
+That configuration was banked separately (51 runs, all passing, 93.2\% total).
+It is lower than the two-cluster bank without the shared levels, and the reason
+is instructive rather than disappointing: enabling two cache levels adds a large
+amount of new control logic---arbiters, flush state machines, miss-status
+handling---while exactly one kernel of fifty-one targets it. Condition coverage
+there is 79.3\%. The honest summary is that the shared hierarchy was
+\emph{reached and validated, not thoroughly exercised}: both halves of that
+sentence matter.
+
 \subsection{Defects found}
 The campaign found defects in both the design and the reference model,
 maintained in an evidence-cited register with explicit dispositions. The
