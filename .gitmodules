@@ -3,4 +3,4 @@
 	url = https://github.com/openhwgroup/core-v-verif.git
 [submodule "Vortex"]
 	path = Vortex
-	url = https://github.com/vortexgpgpu/vortex.git
+	url = https://github.com/Samuel-Moussa/vortex.git
