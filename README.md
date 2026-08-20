@@ -288,15 +288,6 @@ Originally scoped as a group project; the verification environment, coverage
 model, lockstep flow, RTL investigations and papers in their current form are
 the work of **Samuel Moussa**. Earlier contributors are credited in the commit
 history for the bring-up phase.
-A group project delivered to one shared verification plan.
-
-| Owner | Lane |
-| :--- | :--- |
-| **Samuel Mousa** | verification infrastructure · full configurability (parameter harness, elaboration asserts, scripts) · constrained-random (riscv-dv) |
-| **Ahmad Mahmoud** | functional & code coverage · scoreboard |
-| **Abanoub Nabil** | Vortex architecture |
-| **Steven Ibrahim** | golden model (SimX / DPI-C) · directed tests · AXI SVA . Regression Tests . Building Configrable master Makefile |
-| **Ahmad Fawzy** | UVM agents |
 
 ---
 
