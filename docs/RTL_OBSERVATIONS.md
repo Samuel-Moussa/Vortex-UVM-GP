@@ -2496,3 +2496,43 @@ would have run over 60 files, produced a plausible number, and understated the f
 warning. Worked around here by collecting all 90 run directories explicitly (`--collect` uses unique
 `<date>_<run>` keys; the 9 auto-staged ones were correctly skipped as content-duplicates by the
 OBS-044 fix). **The auto-stage key itself still needs a run-unique component.**
+
+---
+
+## OBS-047 — `run_vortex_uvm_enhanced.sh`'s generic "custom ELF" path double-offsets hex load addresses by `0x80000000`
+
+**Class:** TB TOOLING DEFECT (not RTL) · **Disposition: OPEN, low priority (documented workaround
+exists)** · **Found:** 2026-08-20, while proving the Vortex submodule conversion (OBS-048-adjacent
+session, see `docs/INDUSTRIAL_TRANSFORMATION_PLAN.md` → ▶▶ RESUME HERE 2026-08-20) actually builds
+and runs a kernel end-to-end on a fresh checkout.
+
+**What we saw.** Invoking `scripts/run_vortex_uvm_enhanced.sh --test=kernel_launch_test
+--program=<full path to tests/kernel/vecadd_lite/vecadd_lite.elf>` compiled the RTL cleanly (0
+errors), built and initialised SimX successfully (`RAM verification PASSED`), then crashed
+immediately on load with `** Fatal: (SIGABRT) Bad handle or reference` inside
+`uvm_env/ref_model/simx_pkg.sv:39`, called from `vortex_scoreboard.svh:275`
+(`simx_load_hex_at`).
+
+**Root cause, traced through the actual crash backtrace** (`RAM::get` → `RAM::write` →
+`ram_write_cached` → `simx_load_hex_at`): `RAM::get()` throws `OutOfRange()` when
+`address >= capacity_` (`Vortex/sim/common/mem.cpp:450-451`). The generated `.hex` file's `@`
+address markers read `@0000000100000000` = `0x100000000` — exactly the RAM's configured capacity,
+and exactly `0x80000000` (2 GiB) higher than the kernel's real link address of `0x80000000`. The
+ELF's own program headers already encode an absolute load address; the script's generic ELF→hex
+conversion path (Case 6, `scripts/run_vortex_uvm_enhanced.sh` around line 617) adds `base_addr` a
+**second time** on top of that, producing an address that lands exactly on the capacity boundary
+and throws. The C++ exception then crosses the DPI/SV boundary uncaught, which QuestaSim reports
+as a generic `SIGABRT` — the real cause is two call-frames away from what the simulator log shows.
+
+**Confirmed NOT present on the documented entry point.** `make sim TEST=kernel_launch_test
+PROGRAM_NAME=vecadd_lite CLUSTERS=1 CORES=1 WARPS=4 THREADS=4 TIMEOUT=50000` — which resolves to
+the exact same `.elf`, through the Makefile's own hex-generation step rather than the raw script's
+Case 6 — ran clean: `SIMULATION PASSED — all checks matched!`, 0 UVM errors, 0 RTL errors, 9,905
+cycles, 1,881 instructions. The bug is specific to driving a `tests/kernel/*.elf` by raw full path
+through the generic script; every documented invocation in this project's history goes through the
+Makefile, so this had apparently never been exercised against a `tests/kernel/*` binary before.
+
+**Disposition: OPEN, workaround is simply "use the documented entry point."** A real fix (stop
+adding `base_addr` when the ELF's own address is already absolute, mirroring the logic
+`simx_load_hex_at` itself already applies for `@`-marker parsing) is cheap but not urgent — nobody
+in this project's actual test flow uses the affected path.

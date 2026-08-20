@@ -66,6 +66,124 @@ store into a partially-written dword is invisible — pre-existing, bounded, OPE
 **PHASE A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (gate discharged) · `.svh` DONE · 1CL RE-BANKED
 CLEAN · icache WAIVERS APPLIED. ONE STEP REMAINS: the 2CL re-bank.**
 
+### ▶▶ RESUME HERE — 2026-08-20 · Vortex CONVERTED TO A REAL SUBMODULE · ONE TEST PROVEN GREEN · ORG PUSH BLOCKED ON PERMISSIONS
+
+**This block supersedes every block below it. No coverage/RTL work happened this session — this
+was repo-hygiene (merge-to-main prep) that turned into fixing a structural defect in how `Vortex/`
+has been tracked since the project's original bring-up. Read this before touching git history,
+the submodule, or believing the "18 modified files" provenance count anywhere in the papers.**
+
+**WHAT HAPPENED, IN ORDER (all on `industrial_transformations`, `main` untouched throughout):**
+1. Merged `main` into the branch via GitHub's UI (conflict resolution "accept current" on 4 of 5
+   files was correct — verified content-identical to what would have resulted from a clean merge;
+   README needed a manual one-paragraph fix, `2db4210`, because GitHub silently spliced main's old
+   5-person team table back in next to the solo-authorship rewrite on non-overlapping lines that
+   never triggered a conflict marker).
+2. **Discovered `Vortex/` was never a real submodule despite `.gitmodules` declaring one** — a
+   single commit (`9662521 "Converted Vortex to local folder"`) had flattened the entire upstream
+   tree into 2,174 regular tracked files, inflating `.git` by ~149 MB and defeating the whole
+   point of vendoring. User wanted only "our own files, in their place" going into the org merge.
+3. **Rewrote history** (`git filter-repo --path Vortex --invert-paths`) to strip the embedded tree
+   from every commit, then re-added `Vortex` as a real submodule (mode `160000`). `.git` dropped
+   222 MB → 99 MB (has since grown to ~253 MB from an unrelated coverage-regen commit, `52a0298`
+   — real content, not regression). **Every commit SHA on the branch changed from the flattening
+   point onward** — anyone else with a clone of this branch needs to re-clone, not pull.
+4. **First attempt to preserve "our" RTL changes was incomplete** — only captured the 2 files I
+   already knew about (`VX_reset_relay.sv`, `VX_pending_size.sv`) via targeted `git log`, not an
+   exhaustive diff. This broke the very first fresh-clone build (`simx_cosim_record.h` missing).
+   **Corrected via an exhaustive diff of the full historical tree against pristine upstream
+   `7a52ee5`: ~270 files actually differ**, not 18 — DPI glue (`hw/dpi/*`, `sim/common/*`,
+   `sim/rtlsim/*`), several more RTL files (`VX_gpu_pkg.sv`, `VX_cache_bypass.sv`,
+   `VX_operands.sv`, `VX_mem_scheduler.sv`, TCU/FPU files), the `simx_dpi-main` verification
+   harness, and every custom test kernel under `tests/kernel/*`. **⚠ THE "18 MODIFIED RTL FILES"
+   FIGURE IN THE PAPERS/README (OBS-040) IS NOW KNOWN-WRONG AS A TOTAL COUNT** — it may still be
+   approximately right for *RTL specifically* (most of the 270 are kernel tests and DPI glue, not
+   RTL), but this was never actually re-counted file-by-file against that category before the
+   figure was written. **Before quoting a modified-file count again, regenerate it from
+   `Samuel-Moussa/vortex-uvm-gp-rtl` (below) filtered to `hw/rtl/**`, don't reuse the old number.**
+5. **GitHub rejected pushing the complete fix to `Samuel-Moussa/vortex` (a fork)** —
+   `"can not upload new objects to public fork"`, a real GitHub restriction on forks of Git-LFS-
+   enabled repos (upstream Vortex uses LFS for `tests/opencl/spmv/*.mtx`), unrelated to size. Not
+   a permissions issue, not fixable from our side. **Switched to a plain (non-fork) repo:
+   `Samuel-Moussa/vortex-uvm-gp-rtl`**, branch `main`, no restriction there.
+6. Along the way, found and reverted one real corruption: `tests/opencl/spmv/Dubcova3.mtx` in the
+   historical tree was a resolved/truncated 60 MB blob where upstream has a small Git LFS pointer
+   — reverted to upstream's pointer (that test directory isn't part of this project's suite).
+   Also deleted ~1,045 harmless WSL `Zone.Identifier` stub files that had been tracked by mistake.
+7. **`.gitmodules` now points `Vortex` at `https://github.com/Samuel-Moussa/vortex-uvm-gp-rtl.git`**,
+   checked out at `994d3d34b` (upstream `7a52ee5` + the full historical customization set, with the
+   OBS-045 reset-relay fix and the retired `VX_pending_size` fix both present as real, non-empty
+   commits — `git filter-repo` preserved them as empty placeholders in the *outer* repo's history
+   with full message/authorship intact, but the actual diffs now live in the RTL repo).
+
+**PROVEN WORKING END-TO-END (not just "it builds") — `kernel_launch_test` / `vecadd_lite`, via the
+documented entry point (`make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite CLUSTERS=1
+CORES=1 WARPS=4 THREADS=4 TIMEOUT=50000`): RTL compiled 0 errors, SimX built and initialised,
+`SIMULATION PASSED — all checks matched!`, 0 UVM errors, 0 RTL errors, 9,905 cycles, 1,881
+instructions. This is real evidence the submodule conversion didn't silently break anything — not
+an assumption.**
+
+**Fresh-clone bootstrap steps that are NOT automatic (needed once per fresh checkout, not
+committed because they're either generated or environment-specific — do this before assuming a
+build failure is a code problem):**
+- `cd Vortex && ./configure` — generates `config.mk` (gitignored).
+- `cd Vortex/hw && make config` — generates `VX_config.h`/`VX_types.h` from the `.vh` sources
+  (gitignored; config-dependent, must never be committed).
+- `cp Vortex/third_party/hardfloat/source/RISCV/HardFloat_specialize.v{,i}
+  Vortex/third_party/hardfloat/source/` — **the flist's `+incdir+.../hardfloat/source` expects
+  these at the top level; the `hardfloat` submodule only ships them per-ISA
+  (`source/RISCV/…`,`source/8086-SSE/…`,`source/ARM-VFPv2/…`)**. This placement was always manual
+  in this project (confirmed identical byte-for-byte to the historical copy) and is not something
+  any build step does automatically — worth a real fix (a symlink, or an `+incdir` pointing at
+  `source/RISCV` directly) rather than a repeated manual step. Filed as a TB-hygiene item, not
+  urgent.
+- `cd Vortex/kernel && make` — builds `libvortex.a` (the kernel runtime — crt0, syscalls, spawn).
+  **This is a real build-from-source step, NOT a file that can be copied from the old tree**
+  (I initially excluded `*.a` from the tree copy as "build artifact," which was right for
+  everything else but wrong for this one — it's a required link dependency every kernel program's
+  Makefile expects to already exist).
+- SimX itself: `make -C Vortex/sim/simx CONFIGS="-DNUM_CLUSTERS=n -DNUM_CORES=n -DNUM_WARPS=n
+  -DNUM_THREADS=n -DEXT_TCU_ENABLE"` (per-config, as already documented — OBS-021 still applies,
+  never `make clean` there).
+
+**⚠ NEW TB DEFECT FOUND (not RTL, not filed as an OBS-0xx yet — do that before the next session
+closes): `run_vortex_uvm_enhanced.sh`'s generic "custom ELF" path (Case 6, `~line 617`) produces a
+`.hex` with address markers double-offset by `0x80000000`** when driving a `tests/kernel/*.elf`
+directly by full path instead of by the Makefile's `PROGRAM_NAME=` route. Root cause: the elf→hex
+conversion this generic path uses adds `base_addr` on top of an already-absolute address the ELF's
+own program headers encode, landing exactly on the RAM capacity boundary (`0x100000000`) and
+throwing `RAM::OutOfRange()` — which crosses the DPI boundary as an uncaught C++ exception and
+QuestaSim reports it as an opaque `** Fatal: (SIGABRT) Bad handle or reference`, giving no hint
+the real cause is an addressing bug two layers down. **The Makefile's `make sim
+TEST=... PROGRAM_NAME=...` route does NOT have this bug** (verified — that's how the passing run
+above was produced) and is the actual documented entry point; Case 6 in the raw script is a
+secondary path that's apparently never been exercised against a `tests/kernel/*` binary before.
+Low priority (workaround exists, path is well-defined), but worth a real fix or a warning.
+
+**BLOCKED, NOT MY LANE TO FIX: pushing to the org's `main`.** `git push org
+industrial_transformations:main --force` → `403 Write access to repository not granted`.
+Root-caused precisely, twice ruled-out wrong theories along the way:
+- NOT an SSO/OAuth-authorization issue — the `gh` CLI's GitHub-CLI OAuth app already has full
+  `RISC-V-Based-Accelerators` org access granted (verified via the org's Applications settings
+  page — green checkmark, no "Enable SSO" prompt present).
+- NOT an org seat/capacity limit — `gh api orgs/RISC-V-Based-Accelerators` confirms Free plan,
+  which has no collaborator cap on private repos (that restriction was removed by GitHub in 2020);
+  78 members is nowhere near any real ceiling.
+- **IS a genuine per-repo permission gap**: `gh api repos/RISC-V-Based-Accelerators/Vortex-UVM-GP
+  --jq '.permissions'` → `{"push":false,"pull":true}`. Samuel-Moussa is an active org member but
+  was never granted Write on this specific repo. Needs an org owner to add Write access, or the
+  fallback is a PR from a pushed branch (which only needs the read access already present) —
+  `git push org industrial_transformations:samuel-industrial-transformations` then open a PR.
+  **`origin` (Samuel's own fork) is fully pushed and up to date; only the org push is pending.**
+
+**▶ NEXT:** get org Write access (or take the PR route) and complete the `org:main` force-push;
+file `run_vortex_uvm_enhanced.sh`'s Case-6 double-offset bug as a real OBS entry; regenerate the
+modified-RTL-file count from the new `vortex-uvm-gp-rtl` repo before the next time a paper/README
+quotes "18 files." **Coverage/RTL verification work (T-exc, T-cache, D-matrix, SIGN — see
+CLAUDE.md checklist) is untouched and still where OBS-045's block left it.**
+
+---
+
 ### ▶▶ RESUME HERE — 2026-08-19 · RTL DEFECT FOUND AND FIXED (OBS-045) · 4 BANKS · NOTHING RUNNING
 
 **This block supersedes every block below it. Nothing is in flight.**
