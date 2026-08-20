@@ -1,0 +1,101 @@
+PASS seed=2 riscv_arithmetic_basic_test cycles=87752 hex=9b9759ec
+PASS seed=2 riscv_jump_stress_test cycles=76446 hex=a78f2dc3
+PASS seed=2 riscv_non_compressed_instr_test cycles=252648 hex=8ea9aa76
+PASS seed=2 riscv_loop_test cycles=216102 hex=0ed8afa9
+PASS seed=2 riscv_rand_instr_test cycles=158723 hex=3bb85116
+PASS seed=2 riscv_rand_jump_test cycles=91758 hex=d803daf2
+PASS seed=2 riscv_mmu_stress_test cycles=24540 hex=061c5c62
+PASS seed=2 riscv_no_fence_test cycles=185870 hex=cf516720
+PASS seed=2 riscv_full_interrupt_test cycles=253670 hex=0404fb13
+--- seed 2 complete: 9/9 pass ---
+PASS seed=3 riscv_arithmetic_basic_test cycles=90014 hex=a93d93d8
+PASS seed=3 riscv_jump_stress_test cycles=152652 hex=6ba1357d
+PASS seed=3 riscv_non_compressed_instr_test cycles=75084 hex=d384c1c9
+PASS seed=3 riscv_loop_test cycles=54416 hex=40e4712a
+PASS seed=3 riscv_rand_instr_test cycles=54214 hex=ee23b8c5
+PASS seed=3 riscv_rand_jump_test cycles=73792 hex=8c4e309c
+PASS seed=3 riscv_mmu_stress_test cycles=108030 hex=57145b9c
+PASS seed=3 riscv_no_fence_test cycles=54774 hex=5777c19f
+PASS seed=3 riscv_full_interrupt_test cycles=75000 hex=2c28e9a4
+--- seed 3 complete: 9/9 pass ---
+PASS seed=4 riscv_arithmetic_basic_test cycles=87004 hex=fc3a3705
+PASS seed=4 riscv_jump_stress_test cycles=67264 hex=0c136c23
+PASS seed=4 riscv_non_compressed_instr_test cycles=101652 hex=4032e3f9
+PASS seed=4 riscv_loop_test cycles=156638 hex=20e9fe07
+PASS seed=4 riscv_rand_instr_test cycles=51454 hex=c20d0ec0
+PASS seed=4 riscv_rand_jump_test cycles=24384 hex=c1743c08
+PASS seed=4 riscv_mmu_stress_test cycles=92698 hex=b872542e
+PASS seed=4 riscv_no_fence_test cycles=40660 hex=b27809b2
+PASS seed=4 riscv_full_interrupt_test cycles=101632 hex=59dac338
+--- seed 4 complete: 9/9 pass ---
+PASS seed=5 riscv_arithmetic_basic_test cycles=86558 hex=9ea47792
+PASS seed=5 riscv_jump_stress_test cycles=74630 hex=d3380699
+PASS seed=5 riscv_non_compressed_instr_test cycles=28618 hex=e434c2db
+PASS seed=5 riscv_loop_test cycles=172958 hex=9c917444
+PASS seed=5 riscv_rand_instr_test cycles=57515 hex=b6d08ca6
+PASS seed=5 riscv_rand_jump_test cycles=245726 hex=f29a853f
+PASS seed=5 riscv_mmu_stress_test cycles=154310 hex=d73b0895
+PASS seed=5 riscv_no_fence_test cycles=43822 hex=3390ac88
+PASS seed=5 riscv_full_interrupt_test cycles=28638 hex=171fd944
+--- seed 5 complete: 9/9 pass ---
+PASS seed=6 riscv_arithmetic_basic_test cycles=89506 hex=b8e90f1a
+PASS seed=6 riscv_jump_stress_test cycles=52496 hex=4f12d4d8
+PASS seed=6 riscv_non_compressed_instr_test cycles=130562 hex=1355ca55
+PASS seed=6 riscv_loop_test cycles=135395 hex=54222676
+PASS seed=6 riscv_rand_instr_test cycles=139222 hex=a5bff8e0
+PASS seed=6 riscv_rand_jump_test cycles=144582 hex=37e3d74c
+PASS seed=6 riscv_mmu_stress_test cycles=178974 hex=35289d4c
+PASS seed=6 riscv_no_fence_test cycles=97836 hex=e92774e9
+PASS seed=6 riscv_full_interrupt_test cycles=130476 hex=7f9c93f2
+--- seed 6 complete: 9/9 pass ---
+PASS seed=7 riscv_arithmetic_basic_test cycles=88250 hex=16ebdbbc
+PASS seed=7 riscv_jump_stress_test cycles=17242 hex=abc7fa75
+PASS seed=7 riscv_non_compressed_instr_test cycles=4432 hex=de56ae7f
+PASS seed=7 riscv_loop_test cycles=149853 hex=ee790c1a
+PASS seed=7 riscv_rand_instr_test cycles=10002 hex=f7919c05
+PASS seed=7 riscv_rand_jump_test cycles=201724 hex=754edc71
+PASS seed=7 riscv_mmu_stress_test cycles=127392 hex=97daf8f4
+PASS seed=7 riscv_no_fence_test cycles=5418 hex=72fda163
+PASS seed=7 riscv_full_interrupt_test cycles=4444 hex=51fe7378
+--- seed 7 complete: 9/9 pass ---
+PASS seed=8 riscv_arithmetic_basic_test cycles=91098 hex=6efcc330
+PASS seed=8 riscv_jump_stress_test cycles=19292 hex=5dbc53dc
+PASS seed=8 riscv_non_compressed_instr_test cycles=521402 hex=ae1dc68e
+PASS seed=8 riscv_loop_test cycles=125438 hex=8fe8b1a6
+PASS seed=8 riscv_rand_instr_test cycles=241462 hex=6c9f10dd
+PASS seed=8 riscv_rand_jump_test cycles=75522 hex=a1392ce5
+PASS seed=8 riscv_mmu_stress_test cycles=207238 hex=df88edc7
+PASS seed=8 riscv_no_fence_test cycles=74642 hex=8215b57e
+PASS seed=8 riscv_full_interrupt_test cycles=521448 hex=2e121bd2
+--- seed 8 complete: 9/9 pass ---
+PASS seed=9 riscv_arithmetic_basic_test cycles=91496 hex=49f864f7
+PASS seed=9 riscv_jump_stress_test cycles=73838 hex=d5f73b78
+PASS seed=9 riscv_non_compressed_instr_test cycles=104821 hex=88638f1e
+PASS seed=9 riscv_loop_test cycles=145950 hex=6e8671b6
+PASS seed=9 riscv_rand_instr_test cycles=129600 hex=2ee245d0
+PASS seed=9 riscv_rand_jump_test cycles=12546 hex=1bc314f2
+PASS seed=9 riscv_mmu_stress_test cycles=857190 hex=4e4bd29b
+PASS seed=9 riscv_no_fence_test cycles=55382 hex=b3eb6d8a
+PASS seed=9 riscv_full_interrupt_test cycles=104801 hex=a1a43081
+--- seed 9 complete: 9/9 pass ---
+PASS seed=10 riscv_arithmetic_basic_test cycles=89738 hex=dcfa1591
+PASS seed=10 riscv_jump_stress_test cycles=35898 hex=d9ba0ec4
+PASS seed=10 riscv_non_compressed_instr_test cycles=255478 hex=c12060cd
+PASS seed=10 riscv_loop_test cycles=43700 hex=4435ba9f
+PASS seed=10 riscv_rand_instr_test cycles=143275 hex=c97cf5e4
+PASS seed=10 riscv_rand_jump_test cycles=80868 hex=4a04874e
+PASS seed=10 riscv_mmu_stress_test cycles=153080 hex=39f0bcbc
+PASS seed=10 riscv_no_fence_test cycles=180680 hex=ac8d9f06
+PASS seed=10 riscv_full_interrupt_test cycles=255310 hex=f2279b81
+--- seed 10 complete: 9/9 pass ---
+PASS seed=11 riscv_arithmetic_basic_test cycles=86302 hex=66e259b3
+PASS seed=11 riscv_jump_stress_test cycles=38810 hex=39077170
+PASS seed=11 riscv_non_compressed_instr_test cycles=114162 hex=727af4aa
+PASS seed=11 riscv_loop_test cycles=172596 hex=894b3061
+PASS seed=11 riscv_rand_instr_test cycles=56794 hex=ec3011fb
+PASS seed=11 riscv_rand_jump_test cycles=112186 hex=eec17624
+PASS seed=11 riscv_mmu_stress_test cycles=169808 hex=2a4c467c
+PASS seed=11 riscv_no_fence_test cycles=144333 hex=2ed1d4bf
+PASS seed=11 riscv_full_interrupt_test cycles=114144 hex=81ad6a54
+--- seed 11 complete: 9/9 pass ---
+=== SEED FARM COMPLETE ===

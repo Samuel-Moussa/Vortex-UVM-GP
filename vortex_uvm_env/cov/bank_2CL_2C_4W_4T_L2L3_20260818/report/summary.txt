@@ -1,0 +1,20 @@
+QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
+Start time: 16:52:18 on Aug 18,2026
+vcover report -summary /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/cov/merged.ucdb 
+Coverage Report Totals BY INSTANCES: Number of Instances 8797
+
+    Enabled Coverage              Bins      Hits    Misses    Weight  Coverage
+    ----------------              ----      ----    ------    ------  --------
+    Assertions                     407       403         4         1    99.01%
+    Branches                     12082     11437       645         1    94.66%
+    Conditions                    1462      1159       303         1    79.27%
+    Covergroups                     58        na        na         1    99.15%
+        Coverpoints/Crosses        244        na        na         1        na
+            Covergroup Bins       1092      1042        50         1    95.42%
+    Directives                       5         5         0         1   100.00%
+    Statements                   18293     17683       610         1    96.66%
+    Toggles                    1541136   1287054    254082         1    83.51%
+Total coverage (filtered view): 93.18%
+
+End time: 16:52:21 on Aug 18,2026, Elapsed time: 0:00:03
+Errors: 0, Warnings: 0

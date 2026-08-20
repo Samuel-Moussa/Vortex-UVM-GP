@@ -6,6 +6,3 @@ coverage exclude -du rr_arb_tree -reason EOTH
 coverage exclude -du VX_fpu_fpnew -reason EOTH
 coverage exclude -du {VX_tcu_*}  -reason EOTH
 coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/execute/tcu_unit} -recursive -reason EOTH
-coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[1]/core/execute/tcu_unit} -recursive -reason EOTH
-coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/g_cores[0]/core/execute/tcu_unit} -recursive -reason EOTH
-coverage exclude -scope {/vortex_tb_top/dut/vortex/g_clusters[1]/cluster/g_sockets[0]/socket/g_cores[1]/core/execute/tcu_unit} -recursive -reason EOTH
