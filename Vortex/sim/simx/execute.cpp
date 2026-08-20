@@ -26,12 +26,38 @@
 #include "instr.h"
 #include "core.h"
 #include "types.h"
+#include "cosim_loadfeed.h"
+#include "golden_halt.h"
 #ifdef EXT_V_ENABLE
 #include "processor_impl.h"
 #endif
 #include "VX_types.h"
 
 using namespace vortex;
+
+// ── A3 / OBS-020: execute-side refusal, RECORDED ─────────────────────────────
+// Counterpart of DECODE_ABORT() in decode.cpp. These sites are reached when the
+// instruction DECODED fine but a sub-field (funct3, rounding mode, register-file
+// class …) falls outside what the model implements, or when a model invariant /
+// capacity limit is violated (IPDOM stack, uniform-branch assumption).
+//
+// The abort is DELIBERATELY KEPT. A golden model that guessed a writeback value
+// here would corrupt every subsequent comparison while still reporting "pass" —
+// far worse than stopping. What changes is that the refusal now records WHERE and
+// WHY first, so the DPI returns -4 (GOLDEN_HALT at a named instruction) instead
+// of -3 (crashed, reason unknown), and the run's already-verified prefix survives.
+//
+// Valid in Emulator::execute() and Emulator::fetch_registers(), where `wid` is a
+// parameter and `warps_` is a member (checked at every one of the 22 call sites).
+#define EXEC_UNSUPPORTED(detail_) do {                                          \
+    vortex::golden_halt_set("execute", (detail_), __LINE__,                     \
+                            warps_.at(wid).PC, 0u, (wid));                      \
+    std::cerr << "[SimX-GOLDEN-HALT] execute: " << (detail_)                    \
+              << " at PC=0x" << std::hex << warps_.at(wid).PC << std::dec       \
+              << " (wid=" << (wid) << ", execute.cpp:" << __LINE__ << ")"       \
+              << std::endl;                                                     \
+    std::abort();                                                               \
+  } while (0)
 
 inline uint64_t nan_box(uint32_t value) {
   return value | 0xffffffff00000000;
@@ -103,7 +129,7 @@ void Emulator::fetch_registers(std::vector<reg_data_t>& out, uint32_t wid, uint3
     DPN(2, "}" << std::endl);
   } break;
   default:
-    std::abort();
+    EXEC_UNSUPPORTED("unhandled reg.type");
     break;
   }
 }
@@ -301,7 +327,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled alu_type");
       }
       rd_write = true;
     },
@@ -336,7 +362,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           rd_data[t].i = ballot;
           break;
         default:
-          std::abort();
+          EXEC_UNSUPPORTED("unhandled vote_type");
         }
       }
       rd_write = true;
@@ -371,7 +397,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
           pval = (lane <= maxLane);
         } break;
         default:
-          std::abort();
+          EXEC_UNSUPPORTED("unhandled shfl_type");
         }
         if (!pval)
           lane = t;
@@ -437,14 +463,14 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             break;
           }
           default:
-            std::abort();
+            EXEC_UNSUPPORTED("unhandled brArgs.cmp");
           }
           if (t == thread_start) {
             all_taken = curr_taken;
           } else {
             if (all_taken != curr_taken) {
               std::cout << "divergent branch! PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
-              std::abort();
+              EXEC_UNSUPPORTED("divergent branch inside a uniform-branch path (model invariant violated)");
             }
           }
         }
@@ -466,6 +492,12 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             continue;
           rd_data[t].i = next_pc;
         }
+        // NOTE: intentionally NO `& ~1` here. In the DUT's debug build (PC_BITS=XLEN,
+        // to/from_fullPC identity) the architectural PC keeps its full low bits, so a
+        // jalr to an odd target yields an ODD committed PC — SimX must mirror that for
+        // the lockstep PC compare to match. The misalignment is absorbed at FETCH
+        // (word-aligned icache read), matching VX_fetch.sv (icache_req_addr = PC[2+:...],
+        // "4-byte aligned"). See Emulator::fetch().
         next_pc = rs1_data[thread_last].i + offset;
         trace->fetch_stall = true;
         rd_write = true;
@@ -483,11 +515,11 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         case 0x302: // RV32I: MRET
           break;
         default:
-          std::abort();
+          EXEC_UNSUPPORTED("unhandled brArgs.offset");
         }
         break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled br_type");
       }
     },
     [&](MdvType mdv_type) {
@@ -653,7 +685,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled mdv_type");
       }
       rd_write = true;
     },
@@ -666,6 +698,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         uint32_t data_bytes = 1 << (lsuArgs.width & 0x3);
         uint32_t data_width = 8 * data_bytes;
         Word offset = sext<Word>(lsuArgs.offset, 32);
+        // RVVI load-bus (Phase A1(e)): consume this warp's next execution of the
+        // LOAD at this PC (alignment key = (cid,wid,PC,occurrence) — robust to
+        // interrupt-inserted instructions, unlike a raw ordinal; DUT/SimX uuids
+        // differ so program order is the only valid key). If the scoreboard
+        // flagged this occurrence as a provably-racy shared load, adopt the
+        // DUT-observed per-lane writeback value instead of SimX's own memory read.
+        // Default OFF ⇒ feed==nullptr ⇒ no change. See cosim_loadfeed.h.
+        const vortex::LoadFeedRec* feed =
+            vortex::loadfeed_next(core_->id(), wid, trace->PC);
         for (uint32_t t = thread_start; t < num_threads; ++t) {
           if (!warp.tmask.test(t))
             continue;
@@ -695,7 +736,15 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             rd_data[t].u64 = read_data;
             break;
           default:
-            std::abort();
+            EXEC_UNSUPPORTED("unhandled lsuArgs.width");
+          }
+          // Load-bus override: replace the aligned register value with the DUT's
+          // observed writeback for this lane (integer loads only; FP-dest loads
+          // are not on the feed — their data routes to the FP regfile, which the
+          // DUT LSU probe does not tap). Applied post-alignment so no double
+          // sign-extension.
+          if (feed && ((feed->feed_mask >> t) & 1)) {
+            rd_data[t].u64 = feed->data[t];
           }
         }
         rd_write = true;
@@ -719,7 +768,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
             this->dcache_write(&write_data, mem_addr, data_bytes);
             break;
           default:
-            std::abort();
+            EXEC_UNSUPPORTED("unhandled lsuArgs.width");
           }
         }
       } break;
@@ -727,7 +776,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         // no compute
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled lsu_type");
       }
     },
     [&](AmoType amo_type) {
@@ -904,7 +953,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled amo_type");
       }
       rd_write = true;
     },
@@ -1262,52 +1311,99 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled fpu_type");
+      }
+      // COMPUTE-writeback feed (OBS-014 reconvergence): for FSQRT ONLY, if the
+      // scoreboard certified this warp/PC/occurrence's DUT sqrt as within the
+      // documented 1-ULP bound, adopt the DUT value into SimX's FP destination so
+      // the register file reconverges and every downstream op is re-checked
+      // bit-exact against a DUT-consistent reference. Advance the cursor once per
+      // sqrt at this PC (fed or not). Default OFF ⇒ feed==nullptr ⇒ no change.
+      if (fpu_type == FpuType::FSQRT) {
+        const vortex::LoadFeedRec* cfeed =
+            vortex::compfeed_next(core_->id(), wid, trace->PC);
+        if (cfeed) {
+          for (uint32_t t = thread_start; t < num_threads; ++t) {
+            if (warp.tmask.test(t) && ((cfeed->feed_mask >> t) & 1)) {
+              // Re-NaN-box the DUT's single-precision result: the F-only DUT regfile
+              // reports upper32=0, but SimX's 64-bit FP convention expects a boxed
+              // single (upper32=0xFFFFFFFF) so downstream check_boxing() does not treat
+              // it as an unboxed qNaN. (F-only/FLEN=32 build; fsqrt.d is future work.)
+              rd_data[t].u64 = nan_box(static_cast<uint32_t>(cfeed->data[t]));
+            }
+          }
+        }
       }
       rd_write = true;
     },
     [&](CsrType csr_type) {
       auto csrArgs = std::get<IntrCsrArgs>(instrArgs);
       uint32_t csr_addr = csrArgs.csr;
-      switch (csr_type) {
-      case CsrType::CSRRW: {
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          Word csr_value = this->get_csr(csr_addr, wid, t);
-          auto src_data = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-          this->set_csr(csr_addr, src_data, wid, t);
-          rd_data[t].i = csr_value;
+      // OBS-015: a warp-wide CSR access must be READ-ONCE / WRITE-ONCE.
+      //
+      // The previous shape looped lanes doing get_csr -> set_csr -> return-old per
+      // lane. For a CSR whose storage is shared across the warp (fcsr/frm/fflags live
+      // in warp_t, emulator.h:61, indexed by wid only), lane t then read what lane t-1
+      // had just written — so the "old" value returned to each lane differed and the
+      // committed CSR ended up as the LAST active lane's value. That is an artifact of
+      // iterating lanes over shared state, not architectural behaviour: a warp-wide
+      // csrrw reads the CSR once. The DUT reads once and broadcasts the same old value
+      // to every lane (VX_csr_unit.sv:134) and writes once (VX_csr_unit.sv:142).
+      //
+      // PHASE 1 reads every active lane BEFORE any write (removes the aliasing, and
+      // keeps genuinely per-thread CSRs like THREAD_ID per-lane). PHASE 2 applies a
+      // single write, sourced from the LOWEST ACTIVE lane. Note the RTL sources the
+      // write from rs1_data[0] with NO tmask gating — so when lane 0 is masked off the
+      // two can legitimately differ; that is the RTL quirk recorded in OBS-015 and it
+      // is deliberately left VISIBLE here rather than mirrored, so lockstep can flag it.
+      if (csr_type != CsrType::CSRRW && csr_type != CsrType::CSRRS && csr_type != CsrType::CSRRC)
+        EXEC_UNSUPPORTED("csr_type outside {CSRRW,CSRRS,CSRRC} in the SIMT CSR path");
+
+      bool     wr_valid    = false;   // at least one active lane -> one write
+      uint32_t wr_lane     = 0;       // lowest active lane
+      Word     wr_snapshot = 0;       // pre-write CSR value (for the S/C read-modify)
+      Word     wr_src      = 0;       // that lane's source operand
+
+      // PHASE 1 — read for all active lanes, no writes yet.
+      for (uint32_t t = thread_start; t < num_threads; ++t) {
+        if (!warp.tmask.test(t))
+          continue;
+        Word csr_value = this->get_csr(csr_addr, wid, t);
+        rd_data[t].i = csr_value;
+        if (!wr_valid) {
+          wr_valid    = true;
+          wr_lane     = t;
+          wr_snapshot = csr_value;
+          wr_src      = csrArgs.is_imm ? Word(csrArgs.imm) : Word(rs1_data[t].i);
         }
-      } break;
-      case CsrType::CSRRS: {
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          Word csr_value = this->get_csr(csr_addr, wid, t);
-          auto src_data = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-          if (src_data != 0) {
-            this->set_csr(csr_addr, csr_value | src_data, wid, t);
-          }
-          rd_data[t].i = csr_value;
+      }
+
+      // PHASE 2 — exactly one write per warp-instruction. CSRRS/CSRRC skip the write
+      // when the source operand is zero (matches the RTL's csr_wr_enable and the ISA).
+      if (wr_valid) {
+        switch (csr_type) {
+        case CsrType::CSRRW:
+          this->set_csr(csr_addr, wr_src, wid, wr_lane);
+          break;
+        case CsrType::CSRRS:
+          if (wr_src != 0)
+            this->set_csr(csr_addr, wr_snapshot | wr_src, wid, wr_lane);
+          break;
+        case CsrType::CSRRC:
+          if (wr_src != 0)
+            this->set_csr(csr_addr, wr_snapshot & ~wr_src, wid, wr_lane);
+          break;
+        default:
+          EXEC_UNSUPPORTED("unhandled csr_type");
         }
-      } break;
-      case CsrType::CSRRC: {
-        for (uint32_t t = thread_start; t < num_threads; ++t) {
-          if (!warp.tmask.test(t))
-            continue;
-          Word csr_value = this->get_csr(csr_addr, wid, t);
-          auto src_data = csrArgs.is_imm ? csrArgs.imm : rs1_data[t].i;
-          if (src_data != 0) {
-            this->set_csr(csr_addr, csr_value & ~src_data, wid, t);
-          }
-          rd_data[t].i = csr_value;
-        }
-      } break;
-      default:
-        std::abort();
       }
       trace->fetch_stall = (csr_addr <= VX_CSR_FCSR);
+      // Performance-monitor CSRs (mcycle/minstret/mhpmcounter* and their _h
+      // mirrors) are timing-model-specific → exclude from per-instruction
+      // lockstep compare (the DUT and functional SimX count differently).
+      if ((csr_addr >= VX_CSR_MPM_BASE   && csr_addr < (VX_CSR_MPM_BASE   + 32)) ||
+          (csr_addr >= VX_CSR_MPM_BASE_H && csr_addr < (VX_CSR_MPM_BASE_H + 32)))
+        trace->volatile_result = true;
       rd_write = true;
     },
     [&](WctlType wctl_type) {
@@ -1341,7 +1437,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         if (is_divergent) {
           if (stack_size == ipdom_size_) {
             std::cout << "IPDOM stack is full! size=" << stack_size << ", PC=0x" << std::hex << warp.PC << std::dec << " (#" << trace->uuid << ")\n" << std::flush;
-            std::abort();
+            EXEC_UNSUPPORTED("IPDOM stack overflow -- raise ipdom_size_ (model CAPACITY limit, not a missing encoding)");
           }
           // set new thread mask to the larger set
           if (then_tmask.count() >= else_tmask.count()) {
@@ -1365,7 +1461,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         if (stack_ptr != warp.ipdom_stack.size()) {
           if (warp.ipdom_stack.empty()) {
             std::cout << "IPDOM stack is empty!\n" << std::flush;
-            std::abort();
+            EXEC_UNSUPPORTED("IPDOM stack underflow on JOIN (model invariant violated)");
           }
           if (warp.ipdom_stack.top().fallthrough) {
             next_tmask = warp.ipdom_stack.top().orig_tmask;
@@ -1396,7 +1492,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled wctl_type");
       }
     }
   #ifdef EXT_V_ENABLE
@@ -1436,7 +1532,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         }
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled vls_type");
       }
     },
     [&](VopType /*vop_type*/) {
@@ -1462,7 +1558,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
         rd_write = true;
       } break;
       default:
-        std::abort();
+        EXEC_UNSUPPORTED("unhandled tcu_type");
       }
     }
   #endif // EXT_TCU_ENABLE
@@ -1524,7 +1620,7 @@ instr_trace_t* Emulator::execute(const Instr &instr, uint32_t wid) {
   #endif
     default:
       std::cout << "Unrecognized register write back type: " << rdest.type << std::endl;
-      std::abort();
+      EXEC_UNSUPPORTED("unhandled rdest.type in register writeback");
       break;
     }
   }

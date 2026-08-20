@@ -885,6 +885,56 @@ module vortex_tb_top;
 
         $display("[I2-ASSERT] Topology OK: %0dCL %0dC %0dW %0dT (RTL == UVM plusargs)",
                  TB_NUM_CLUSTERS, `NUM_CORES, `NUM_WARPS, `NUM_THREADS);
+
+        // ── I2 (extended): the REST of the STRUCTURAL config ──────────────────
+        // Everything below is fixed at ELABORATION in the RTL, so a runtime plusarg
+        // can only make the TB *believe* something the DUT does not implement — it
+        // can never change the hardware. Historically only the topology was gated
+        // here, which left silent TB/RTL drift possible on XLEN, the memory
+        // interface, and the optional cache levels (see OBS-019). Fail loud instead,
+        // and say exactly how to rebuild.
+        begin
+            // Snapshot the RTL's elaborated structural config into plain variables
+            // first (no preprocessor conditionals inside expressions), then check.
+            bit rtl_xlen64, rtl_icache, rtl_dcache;
+            `ifdef XLEN_64
+                rtl_xlen64 = 1'b1;
+            `else
+                rtl_xlen64 = 1'b0;
+            `endif
+            `ifdef ICACHE_ENABLE
+                rtl_icache = 1'b1;
+            `else
+                rtl_icache = 1'b0;
+            `endif
+            `ifdef DCACHE_ENABLE
+                rtl_dcache = 1'b1;
+            `else
+                rtl_dcache = 1'b0;
+            `endif
+            if (($test$plusargs("XLEN_64") || $test$plusargs("xlen=64")) && !rtl_xlen64)
+                $fatal(1, "[I2-ASSERT] +XLEN_64 requested but the RTL was compiled XLEN_32 -- XLEN is compile-time: rebuild the RTL/SimX for 64-bit.");
+
+            // Optional cache levels — PASSTHRU (no cache array) unless enabled at
+            // compile time; VX_cache_wrap.sv:160 only instantiates VX_cache when
+            // PASSTHRU==0. Terminal control is `make sim ... L2=1 L3=1`.
+            if (($test$plusargs("L2CACHE") || $test$plusargs("l2cache")) && (`L2_ENABLED == 0))
+                $fatal(1, "[I2-ASSERT] +L2CACHE requested but the RTL was elaborated WITHOUT L2 (PASSTHRU/bypass) -- rebuild with `make sim ... L2=1`.");
+            if (($test$plusargs("L3CACHE") || $test$plusargs("l3cache")) && (`L3_ENABLED == 0))
+                $fatal(1, "[I2-ASSERT] +L3CACHE requested but the RTL was elaborated WITHOUT L3 (PASSTHRU/bypass) -- rebuild with `make sim ... L3=1`.");
+
+            // Memory interface — the AXI wrapper is a compile-time wrapper choice.
+            `ifdef USE_AXI_WRAPPER
+                if ($test$plusargs("MEM_INTERFACE"))
+                    $fatal(1, "[I2-ASSERT] +MEM_INTERFACE requested but the RTL was compiled with USE_AXI_WRAPPER -- rebuild with `--interface=mem`.");
+            `else
+                if ($test$plusargs("USE_AXI_WRAPPER"))
+                    $fatal(1, "[I2-ASSERT] +USE_AXI_WRAPPER requested but the RTL was compiled WITHOUT the AXI wrapper -- rebuild with `--interface=axi`.");
+            `endif
+
+            $display("[I2-ASSERT] Structural config OK: XLEN=%0d L2=%0d L3=%0d icache=%0d dcache=%0d (RTL == UVM)",
+                     rtl_xlen64 ? 64 : 32, `L2_ENABLED, `L3_ENABLED, rtl_icache, rtl_dcache);
+        end
     end
 
     //==========================================================================
@@ -945,7 +995,99 @@ module vortex_tb_top;
         .reset        (reset),
         .commit_arb_if(commit_arb_if)
     );
-    
+
+    // B1-bind: passive per-core DCR register observer. VX_core.sv:82 instantiates
+    // VX_dcr_data once per core, so this creates exactly one probe per core the
+    // config actually built — config-aware by construction, no path enumeration.
+    // Supplies the READ side the write-only VX_dcr_bus_if cannot, turning the RAL
+    // mirror into a real check. PEEK ONLY: it never drives, so the DCR waveform
+    // (and therefore the SimX feed at vortex_scoreboard.sv:403) is unchanged.
+    // Note the connection to `dcrs`, the module's INTERNAL storage register.
+    bind VX_dcr_data vx_dcr_probe u_dcr_probe (
+        .clk         (clk),
+        .reset       (reset),
+        .write_valid (dcr_bus_if.write_valid),
+        .write_addr  (dcr_bus_if.write_addr),
+        .write_data  (dcr_bus_if.write_data),
+        .dcrs        (dcrs)
+    );
+
+    // A1(d)-bind: passive LOAD-writeback probe into every VX_lsu_slice. Captures
+    // the final aligned per-lane load DATA (result_if) — invisible at the commit
+    // tap (OBS-002) — so lockstep can DATA-compare loads. +LOCKSTEP-gated, passive.
+    bind VX_lsu_slice vx_lsu_probe u_lsu_probe (
+        .clk  (clk),
+        .reset(reset),
+        .valid(result_if.valid),
+        .ready(result_if.ready),
+        .data (result_if.data)
+    );
+
+    // FW-6 / gap G1: passive CACHE-EVENT coverage probe, bound into every
+    // VX_cache_bank (the stage where hit/miss is actually resolved). One instance
+    // per bank per cache, so L1 I$/D$, L2 and L3 land as SEPARATE covergroup
+    // instances in the UCDB hierarchy.
+    //
+    // CONFIG-AWARE BY CONSTRUCTION: VX_cache_wrap.sv:160 instantiates VX_cache —
+    // and hence VX_cache_bank — only when `PASSTHRU == 0`. With L2/L3 disabled
+    // those levels are pure bypass, no bank exists, so this bind creates NO
+    // instance and adds NO bins. That means the default (L2/L3-off) build keeps
+    // its coverage denominator untouched and there is no unreachable 0% block to
+    // waive — the failure mode that made the TCU covergroup a dead ~195-bin block
+    // before it was gated. Cache geometry is passed through from the bank's own
+    // parameters, never restated here (the OBS-019 single-source-of-truth rule).
+    bind VX_cache_bank vx_cache_probe #(
+        .INSTANCE_ID(INSTANCE_ID),
+        .BANK_ID    (BANK_ID),
+        .CACHE_SIZE (CACHE_SIZE),
+        .NUM_WAYS   (NUM_WAYS),
+        .WRITEBACK  (WRITEBACK),
+        // Structural waiver key: the icache is built .WRITE_ENABLE(0)
+        // (VX_socket.sv:106), which makes its write and flush bins impossible
+        // rather than unstimulated. Passed through by `bind` so the waiver is
+        // per-instance and config-generic -- enable L2/L3 or change the socket
+        // and the correct caches keep their bins with no edit here.
+        .WRITE_ENABLE (WRITE_ENABLE),
+        // OBS-031 structural-reachability key for cp_mshr_stall.stall. The bin
+        // needs MSHR_SIZE CONCURRENT outstanding misses in one bank; whether
+        // that is possible is set by the REQUESTER side, which is narrower than
+        // the MSHR at L1 in this configuration. Computed HERE because the
+        // VX_config.vh macros are in scope at the bind site but not inside the
+        // probe, and passed per-instance so it adapts to any config.
+        //   L1 icache: at most one outstanding fetch per warp, over the cores
+        //              sharing the socket.
+        //   L1 dcache: LSUQ_OUT_SIZE outstanding memory requests per LSU, over
+        //              the cores sharing the socket (VX_config.vh:431).
+        //   anything else (L2 1 MB / L3 2 MB): the requesters are CACHES, not a
+        //              core pipeline, and that bound is NOT established here —
+        //              so fall back to MSHR_SIZE, which makes the waiver
+        //              inapplicable. Never guess a bound for a level we have not
+        //              analysed; an unproven ignore_bins is the OBS-030 failure.
+        // ICACHE_SIZE == DCACHE_SIZE (both 16384), so WRITE_ENABLE is what
+        // separates them (the icache is built .WRITE_ENABLE(0), VX_socket.sv:106).
+        .MSHR_SIZE (MSHR_SIZE),
+        .MAX_OUTSTANDING (
+            (CACHE_SIZE == `ICACHE_SIZE && WRITE_ENABLE == 0)
+                ? (`SOCKET_SIZE * `NUM_WARPS)
+          : (CACHE_SIZE == `DCACHE_SIZE && WRITE_ENABLE == 1)
+                ? (`SOCKET_SIZE * `LSUQ_OUT_SIZE)
+          : MSHR_SIZE)
+    ) u_cache_probe (
+        .clk            (clk),
+        .reset          (reset),
+        .valid_st1      (valid_st1),
+        .is_creq_st1    (is_creq_st1),
+        .is_fill_st1    (is_fill_st1),
+        .is_flush_st1   (is_flush_st1),
+        .is_replay_st1  (is_replay_st1),
+        .is_hit_st1     (is_hit_st1),
+        .rw_st1         (rw_st1),
+        .is_dirty_st1   (is_dirty_st1),
+        .perf_read_miss (perf_read_miss),
+        .perf_write_miss(perf_write_miss),
+        .perf_mshr_stall(perf_mshr_stall)
+    );
+
 
     //==========================================================================
     // SIMULATION COMPLETION

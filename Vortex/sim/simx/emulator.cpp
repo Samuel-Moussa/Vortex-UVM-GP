@@ -19,6 +19,8 @@
 #include <util.h>
 
 #include "emulator.h"
+#include "golden_halt.h"
+#include <cstdio>
 #include "instr_trace.h"
 #include "instr.h"
 #include "dcrs.h"
@@ -29,6 +31,22 @@
 #include "local_mem.h"
 
 using namespace vortex;
+
+// ── A3 / OBS-020: emulator-side refusal, RECORDED ────────────────────────────
+// Third and last counterpart of DECODE_ABORT() / EXEC_UNSUPPORTED(). These sites
+// are the CSR and console-MMIO gaps — historically the most common reason a
+// riscv-dv program ended UNVERIFIABLE, since an exotic CSR address killed the
+// whole run. Converting them means the -3 sentinel now really does mean "crashed
+// for an unknown reason" and nothing else.
+#define EMU_HALT(wid_, ...) do {                                                \
+    char _d[96];                                                                \
+    std::snprintf(_d, sizeof(_d), __VA_ARGS__);                                 \
+    vortex::golden_halt_set("emulator", _d, __LINE__,                           \
+                            warps_.at(wid_).PC, 0u, (uint32_t)(wid_));          \
+    std::cerr << "[SimX-GOLDEN-HALT] emulator: " << _d                          \
+              << " (emulator.cpp:" << __LINE__ << ")" << std::endl;             \
+    std::abort();                                                               \
+  } while (0)
 
 warp_t::warp_t(uint32_t num_threads)
   : ireg_file(MAX_NUM_REGS, std::vector<Word>(num_threads))
@@ -142,7 +160,13 @@ uint32_t Emulator::fetch(uint32_t wid, uint64_t uuid) {
   __unused(uuid);
 
   uint32_t instr_code = 0;
-  this->icache_read(&instr_code, warp.PC, sizeof(uint32_t));
+  // Word-align the fetch (drop PC[1:0]), matching the RTL icache request address
+  // (VX_fetch.sv: icache_req_addr = PC[2 +: ...], "4-byte aligned"). The DUT keeps
+  // the full (possibly odd) PC in its register but always fetches the aligned word;
+  // without this mask a jalr-to-odd-target makes SimX read misaligned bytes →
+  // undecodable garbage → std::abort() (run wrongly classified UNVERIFIABLE). The
+  // architectural warp.PC is left unchanged so the odd PC still matches the DUT.
+  this->icache_read(&instr_code, warp.PC & ~Word(3), sizeof(uint32_t));
 
   DP(1, "Fetch: code=0x" << std::hex << instr_code << std::dec << ", cid=" << core_->id() << ", wid=" << wid << ", tmask=" << warp.tmask
          << ", PC=0x" << std::hex << warp.PC << " (#" << std::dec << uuid << ")");
@@ -417,7 +441,7 @@ bool Emulator::dcache_amo_check(uint64_t addr) {
 
 void Emulator::writeToStdOut(const void* data, uint64_t addr, uint32_t size) {
   if (size != 1)
-    std::abort();
+    EMU_HALT(0, "console MMIO write of %u bytes; only 1-byte writes are modelled", size);
   uint32_t tid = (addr - IO_COUT_ADDR) & (IO_COUT_SIZE-1);
   auto& ss_buf = print_bufs_[tid];
   char c = *(char*)data;
@@ -579,12 +603,12 @@ Word Emulator::get_csr(uint32_t addr, uint32_t wid, uint32_t tid) {
       } break;
       default:
         std::cerr << "Error: invalid MPM CLASS: value=" << perf_class << std::endl;
-        std::abort();
+        EMU_HALT(wid, "invalid MPM perf CLASS=%u", (unsigned)perf_class);
         break;
       }
     } else {
       std::cerr << "Error: invalid CSR read addr=0x"<< std::hex << addr << std::dec << std::endl;
-      std::abort();
+      EMU_HALT(wid, "invalid CSR READ addr=0x%x", (unsigned)addr);
     }
   }
   return 0;
@@ -631,7 +655,7 @@ void Emulator::set_csr(uint32_t addr, Word value, uint32_t wid, uint32_t tid) {
         return; // silently ignore unimplemented machine-mode / hw-id CSR writes
       std::cerr << "Error: invalid CSR write addr=0x" << std::hex << addr << ", value=0x" << value << std::dec << std::endl;
       std::flush(std::cout);
-      std::abort();
+      EMU_HALT(wid, "invalid CSR WRITE addr=0x%x value=0x%llx", (unsigned)addr, (unsigned long long)value);
     }
   }
 }
@@ -658,3 +682,111 @@ void Emulator::trigger_ecall() {
 void Emulator::trigger_ebreak() {
   active_warps_.reset();
 }
+
+///////////////////////////////////////////////////////////////////////////////
+// RVVI-style DUT load-bus feed (Phase A1(e)). Defined here (a translation unit
+// already in the SimX SRCS list) so the DPI bridge (simx_dpi.cpp, linked against
+// obj/*.o) and execute.cpp share one store without a Makefile change. See
+// cosim_loadfeed.h for the rationale. Keyed by (cid,wid,uuid); a std::map is fine
+// — lookups happen only at LOAD retirements.
+///////////////////////////////////////////////////////////////////////////////
+#include "cosim_loadfeed.h"
+#include <map>
+#include <tuple>
+
+namespace vortex {
+namespace {
+  // key = (cid, wid, pc, occurrence-of-that-pc) -> override record
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t,uint32_t>, LoadFeedRec> g_loadfeed;
+  // per-(cid,wid,pc) occurrence counter (next occurrence SimX will execute)
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t>, uint32_t> g_loadfeed_cursor;
+  bool     g_loadfeed_en = false;
+  uint32_t g_loadfeed_pushed = 0;
+  uint32_t g_loadfeed_consumed = 0;
+}
+
+void loadfeed_reset() {
+  g_loadfeed.clear();
+  g_loadfeed_cursor.clear();
+  g_loadfeed_pushed = 0;
+  g_loadfeed_consumed = 0;
+}
+
+void loadfeed_rewind() {
+  g_loadfeed_cursor.clear();
+  g_loadfeed_consumed = 0;
+}
+
+void loadfeed_enable(bool en) { g_loadfeed_en = en; }
+bool loadfeed_enabled() { return g_loadfeed_en; }
+
+void loadfeed_push(uint32_t cid, uint32_t wid, uint64_t pc, uint32_t occurrence,
+                   uint32_t feed_mask, const uint64_t* data, uint32_t n) {
+  LoadFeedRec r{};
+  r.feed_mask = feed_mask;
+  for (uint32_t i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i)
+    r.data[i] = data[i];
+  g_loadfeed[std::make_tuple(cid, wid, pc, occurrence)] = r;
+  ++g_loadfeed_pushed;
+}
+
+const LoadFeedRec* loadfeed_next(uint32_t cid, uint32_t wid, uint64_t pc) {
+  if (!g_loadfeed_en) return nullptr;
+  // advance this (warp,pc) occurrence counter, then look up the just-consumed one
+  uint32_t occ = g_loadfeed_cursor[std::make_tuple(cid, wid, pc)]++;
+  auto it = g_loadfeed.find(std::make_tuple(cid, wid, pc, occ));
+  if (it == g_loadfeed.end()) return nullptr;
+  ++g_loadfeed_consumed;
+  return &it->second;
+}
+
+uint32_t loadfeed_pushed()   { return g_loadfeed_pushed; }
+uint32_t loadfeed_consumed() { return g_loadfeed_consumed; }
+
+// --- COMPUTE-writeback feed (OBS-014 reconvergence) — parallel store, own cursors.
+namespace {
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t,uint32_t>, LoadFeedRec> g_compfeed;
+  std::map<std::tuple<uint32_t,uint32_t,uint64_t>, uint32_t> g_compfeed_cursor;
+  bool     g_compfeed_en = false;
+  uint32_t g_compfeed_pushed = 0;
+  uint32_t g_compfeed_consumed = 0;
+}
+
+void compfeed_reset() {
+  g_compfeed.clear();
+  g_compfeed_cursor.clear();
+  g_compfeed_pushed = 0;
+  g_compfeed_consumed = 0;
+}
+
+void compfeed_rewind() {
+  g_compfeed_cursor.clear();
+  g_compfeed_consumed = 0;
+}
+
+void compfeed_enable(bool en) { g_compfeed_en = en; }
+bool compfeed_enabled() { return g_compfeed_en; }
+
+void compfeed_push(uint32_t cid, uint32_t wid, uint64_t pc, uint32_t occurrence,
+                   uint32_t feed_mask, const uint64_t* data, uint32_t n) {
+  LoadFeedRec r{};
+  r.feed_mask = feed_mask;
+  for (uint32_t i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i)
+    r.data[i] = data[i];
+  g_compfeed[std::make_tuple(cid, wid, pc, occurrence)] = r;
+  ++g_compfeed_pushed;
+}
+
+const LoadFeedRec* compfeed_next(uint32_t cid, uint32_t wid, uint64_t pc) {
+  if (!g_compfeed_en) return nullptr;
+  uint32_t occ = g_compfeed_cursor[std::make_tuple(cid, wid, pc)]++;
+  auto it = g_compfeed.find(std::make_tuple(cid, wid, pc, occ));
+  if (it == g_compfeed.end()) return nullptr;
+  ++g_compfeed_consumed;
+  return &it->second;
+}
+
+uint32_t compfeed_pushed()   { return g_compfeed_pushed; }
+uint32_t compfeed_consumed() { return g_compfeed_consumed; }
+
+} // namespace vortex

@@ -29,7 +29,13 @@
 #define NLINES     (WSPAN / MEM_BLOCK_SIZE)               // 4096 cache lines
 #define BUFW       (NLINES * LINE_WORDS)                  // words backing the span
 #define NPAT       8
-#define TOTAL      (NUM_CLUSTERS * NUM_CORES * NUM_WARPS * NUM_THREADS)
+// OBS-028: this WAS `(NUM_CLUSTERS * NUM_CORES * NUM_WARPS * NUM_THREADS)`, but
+// those macros come from VX_config.h and are FROZEN at 1/1/4/4 — kernels are never
+// rebuilt per config — so this "multi-core aware" kernel computed 16 (one core's
+// worth) at EVERY config and ran with per_cluster_busy=01 at 2CL. The device is
+// queried at RUNTIME instead, so one ELF is correct at any NCL/NC/NW/NT and cannot
+// drift from the elaborated hardware. MAX_TOTAL is the static bound for g_out.
+#define MAX_TOTAL  128                                    // 8 cores x 16 threads/core
 
 // Consecutive patterns flip every bit; XOR with index adds per-word entropy.
 static const uint32_t PAT[NPAT] = {
@@ -37,10 +43,12 @@ static const uint32_t PAT[NPAT] = {
   0xCCCCCCCCu, 0x33333333u, 0xF0F0F0F0u, 0x0F0F0F0Fu
 };
 
-typedef struct { uint32_t *buf; uint32_t *out; } ws_args_t;
+// `total` travels in the args: the stride is a RUNTIME value now (OBS-028), so
+// the kernel can no longer read it from a compile-time macro.
+typedef struct { uint32_t *buf; uint32_t *out; uint32_t total; } ws_args_t;
 
 volatile uint32_t g_buf[BUFW];
-volatile uint32_t g_out[TOTAL];
+volatile uint32_t g_out[MAX_TOTAL];
 
 static inline uint32_t sweep(uint32_t *buf, int tid, int total) {
   uint32_t acc = 0;
@@ -62,12 +70,14 @@ static inline uint32_t sweep(uint32_t *buf, int tid, int total) {
 
 void ws_kernel(ws_args_t *__UNIFORM__ args) {
   int tid = blockIdx.x;
-  args->out[tid] = sweep(args->buf, tid, TOTAL);
+  args->out[tid] = sweep(args->buf, tid, (int)args->total);
 }
 
 int main() {
   ws_args_t args; args.buf = (uint32_t *)g_buf; args.out = (uint32_t *)g_out;
-  uint32_t total = TOTAL;
+  uint32_t total = (uint32_t)vx_num_cores() * vx_num_warps() * vx_num_threads();
+  if (total > MAX_TOTAL) total = MAX_TOTAL;
+  args.total = total;
   vx_spawn_threads(1, &total, nullptr, (vx_kernel_func_cb)ws_kernel, &args);
   return 0;   // scoreboard (DUT vs SimX: g_buf touched words + g_out) is the authority
 }

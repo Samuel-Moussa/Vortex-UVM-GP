@@ -92,6 +92,10 @@ ${YELLOW}Optional Configuration:${NC}
     --cores=N                Number of cores (default: 1)
     --warps=N                Number of warps per core (default: 4)
     --threads=N              Number of threads per warp (default: 4)
+    --l2=0|1                 Enable the per-cluster L2 cache (default: 0 = PASSTHRU/bypass)
+    --l3=0|1                 Enable the GPU-wide L3 cache   (default: 0 = PASSTHRU/bypass)
+    --icache=0|1             Enable the per-socket I-cache  (default: 1)
+    --dcache=0|1             Enable the per-socket D-cache  (default: 1)
     --timeout=CYCLES         Simulation timeout in cycles (default: 1000000)
     --startup-addr=ADDR      Startup PC in hex (default: 0x80000000 RV32,
                               use 0x080000000 for RV64)
@@ -944,15 +948,15 @@ SIM_EXIT_CODE=$?
 print_header "Results"
 
 
-# Count UVM errors directly — this is the authoritative source
-# Subtract the 2 expected end-of-test UVM_ERRORs (base_test + smoke_test banners)
-# that fire ONLY when test_passed=0 — they are symptoms, not causes.
-# Real errors are the ones fired DURING simulation.
+# Count UVM errors directly — this is the authoritative source.
+# T4: no subtraction. Every UVM_ERROR in the log is a real failure (parity with
+# scripts/simulate.sh; the old "-2" workaround hid real errors — root causes of
+# the phantom end-of-test errors were fixed in commits 2ccef437, 11f71359).
 UVM_ERRORS=$(grep -c "^# UVM_ERROR /" "$LOG_FILE" 2>/dev/null || true)
 UVM_ERRORS=${UVM_ERRORS:-0}
 UVM_FATALS=$(grep -c "^# UVM_FATAL /" "$LOG_FILE" 2>/dev/null || true)
 UVM_FATALS=${UVM_FATALS:-0}
-REAL_UVM_ERRORS=$((UVM_ERRORS > 2 ? UVM_ERRORS - 2 : UVM_ERRORS))
+REAL_UVM_ERRORS=$UVM_ERRORS
 
 # Count RTL assertion errors — lines starting with "# ** Error:" in the log.
 # These are real DUT failures that must cause the run to be marked FAILED

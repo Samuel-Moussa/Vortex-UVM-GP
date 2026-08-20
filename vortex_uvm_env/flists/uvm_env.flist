@@ -12,10 +12,9 @@
 #                          vortex_sanity_test, vortex_smoke_test,
 #                          functional_memory_test
 #
-#   vortex_env_pkg   owns: (imports only — no includes of sv class files)
-#
-#   All env components (virtual_sequencer, scoreboard, coverage, env) are
-#   standalone because vortex_env_pkg does NOT include them.
+#   vortex_env_pkg   owns: vortex_virtual_sequencer, rvvi_txn, rvvi_monitor,
+#                          vortex_scoreboard, lockstep_scoreboard,
+#                          vortex_coverage_collector, vortex_env
 
 # Set UVM environment base directory
 +incdir+$UVM_HOME
@@ -40,10 +39,23 @@ $VORTEX_UVM_HOME/tb/vortex_if.sv
 # 4. Memory model package (standalone package; imported by multiple packages)
 $VORTEX_UVM_HOME/tb/mem_model.sv
 
+# Lockstep record type + gating flags (Phase A0; queues removed in A1(c)).
+# MUST precede rvvi_if.sv and the probes (both import it) and vortex_env_pkg.
+$VORTEX_UVM_HOME/uvm_env/lockstep_pkg.sv
+
+# RVVI hand-off interface + registry (Phase A1(c)): each probe instantiates an
+# rvvi_if and registers it; rvvi_monitor (owned by vortex_env_pkg) drains all
+# registered vifs and publishes rvvi_txn on its analysis port to the lockstep
+# scoreboard. MUST follow lockstep_pkg (struct) and precede the probes (they
+# instantiate rvvi_if and call rvvi_registry_pkg::rvvi_register).
+$VORTEX_UVM_HOME/tb/rvvi_if.sv
+
 # White-box architectural instruction coverage (ARCH-COV / instr_class_cg / Warp/scheduler-state functional coverage)
 $VORTEX_UVM_HOME/tb/vx_instr_probe.sv
 $VORTEX_UVM_HOME/tb/vx_sched_probe.sv
 $VORTEX_UVM_HOME/tb/vx_commit_probe.sv
+$VORTEX_UVM_HOME/tb/vx_lsu_probe.sv
+$VORTEX_UVM_HOME/tb/vx_cache_probe.sv
 
 # 5. Agent packages (each self-contained)
 $VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent_pkg.sv
@@ -52,34 +64,15 @@ $VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent_pkg.sv
 $VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent_pkg.sv
 $VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent_pkg.sv
 
+# 5b. B1 — DCR RAL. MUST follow dcr_agent_pkg (the adapter builds a
+# dcr_transaction) and MUST precede both vx_dcr_probe.sv (the probe calls
+# vortex_dcr_ral_pkg::vx_dcr_observer::note) and vortex_env_pkg.sv (the env
+# instantiates the reg block + checker). This is why the probe does NOT sit with
+# the other tb/ probes above — its package dependency lands later than theirs.
+$VORTEX_UVM_HOME/uvm_env/ral/vortex_dcr_ral_pkg.sv
+$VORTEX_UVM_HOME/tb/vx_dcr_probe.sv
+
 # 6. Agent components (standalone, each imports its own pkg at the top)
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/axi_agent/axi_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/dcr_agent/dcr_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/mem_agent/mem_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/status_agent/status_agent.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_transaction.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequences.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_sequencer.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_driver.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_monitor.sv
-$VORTEX_UVM_HOME/uvm_env/agents/host_agent/host_agent.sv
 
 # 7. Ref model
 $VORTEX_UVM_HOME/uvm_env/ref_model/simx_pkg.sv

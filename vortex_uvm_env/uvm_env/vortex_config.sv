@@ -320,6 +320,7 @@ class vortex_config extends uvm_object;
     rand bit            enable_scoreboard;
     rand bit            strict_ordering;
     rand bit            compare_on_the_fly;
+    rand bit            enable_lockstep;    // Phase-A0: per-instruction lockstep (default 0, +LOCKSTEP)
 
     //==========================================================================
     // SYNCHRONIZATION EVENTS
@@ -339,10 +340,17 @@ class vortex_config extends uvm_object;
     //==========================================================================
 
     constraint valid_hw_config_c {
-        num_clusters inside {[1:4]};
-        num_cores    inside {[1:32]};
-        num_warps    inside {[1:16]};
-        num_threads  inside {[1:8]};
+        // NO magic ceilings. The UVM config cannot legally differ from the
+        // hardware this build was elaborated with — a plusarg cannot create
+        // hardware, which is exactly what the I2 elaboration asserts enforce
+        // (vortex_tb_top.sv). So bound each dimension by its OWN compile-time
+        // macro: the constraint is then correct for ANY configuration, including
+        // ones nobody has run yet, and it can never silently exclude a legal
+        // value the way a hardcoded [1:4] / [1:8] range did.
+        num_clusters inside {[1:`NUM_CLUSTERS]};
+        num_cores    inside {[1:`NUM_CORES]};
+        num_warps    inside {[1:`NUM_WARPS]};
+        num_threads  inside {[1:`NUM_THREADS]};
         // RTL: NUM_BARRIERS = UP(NUM_WARPS/2) = max(NUM_WARPS/2, 1)
         num_barriers == ((num_warps / 2 > 0) ? (num_warps / 2) : 1);
 
@@ -554,55 +562,53 @@ class vortex_config extends uvm_object;
         else                   flen = 0;
 
         // --- Cache ---
-        `ifdef ICACHE_ENABLE
-            icache_enable = `ICACHE_ENABLE;
+        // Cache-hierarchy enables — MIRROR the RTL's own macro logic exactly, so the TB
+        // view can never drift from what was actually elaborated. Controlled from the
+        // terminal (`make sim ... L2=1 L3=1 DCACHE=0`), never hardcoded here.
+        //
+        // In the RTL these are PRESENCE guards defined with NO value:
+        //   `VX_config.vh:531-534`  ifndef ICACHE_DISABLE -> `define ICACHE_ENABLE
+        //   `VX_config.vh:586-589`  ifndef DCACHE_DISABLE -> `define DCACHE_ENABLE
+        //   `VX_config.vh:845-856`  ifdef  L2_ENABLE      -> `define L2_ENABLED 1
+        // Expanding them as if they carried a value (``x = `L2_ENABLE;``) yields ``x = ;``
+        // — a syntax error the moment anyone defines them, which is why the optional
+        // cache levels were previously unbuildable (OBS-016). Key off the SAME guard the
+        // RTL keys off: the *_DISABLE form for I/D (default on), presence for L2/L3
+        // (default off). Tolerates the ``=1`` form too, since only presence is tested.
+        `ifdef ICACHE_DISABLE
+            icache_enable = 0;
         `else
             icache_enable = 1;
         `endif
 
-        `ifdef DCACHE_ENABLE
-            dcache_enable = `DCACHE_ENABLE;
+        `ifdef DCACHE_DISABLE
+            dcache_enable = 0;
         `else
             dcache_enable = 1;
         `endif
 
-        `ifdef L2_ENABLE
-            l2_enable = `L2_ENABLE;
-        `else
-            l2_enable = 0;
-        `endif
+        // L2/L3 come from the RTL package too (VX_gpu_pkg mirrors `L{2,3}_ENABLED`),
+        // so the TB cannot disagree with what was actually elaborated — the optional
+        // levels are PASSTHRU/bypass unless enabled (VX_cache_wrap.sv:160).
+        // Terminal-controlled: `make sim ... L2=1 L3=1`.
+        l2_enable = VX_gpu_pkg::L2_IS_ENABLED;
+        l3_enable = VX_gpu_pkg::L3_IS_ENABLED;
 
-        `ifdef L3_ENABLE
-            l3_enable = `L3_ENABLE;
-        `else
-            l3_enable = 0;
-        `endif
-
-        `ifdef ICACHE_SIZE
-            icache_size = `ICACHE_SIZE;
-        `else
-            icache_size = 16384;
-        `endif
-
-        `ifdef DCACHE_SIZE
-            dcache_size = `DCACHE_SIZE;
-        `else
-            dcache_size = 16384;
-        `endif
-
-        `ifdef L2_CACHE_SIZE
-            l2_cache_size = `L2_CACHE_SIZE;
-        `else
-            l2_cache_size = 1048576;  // L2_CACHE_SIZE default (non-ALTERA_S10): 1MB
-        `endif
-
-        `ifdef L3_CACHE_SIZE
-            l3_cache_size = `L3_CACHE_SIZE;
-        `else
-            l3_cache_size = 1048576;  // L3_CACHE_SIZE default (non-ALTERA_S10): 1MB
-        `endif
-
-        cache_line_size = 64;
+        // Cache geometry — read DIRECTLY from the RTL package, never duplicated.
+        // These used to be `ifdef/`else pairs whose `else` fallback restated the RTL
+        // default by hand. The UVM compile does NOT include VX_config.vh (only
+        // command-line +define+s reach it), so those fallbacks were ALWAYS the values
+        // actually used — and they had drifted: l3_cache_size said 1 MB while the RTL
+        // default is 2 MB (`VX_config.vh:750`), and cache_line_size was hardcoded 64
+        // instead of tracking MEM_BLOCK_SIZE. Deriving from VX_gpu_pkg (same pattern
+        // as VX_MEM_TAG_WIDTH at the top of this file) makes TB==RTL by construction.
+        // Anything set from the terminal flows through the RTL macros into the package,
+        // so a terminal override is reflected here automatically. See OBS-019.
+        icache_size     = VX_gpu_pkg::ICACHE_SIZE_BYTES;
+        dcache_size     = VX_gpu_pkg::DCACHE_SIZE_BYTES;
+        l2_cache_size   = VX_gpu_pkg::L2_CACHE_SIZE_BYTES;
+        l3_cache_size   = VX_gpu_pkg::L3_CACHE_SIZE_BYTES;
+        cache_line_size = VX_gpu_pkg::CACHE_LINE_SIZE_BYTES;
 
         // Derived cache counts
         socket_size = (num_cores < 4) ? num_cores : 4;
@@ -786,6 +792,7 @@ class vortex_config extends uvm_object;
         enable_scoreboard  = 1;
         strict_ordering    = 0;
         compare_on_the_fly = 1;
+        enable_lockstep    = 0;   // opt-in via +LOCKSTEP (default byte-identical)
 
     endfunction
 
@@ -831,11 +838,19 @@ class vortex_config extends uvm_object;
             $value$plusargs("THREADS=%d",     tmp))
             num_threads = tmp;
 
-        // --- Cache enables ---
-        if ($test$plusargs("L2CACHE") || $test$plusargs("l2cache"))
-            l2_enable = 1;
-        if ($test$plusargs("L3CACHE") || $test$plusargs("l3cache"))
-            l3_enable = 1;
+        // --- Cache enables: CHECK, never override ---
+        // L2/L3 are STRUCTURAL — VX_cache_wrap.sv:160 instantiates the real VX_cache
+        // storage only when PASSTHRU==0, i.e. the decision is made at ELABORATION.
+        // A runtime plusarg therefore cannot turn a cache on; it can only make the TB
+        // *believe* something the DUT does not implement. These plusargs used to do
+        // exactly that (`l2_enable = 1`), silently desynchronising TB from RTL — the
+        // same drift class as OBS-019. Keep the switches as an assertion instead, in
+        // the spirit of the I2 topology asserts: if you ask for a level the build does
+        // not have, fail loudly and say how to build it.
+        if (($test$plusargs("L2CACHE") || $test$plusargs("l2cache")) && !l2_enable)
+            `uvm_fatal("CFG", "+L2CACHE requested but the RTL was elaborated WITHOUT L2 (PASSTHRU/bypass). L2 is compile-time: rebuild with `make sim ... L2=1`.")
+        if (($test$plusargs("L3CACHE") || $test$plusargs("l3cache")) && !l3_enable)
+            `uvm_fatal("CFG", "+L3CACHE requested but the RTL was elaborated WITHOUT L3 (PASSTHRU/bypass). L3 is compile-time: rebuild with `make sim ... L3=1`.")
 
         // --- ISA ---
         if ($test$plusargs("XLEN_64") || $test$plusargs("xlen=64")) begin
@@ -905,6 +920,14 @@ class vortex_config extends uvm_object;
             simx_path = str_tmp;
         if ($test$plusargs("DISABLE_SIMX") || $test$plusargs("disable_simx"))
             simx_enable = 0;
+
+        // --- Lockstep (Phase A0) — per-instruction DUT-vs-SimX checking.
+        //     Requires SimX (the golden retire stream), so force it on.
+        if ($test$plusargs("LOCKSTEP")) begin
+            enable_lockstep = 1;
+            simx_enable     = 1;
+            `uvm_info("VORTEX_CFG", "Lockstep ENABLED (+LOCKSTEP): per-instruction DUT-vs-SimX", UVM_MEDIUM)
+        end
 
         // --- Driver selection ---
         if ($value$plusargs("DRIVER=%s", str_tmp)) begin

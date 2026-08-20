@@ -76,6 +76,11 @@ public:
 
   bool fetch_stall;
 
+  // Set when this instruction reads a volatile CSR (performance counters:
+  // mcycle/minstret/mhpmcounter* and their _h). Such reads are model-specific
+  // (timing DUT vs functional SimX) and must be excluded from lockstep compare.
+  bool volatile_result;
+
   uint64_t issue_time ;
 
   instr_trace_t(uint64_t uuid, const Arch& arch)
@@ -95,6 +100,7 @@ public:
     , sop(true)
     , eop(true)
     , fetch_stall(false)
+    , volatile_result(false)
     , issue_time(SimPlatform::instance().cycles())
     , log_once_(false)
   {}
@@ -116,6 +122,7 @@ public:
     , sop(rhs.sop)
     , eop(rhs.eop)
     , fetch_stall(rhs.fetch_stall)
+    , volatile_result(rhs.volatile_result)
     , issue_time(rhs.issue_time)
     , log_once_(false)
   {}

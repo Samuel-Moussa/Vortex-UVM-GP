@@ -73,10 +73,56 @@ package simx_pkg;
         output byte     unsigned rd,
         output byte     unsigned sop,
         output byte     unsigned eop,
-        output longint unsigned result[]
+        output byte     unsigned fu_type,
+        output byte     unsigned is_volatile,
+        output byte     unsigned is_fsqrt,
+        output longint unsigned result[],
+        output longint unsigned mem_addr[]
     );
     import "DPI-C" context function int  simx_cosim_pending();
     import "DPI-C" context function void simx_cosim_clear();
+
+    // RVVI load-bus feed (Phase A1(e)) — push DUT-observed load values into SimX
+    // for provably-racy shared loads (two-pass selective; default disabled).
+    import "DPI-C" context function void simx_cosim_load_feed_reset();
+    import "DPI-C" context function void simx_cosim_load_feed_enable(input int en);
+    import "DPI-C" context function void simx_cosim_load_feed_push(
+        input int      unsigned cid,
+        input int      unsigned wid,
+        input longint  unsigned pc,
+        input int      unsigned occurrence,
+        input int      unsigned feed_mask,
+        input longint  unsigned data[]
+    );
+    import "DPI-C" context function int  simx_cosim_load_feed_pushed();
+    import "DPI-C" context function int  simx_cosim_load_feed_consumed();
+
+    // A3 GOLDEN_HALT (simx_run() == -4): the golden REFUSED at a known point
+    // rather than crashing for an unknown reason. These name that point, so an
+    // UNVERIFIABLE tail can be reported as a specific missing encoding instead
+    // of an anonymous "SimX died". Valid only when simx_golden_halt_valid().
+    import "DPI-C" context function int     simx_golden_halt_valid();
+    import "DPI-C" context function longint simx_golden_halt_pc();
+    import "DPI-C" context function int     simx_golden_halt_code();
+    import "DPI-C" context function int     simx_golden_halt_wid();
+    import "DPI-C" context function int     simx_golden_halt_line();
+    import "DPI-C" context function string  simx_golden_halt_where();
+    import "DPI-C" context function string  simx_golden_halt_detail();
+
+    // COMPUTE-writeback feed (OBS-014 sqrt reconvergence) — same contract as the
+    // load feed, applied at the FSQRT writeback instead of a load.
+    import "DPI-C" context function void simx_cosim_comp_feed_reset();
+    import "DPI-C" context function void simx_cosim_comp_feed_enable(input int en);
+    import "DPI-C" context function void simx_cosim_comp_feed_push(
+        input int      unsigned cid,
+        input int      unsigned wid,
+        input longint  unsigned pc,
+        input int      unsigned occurrence,
+        input int      unsigned feed_mask,
+        input longint  unsigned data[]
+    );
+    import "DPI-C" context function int  simx_cosim_comp_feed_pushed();
+    import "DPI-C" context function int  simx_cosim_comp_feed_consumed();
 
     // SV mirror of the C simx_retire_t struct. Used by scoreboard to pass
     // one popped record around as a single object.
@@ -91,7 +137,11 @@ package simx_pkg;
         byte     unsigned rd;
         byte     unsigned sop;
         byte     unsigned eop;
+        byte     unsigned fu_type;
+        byte     unsigned is_volatile;
+        byte     unsigned is_fsqrt;
         longint unsigned result[];
+        longint unsigned mem_addr[];
     } simx_retire_s;
 
     //---------------------------------------------------------

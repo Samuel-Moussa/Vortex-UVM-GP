@@ -1,20 +1,20 @@
 QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
-Start time: 18:50:34 on Jul 08,2026
-vcover report -summary cov/merged.ucdb 
-Coverage Report Totals BY INSTANCES: Number of Instances 2247
+Start time: 09:11:07 on Aug 16,2026
+vcover report -summary /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/cov/merged.ucdb 
+Coverage Report Totals BY INSTANCES: Number of Instances 8275
 
     Enabled Coverage              Bins      Hits    Misses    Weight  Coverage
     ----------------              ----      ----    ------    ------  --------
-    Assertions                     142       105        37         1    73.94%
-    Branches                      8034      7099       935         1    88.36%
-    Conditions                     941       689       252         1    73.21%
-    Covergroups                     16        na        na         1    97.94%
-        Coverpoints/Crosses         82        na        na         1        na
-            Covergroup Bins        380       342        38         1    90.00%
-    Directives                      16         5        11         1    31.25%
-    Statements                    9628      9058       570         1    94.07%
-    Toggles                     531920    395547    136373         1    74.36%
-Total coverage (filtered view): 76.16%
+    Assertions                     355       351         4         1    98.87%
+    Branches                     10063      9625       438         1    95.64%
+    Conditions                    1176      1040       136         1    88.43%
+    Covergroups                     54        na        na         1    99.52%
+        Coverpoints/Crosses        220        na        na         1        na
+            Covergroup Bins       1032       985        47         1    95.44%
+    Directives                       5         5         0         1   100.00%
+    Statements                   15252     14992       260         1    98.29%
+    Toggles                    1223490    982924    240566         1    80.33%
+Total coverage (filtered view): 94.44%
 
-End time: 18:50:35 on Jul 08,2026, Elapsed time: 0:00:01
+End time: 09:11:09 on Aug 16,2026, Elapsed time: 0:00:02
 Errors: 0, Warnings: 0

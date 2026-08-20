@@ -301,14 +301,46 @@ if [[ -n "$PROGRAM" ]]; then
             exit 1
         fi
 
-        # Try pre-generated first unless RISCV_DV_REGEN=1
+        # ── FW-1: SEED CONTROL + REPRODUCIBILITY ────────────────────────────
+        # Before this, riscv-dv was invoked with --iterations=1 and NO seed, so
+        # every regeneration produced a DIFFERENT program: a random-stimulus
+        # failure could not be reproduced, bisected or regressed. (That is the
+        # most likely cause of riscv_non_compressed_instr_test / riscv_rand_jump_test
+        # failing in the 2026-08-06 sweep having passed earlier.)
+        #
+        #   RV_SEED=<n>        pin the seed (DEFAULT 1 => the committed suite is a
+        #                      STABLE regression gate: a failure means a real change,
+        #                      not merely a different program)
+        #   RV_START_SEED=<n>  + RV_ITERATIONS=<k> => sweep k consecutive seeds
+        #                      (the FW-1 seed-farm mode; mutually exclusive with RV_SEED)
+        #
+        # The generated program is cached in a SEED-KEYED output directory, so
+        # reuse is deterministic. The previous "newest .S found on disk" lookup was
+        # itself a second reproducibility hole: which program you got depended on
+        # what happened to be generated last, across all seeds and all profiles.
+        RV_SEED="${RV_SEED:-1}"
+        RV_ITERATIONS="${RV_ITERATIONS:-1}"
+        if [[ -n "${RV_START_SEED:-}" ]]; then
+            RV_SEED_ARGS="--start_seed=${RV_START_SEED} --iterations=${RV_ITERATIONS}"
+            RV_SEED_TAG="s${RV_START_SEED}n${RV_ITERATIONS}"
+            RV_SEED_DESC="start_seed=${RV_START_SEED} iterations=${RV_ITERATIONS}"
+        else
+            # --seed implies --iterations=1 in riscv-dv; do not pass both.
+            RV_SEED_ARGS="--seed=${RV_SEED}"
+            RV_SEED_TAG="s${RV_SEED}"
+            RV_SEED_DESC="seed=${RV_SEED}"
+        fi
+        RV_OUT_DIR="$RISCV_DV_HOME/out_vortex_${RISCV_DV_TEST}_${RV_SEED_TAG}"
+        print_info "riscv-dv randomization: ${RV_SEED_DESC}  (out: $(basename "$RV_OUT_DIR"))"
+
+        # Try the SEED-KEYED cache first unless RISCV_DV_REGEN=1
         RISCV_DV_ASM=""
         if [[ "${RISCV_DV_REGEN:-0}" != "1" ]]; then
-            RISCV_DV_ASM=$(find "$RISCV_DV_HOME" -path "*/asm_test/${RISCV_DV_TEST}_0.S" \
-                               -type f 2>/dev/null | sort -r | head -1)
+            RISCV_DV_ASM=$(find "$RV_OUT_DIR" -path "*/asm_test/${RISCV_DV_TEST}_0.S" \
+                               -type f 2>/dev/null | sort | head -1)
             if [[ -n "$RISCV_DV_ASM" ]]; then
                 PROGRAM_SOURCE="$RISCV_DV_ASM"
-                print_info "Using pre-generated assembly (RISCV_DV_REGEN=1 to force refresh): $PROGRAM_SOURCE"
+                print_info "Using cached assembly for ${RV_SEED_DESC} (RISCV_DV_REGEN=1 to force refresh): $PROGRAM_SOURCE"
             fi
         fi
 
@@ -319,11 +351,12 @@ if [[ -n "$PROGRAM" ]]; then
                 --test="$RISCV_DV_TEST" \
                 --simulator=questa \
                 --target=rv32im \
-                --iterations=1 \
+                $RV_SEED_ARGS \
+                -o "$RV_OUT_DIR" \
                 --steps=gen \
                 2>&1 | tee "$RESULTS_RUN_DIR/logs/riscv_dv_gen.log"; then
-                PROGRAM_SOURCE=$(find "$RISCV_DV_HOME" \
-                    -path "*/asm_test/${RISCV_DV_TEST}_0.S" -type f 2>/dev/null | sort -r | head -1)
+                PROGRAM_SOURCE=$(find "$RV_OUT_DIR" \
+                    -path "*/asm_test/${RISCV_DV_TEST}_0.S" -type f 2>/dev/null | sort | head -1)
                 if [[ -z "$PROGRAM_SOURCE" ]]; then
                     print_error "Generated assembly not found — expected: out_*/asm_test/${RISCV_DV_TEST}_0.S"
                     exit 1
@@ -336,6 +369,49 @@ if [[ -n "$PROGRAM" ]]; then
             fi
             cd "$FLISTS_DIR" || exit 1
         fi
+
+        # FW-1: make the run self-describing. The seed and the EXACT program are
+        # recorded next to the results, so a failure found months later can be
+        # reproduced from the log alone without guessing what riscv-dv produced.
+        # ── FW-1b GUARD: detect two profiles that emit the SAME program ─────
+        # riscv_pmp_test and riscv_non_compressed_instr_test generated
+        # BYTE-IDENTICAL programs (md5 16be14c6ebe6): both testlist entries
+        # delegate to `gen_test: riscv_rand_instr_test` and their distinguishing
+        # gen_opts are INERT at --target=rv32im. The suite counted 2 results for
+        # 1 program, so a pass was double-counted and their single 2CL failure
+        # looked like two divergences. Nothing detected it — both names are in
+        # the testlist and generation succeeded, so there was no error to catch.
+        # Record every program's md5 and say so loudly on a collision.
+        # WARNING, not fatal: a duplicate does not make a result WRONG, it makes
+        # the test COUNT wrong — and failing the run would block a legitimate
+        # rerun over a bookkeeping issue.
+        RV_MD5=$(md5sum "$PROGRAM_SOURCE" 2>/dev/null | cut -d' ' -f1)
+        RV_MANIFEST="$RISCV_DV_HOME/vortex_program_md5.manifest"
+        if [[ -n "$RV_MD5" ]]; then
+            if [[ -f "$RV_MANIFEST" ]]; then
+                RV_DUP=$(awk -v m="$RV_MD5" -v t="$RISCV_DV_TEST" -v s="$RV_SEED_TAG" \
+                         '$1==m && $3==s && $2!=t {print $2}' "$RV_MANIFEST" 2>/dev/null \
+                         | sort -u | tr '\n' ' ')
+                if [[ -n "$RV_DUP" ]]; then
+                    print_warning "FW-1b: '${RISCV_DV_TEST}' produced a program IDENTICAL to: ${RV_DUP}(md5 ${RV_MD5:0:12}, seed ${RV_SEED_TAG})"
+                    print_warning "  These are NOT distinct tests — do not count them separately."
+                    print_warning "  Their gen_opts are almost certainly inert at this --target."
+                fi
+            fi
+            grep -qs "^${RV_MD5} ${RISCV_DV_TEST} ${RV_SEED_TAG}\$" "$RV_MANIFEST" 2>/dev/null || \
+                echo "${RV_MD5} ${RISCV_DV_TEST} ${RV_SEED_TAG}" >> "$RV_MANIFEST" 2>/dev/null || true
+        fi
+
+        {
+            echo "riscv_dv_test   = $RISCV_DV_TEST"
+            echo "randomization   = $RV_SEED_DESC"
+            echo "program_md5     = ${RV_MD5:-unknown}"
+            echo "reproduce_with  = make sim TEST=random_instruction_stress_test PROGRAM=$RISCV_DV_TEST RV_SEED=${RV_SEED} RISCV_DV_REGEN=1"
+            echo "program_source  = $PROGRAM_SOURCE"
+            echo "out_dir         = $RV_OUT_DIR"
+        } > "$RESULTS_RUN_DIR/riscv_dv_seed.txt" 2>/dev/null || true
+        cp "$PROGRAM_SOURCE" "$RESULTS_RUN_DIR/" 2>/dev/null || true
+        print_info "SEED RECORD: ${RV_SEED_DESC} -> $RESULTS_RUN_DIR/riscv_dv_seed.txt"
 
 
     # Case 6: Custom ELF/BIN
@@ -410,6 +486,49 @@ if [[ -n "$PROGRAM" ]]; then
                     -e 's/\becall\b/ebreak/g' \
                     "$PROGRAM_SOURCE" > "$ASM_CLEAN"
                 print_info "Stripped machine-mode CSRs/mret, replaced ecall→ebreak → $ASM_CLEAN"
+
+                # ── OBS-027: CORE GATE (must run AFTER the sed above) ────────
+                # riscv-dv emits a SINGLE-HART program whose hart dispatch is a
+                # structural no-op: `csrr x5,0xf14; li x6,0; beq x5,x6,0f` where the
+                # branch target IS the next instruction (confirmed in the linked
+                # binary: `beq t0,t1,80000018` at 0x80000014). The sed above then
+                # rewrites that csrr to nop, so even the vestigial hart read is gone.
+                # Vortex cores ALL self-start from reset (VX_schedule.sv:230), so at
+                # >=2 cores every core executes the same stream against the same
+                # .data with no fences => store ORDER decides the surviving values,
+                # and the timing-accurate RTL orders them differently from SimX.
+                # Both models are deterministic and self-consistent; they simply
+                # disagree. Result: every riscv-dv run at >=2 cores was
+                # architecturally undefined. Gate it for real.
+                #
+                # VX_CSR_CORE_ID (0xCC2), NOT VX_CSR_MHARTID (0xF14), because:
+                #  (1) 0xF14 is stripped by the sed above; 0xCC2 matches none of
+                #      those patterns, so this carries no ordering dependency.
+                #  (2) MHARTID returns a COMPOSED gtid
+                #      (CORE_ID<<(NW_BITS+NT_BITS)) + (wid<<NT_BITS) + tid
+                #      (VX_csr_unit.sv:125,132), so testing it !=0 is only valid
+                #      because reset leaves warp0/thread0 alone
+                #      (VX_schedule.sv:230-233). VX_csr_data.sv:179 returns CORE_ID
+                #      directly — no warp/thread terms, no config arithmetic, valid
+                #      at ANY NCL/NC/NW/NT.
+                #  (3) Both models compose the global core id identically: RTL
+                #      VX_cluster.sv:132 -> VX_socket.sv:227; SimX processor.cpp:37
+                #      -> cluster.cpp:39 -> socket.cpp:100, read back at
+                #      emulator.cpp:501. Equal on both sides by construction.
+                # vx_tmc 0 (.insn r 0x0B,0,0,x0,x0,x0) retires the warp: empty tmask
+                # -> SimX active_warps_.reset(wid) (execute.cpp:1638-1640), matching
+                # the RTL retire. ebreak would NOT work — it has no execute-side
+                # consumer in Vortex (OBS-024).
+                # On 1 core this is a fall-through and the program is unchanged.
+                sed -i '/^_start:/a\                  csrr x5, 0xCC2\n                  beqz x5, _vortex_core0\n                  .insn r 0x0B, 0, 0, x0, x0, x0\n_vortex_core0:' "$ASM_CLEAN"
+                if grep -q "^_vortex_core0:" "$ASM_CLEAN"; then
+                    print_info "Injected core gate (VX_CSR_CORE_ID != 0 → vx_tmc 0): only core 0 runs"
+                else
+                    print_error "Core gate NOT injected — no '^_start:' anchor in $ASM_CLEAN."
+                    print_error "OBS-027: without it every core runs the same single-hart program"
+                    print_error "against the same .data, so a multi-core result is UNDEFINED."
+                    exit 1
+                fi
 
                 # ── Self-checking signature epilogue ─────────────────────────
                 # Pure-arithmetic riscv-dv tests compute only in registers and write

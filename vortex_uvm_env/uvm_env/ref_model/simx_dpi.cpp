@@ -5,9 +5,11 @@
 #include <stdint.h>
 #include <cstring>
 #include <sstream>
+#include <iomanip>
 #include <map>
 #include <csetjmp>
 #include <csignal>
+#include <cstdlib>       // getenv/strtoull — SIMX_MAX_CYCLES override
 
 // Vortex includes
 #include "processor.h"
@@ -17,6 +19,8 @@
 #include <VX_config.h>
 #include <VX_types.h>
 #include "simx_cosim_record.h"
+#include "cosim_loadfeed.h"
+#include "golden_halt.h"
 
 using namespace vortex;
 
@@ -669,7 +673,36 @@ int simx_run() {
 
         //  was: int run_status = g_processor->run();
         const uint64_t STEP_CHUNK = 100;        // cycles per step call
-        const uint64_t MAX_CYCLES = 2000000;    // hard cap — basic needs ~1800; huge margin
+
+        // Hard cap on golden-model cycles. MUST be overridable: this is not a
+        // safety net, it is a CORRECTNESS input. When SimX hits the cap it stops
+        // with the memory it has written SO FAR, and every location the DUT wrote
+        // afterwards then compares against 0 — turning "the golden model did not
+        // finish" into thousands of fake MEM MISMATCH errors that look exactly
+        // like a DUT bug. Measured 2026-08-12: wide_stress at 2CL/2C blew the old
+        // hardcoded 2,000,000 and produced 4,115 such false mismatches (SimX=0x0
+        // on every one) while the DUT completed 577,569 instructions correctly.
+        //
+        // The old comment ("basic needs ~1800; huge margin") sized this for small
+        // kernels only; big programs and higher core counts are both far more
+        // expensive, so a fixed number cannot be right for every config.
+        // DEFAULT RAISED 2,000,000 -> 20,000,000 on 2026-08-12, from MEASUREMENT:
+        // wide_stress at 2CL/2C needs 2,584,300 SimX cycles (DUT: 1,420,203 cycles /
+        // 577,569 instructions). The old 2,000,000 was short by 584,300 (~23%) and
+        // that shortfall alone produced 4,115 phantom MEM MISMATCH errors. Note SimX
+        // cycles are NOT DUT cycles — here the ratio was ~1.82x — so sizing this from
+        // a DUT +TIMEOUT is wrong; measure the golden model itself.
+        // 20,000,000 is ~7.7x the heaviest measured program, which still bounds a
+        // genuine runaway while leaving real programs room at higher core counts.
+        uint64_t MAX_CYCLES = 20000000;
+        if (const char* e = std::getenv("SIMX_MAX_CYCLES")) {
+            uint64_t v = std::strtoull(e, nullptr, 0);
+            if (v > 0) {
+                MAX_CYCLES = v;
+                std::cout << "[SimX-DPI] SIMX_MAX_CYCLES override: " << MAX_CYCLES
+                          << " (default 2000000)" << std::endl;
+            }
+        }
         uint64_t cycles_run = 0;
         int run_status;
 
@@ -692,6 +725,12 @@ int simx_run() {
         std::cout << "[SimX-DPI] Re-staged " << g_staged_mem.size()
                   << " memory regions after reset" << std::endl;
 
+        // RVVI load-bus (Phase A1(e)): reset per-warp LOAD cursors so ordinal
+        // counting restarts for this run. Overrides pushed by the scoreboard
+        // (pass 2) persist; a no-op when the feed is disabled/empty.
+        vortex::loadfeed_rewind();
+        vortex::compfeed_rewind();   // OBS-014 sqrt-writeback feed cursors
+
         // (3) Verify the arg struct is now real (not poison).
         {
             uint8_t dbg[24];
@@ -710,6 +749,9 @@ int simx_run() {
         //     so a model decode failure CANNOT take down vsim. On crash we
         //     siglongjmp back here, restore stdout, and return sentinel -3.
         g_simx_crashed = 0;
+        // A3: clear any record from a previous run, so a stale halt can never
+        // relabel a fresh CRASH (-3) as a tidy GOLDEN_HALT (-4).
+        vortex::golden_halt_clear();
         struct sigaction sa, old_abrt, old_segv;
         sa.sa_handler = simx_crash_handler;
         sigemptyset(&sa.sa_mask);
@@ -733,16 +775,42 @@ int simx_run() {
         std::cout << _cap.str();                                // echo program output
 
         if (g_simx_crashed) {
-            // SimX model aborted mid-run (e.g. Emulator::decode). Do NOT touch
-            // the processor again (its state is undefined). Return a distinct
-            // sentinel; the scoreboard classifies this UNVERIFIABLE, not a DUT
-            // failure, and skips the (now-meaningless) memory comparison.
-            run_status = -3;
+            // SimX model aborted mid-run. Do NOT touch the processor again (its
+            // state is undefined). Return a sentinel; either way the END-STATE
+            // memory compare must be skipped, because SimX never reached a valid
+            // final image.
+            //
+            // A3 splits what used to be one bucket:
+            //   -4 GOLDEN_HALT — the model REFUSED at a recorded instruction
+            //                    (golden_halt.h). We know the PC, the encoding and
+            //                    the sub-field, so the gap is nameable and every
+            //                    instruction lockstep-verified BEFORE it still
+            //                    counts as real verification.
+            //   -3 CRASH       — nothing recorded: SIGSEGV, or an abort site not
+            //                    yet converted. Genuinely unknown, stays fully
+            //                    UNVERIFIABLE. Keeping -3 distinct is what stops
+            //                    an unconverted site from masquerading as a clean
+            //                    halt.
+            const vortex::golden_halt_t& gh = vortex::golden_halt_record();
+            run_status = gh.valid ? -4 : -3;
             g_done     = false;
             g_exitcode = run_status;
-            std::cerr << "[SimX-DPI] WARNING: SimX aborted/crashed after " << cycles_run
-                      << " cycles (model decode/memory fault). Caught so vsim survives; "
-                      << "this run is UNVERIFIABLE." << std::endl;
+            if (gh.valid) {
+                std::cerr << "[SimX-DPI] GOLDEN_HALT after " << cycles_run
+                          << " cycles: " << gh.where << " refused '" << gh.detail
+                          << "' at PC=0x" << std::hex << gh.pc;
+                if (gh.code)
+                    std::cerr << " instr=0x" << std::setw(8) << std::setfill('0') << gh.code;
+                std::cerr << std::dec << " (wid=" << gh.wid << ", " << gh.where
+                          << ".cpp:" << gh.line << "). Instructions verified BEFORE this "
+                          << "point remain valid; the end-state compare is skipped."
+                          << std::endl;
+            } else {
+                std::cerr << "[SimX-DPI] WARNING: SimX crashed after " << cycles_run
+                          << " cycles with NO recorded halt reason (segfault, or an abort "
+                          << "site not yet converted). Caught so vsim survives; "
+                          << "this run is UNVERIFIABLE." << std::endl;
+            }
             std::cout << "[SimX-DPI] ========================================" << std::endl;
             return g_exitcode;
         }
@@ -877,7 +945,11 @@ int simx_cosim_pop(
     unsigned char* rd,
     unsigned char* sop,
     unsigned char* eop,
-    const svOpenArrayHandle result
+    unsigned char* fu_type,
+    unsigned char* is_volatile,
+    unsigned char* is_fsqrt,
+    const svOpenArrayHandle result,
+    const svOpenArrayHandle mem_addr
 ) {
     if (!g_processor) {
         std::cerr << "[SimX-DPI] simx_cosim_pop: processor not initialized" << std::endl;
@@ -896,6 +968,9 @@ int simx_cosim_pop(
     *rd    = rec.rd;
     *sop   = rec.sop;
     *eop   = rec.eop;
+    *fu_type = rec.fu_type;
+    *is_volatile = rec.is_volatile;
+    *is_fsqrt = rec.is_fsqrt;
 
     const int lo = svLow(result, 1);
     const int hi = svHigh(result, 1);
@@ -903,6 +978,14 @@ int simx_cosim_pop(
     for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
         uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(result, lo + i));
         if (slot) *slot = rec.result[i];
+    }
+    // Per-thread effective LOAD address (OBS-002), same open-array convention.
+    const int alo = svLow(mem_addr, 1);
+    const int ahi = svHigh(mem_addr, 1);
+    const int an  = ahi - alo + 1;
+    for (int i = 0; i < an && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(mem_addr, alo + i));
+        if (slot) *slot = rec.mem_addr[i];
     }
     return 1;
 }
@@ -917,5 +1000,86 @@ unsigned simx_cosim_pending() {
 void simx_cosim_clear() {
     if (g_processor) g_processor->cosim_clear();
 }
+
+// ============================================================================
+// RVVI LOAD-BUS FEED (Phase A1(e)) — DUT-observed load values into SimX
+// ============================================================================
+// The SV lockstep scoreboard identifies provably-racy shared loads in pass 1,
+// then (pass 2) pushes the DUT's captured per-lane writeback values here and
+// re-runs SimX with the feed armed so SimX follows the DUT's memory ordering on
+// exactly those loads. Keyed by (cid,wid,uuid); default OFF ⇒ no substitution.
+
+void simx_cosim_load_feed_reset() {
+    vortex::loadfeed_reset();
+}
+
+void simx_cosim_load_feed_enable(int en) {
+    vortex::loadfeed_enable(en != 0);
+}
+
+// Push one DUT load override for the `occurrence`-th (0-based) execution of the
+// LOAD at `pc` on warp (cid,wid). data[] is an SV open array sized to num_threads;
+// feed_mask bit l set => override lane l with data[l].
+void simx_cosim_load_feed_push(
+    unsigned cid,
+    unsigned wid,
+    uint64_t pc,
+    unsigned occurrence,
+    unsigned feed_mask,
+    const svOpenArrayHandle data
+) {
+    const int lo = svLow(data, 1);
+    const int hi = svHigh(data, 1);
+    const int n  = hi - lo + 1;
+    uint64_t buf[SIMX_COSIM_MAX_THREADS] = {0};
+    for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(data, lo + i));
+        if (slot) buf[i] = *slot;
+    }
+    vortex::loadfeed_push(cid, wid, pc, occurrence, feed_mask, buf,
+                          (n < SIMX_COSIM_MAX_THREADS) ? (unsigned)n : SIMX_COSIM_MAX_THREADS);
+}
+
+// Diagnostics: pushed = records handed to SimX; consumed = records SimX actually
+// matched at a load retirement. consumed==pushed ⇒ DUT and SimX uuids aligned.
+unsigned simx_cosim_load_feed_pushed()   { return vortex::loadfeed_pushed(); }
+unsigned simx_cosim_load_feed_consumed() { return vortex::loadfeed_consumed(); }
+
+// --- A3 GOLDEN_HALT accessors -----------------------------------------------
+// Valid only after simx_run() returned -4. They let the scoreboard NAME the
+// instruction that stopped the golden instead of reporting a bare sentinel.
+int      simx_golden_halt_valid()  { return vortex::golden_halt_record().valid; }
+uint64_t simx_golden_halt_pc()     { return vortex::golden_halt_record().pc;    }
+unsigned simx_golden_halt_code()   { return vortex::golden_halt_record().code;  }
+unsigned simx_golden_halt_wid()    { return vortex::golden_halt_record().wid;   }
+int      simx_golden_halt_line()   { return vortex::golden_halt_record().line;  }
+const char* simx_golden_halt_where()  { return vortex::golden_halt_record().where;  }
+const char* simx_golden_halt_detail() { return vortex::golden_halt_record().detail; }
+
+// --- COMPUTE-writeback feed (OBS-014 sqrt reconvergence) — same contract as the
+// load feed, applied at the FSQRT writeback (execute.cpp FPU lambda).
+void simx_cosim_comp_feed_reset()      { vortex::compfeed_reset(); }
+void simx_cosim_comp_feed_enable(int en){ vortex::compfeed_enable(en != 0); }
+void simx_cosim_comp_feed_push(
+    unsigned cid,
+    unsigned wid,
+    uint64_t pc,
+    unsigned occurrence,
+    unsigned feed_mask,
+    const svOpenArrayHandle data
+) {
+    const int lo = svLow(data, 1);
+    const int hi = svHigh(data, 1);
+    const int n  = hi - lo + 1;
+    uint64_t buf[SIMX_COSIM_MAX_THREADS] = {0};
+    for (int i = 0; i < n && i < SIMX_COSIM_MAX_THREADS; ++i) {
+        uint64_t* slot = static_cast<uint64_t*>(svGetArrElemPtr1(data, lo + i));
+        if (slot) buf[i] = *slot;
+    }
+    vortex::compfeed_push(cid, wid, pc, occurrence, feed_mask, buf,
+                          (n < SIMX_COSIM_MAX_THREADS) ? (unsigned)n : SIMX_COSIM_MAX_THREADS);
+}
+unsigned simx_cosim_comp_feed_pushed()   { return vortex::compfeed_pushed(); }
+unsigned simx_cosim_comp_feed_consumed() { return vortex::compfeed_consumed(); }
 
 } // extern "C"

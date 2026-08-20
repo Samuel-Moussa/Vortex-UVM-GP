@@ -84,6 +84,54 @@ if [[ -n "${AXI_FLOOD:-}" ]]; then
     SIM_OPTS="$SIM_OPTS +AXI_FLOOD=$AXI_FLOOD"
 fi
 
+# Phase-A0 lockstep — env LOCKSTEP=1 enables per-instruction DUT-vs-SimX checking
+# (forces SimX on in vortex_config). LOCKSTEP_INJECT=1 adds a 1-bit fault to the
+# first captured wb lane to prove the comparator is non-vacuous. Both OFF by default.
+if [[ -n "${LOCKSTEP:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP"
+fi
+if [[ -n "${LOCKSTEP_INJECT:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_INJECT"
+fi
+if [[ -n "${LSU_DEBUG:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LSU_DEBUG"
+fi
+# Per-instruction LOAD-DATA comparison (LSU probe overlay) is now ON by default —
+# sound via the SimX effective-address region filter (OBS-002). LOCKSTEP_LOADS=1 is
+# retained as a harmless no-op; NO_LOCKSTEP_LOADS=1 falls back to PC/rd/ordering-only
+# for loads (their data then covered by the end-state memory check).
+if [[ -n "${LOCKSTEP_LOADS:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADS"
+fi
+if [[ -n "${NO_LOCKSTEP_LOADS:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +NO_LOCKSTEP_LOADS"
+fi
+# RVVI load-bus two-pass feed (Phase A1(e)) — when pass-1 lockstep finds provably
+# -racy in-region load divergences, re-run SimX driven by the DUT's loaded values
+# on exactly those loads and re-compare; residual mismatches are REAL divergences,
+# not unsynchronizable races. OFF by default (single pass). For multi-cluster
+# single-hart random tests (no_fence/full_interrupt) this makes them verifiable.
+if [[ -n "${LOCKSTEP_LOADFEED:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_LOADFEED"
+fi
+# A6 — dump the aligned DUT/SimX retirement streams for the OFFLINE Spike
+# independence audit (scripts/spike_audit.py). Observability only: it writes a
+# file and touches no verdict, so an armed run and a bare run reach the same
+# conclusion. OFF unless a path is given.
+if [[ -n "${LOCKSTEP_TRACE:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS +LOCKSTEP_TRACE=${LOCKSTEP_TRACE}"
+fi
+
+# Generic runtime plusarg passthrough — the sim-time counterpart of
+# EXTRA_RTL_DEFINES (compile time). Lets any TB/UVM plusarg be driven from the
+# terminal without editing this script, e.g.
+#   EXTRA_PLUSARGS="+L2CACHE" make sim ...
+# Empty by default => byte-identical. Appended last so it can override.
+if [[ -n "${EXTRA_PLUSARGS:-}" ]]; then
+    SIM_OPTS="$SIM_OPTS $EXTRA_PLUSARGS"
+    print_info "Extra plusargs: $EXTRA_PLUSARGS"
+fi
+
 
 print_info "Test:      $TEST_NAME"
 print_info "Config:    ${NUM_CLUSTERS}CL ${NUM_CORES}C ${NUM_WARPS}W ${NUM_THREADS}T"
@@ -330,3 +378,10 @@ else
     print_error "Test failed with code $EXIT_CODE"
     echo "Check logs: $LOG_FILE"
 fi
+
+# A5: propagate the verdict. This file is sourced as run.sh's last line, so this
+# exit IS run.sh's exit code — `make sim`/`sim-only` now return the real verdict
+# (0=PASSED, 1=UVM fail, 2=RTL assertion fail, 3=unknown) instead of always 0.
+# Without this, the RTL-assert gate above was print-only (verdict never left the
+# script) and DUT RUNTIME_ASSERT firings could not fail a run at suite level.
+exit $EXIT_CODE

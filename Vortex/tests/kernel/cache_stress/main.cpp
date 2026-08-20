@@ -9129,9 +9129,20 @@ static int cs_sweep(int r){
 }
 
 typedef struct { int *in; int *out; } cs_args_t;
-#define N 16
-int in_buf[N];
-volatile int out_buf[N];
+
+// CONFIG-ADAPTIVE GRID. This was `#define N 16` — exactly ONE core's capacity
+// (warps x threads = 4x4). vx_spawn_threads computes
+//   needed_cores = ceil(num_tasks / threads_per_core)
+//   active_cores = MIN(needed_cores, num_cores)
+//   if (core_id >= active_cores) return 0;      // vx_spawn.c:274-279
+// so at 16 tasks it engaged ONE core and correctly idled every other core. The
+// parallelism was never broken — we were launching a 1-core problem on an
+// N-core machine, which is why per-core probe instances on cores 1..N-1 showed
+// 28 missing bins each at 2CL while cluster0_core0 was complete.
+// Sizing the grid from the DEVICE makes this scale at any NCL/NC/NW/NT.
+#define MAX_TOTAL 128                // static bound: 8 cores x 16 threads/core
+int in_buf[MAX_TOTAL];
+volatile int out_buf[MAX_TOTAL];
 
 void cs_kernel(cs_args_t *__UNIFORM__ args){
   int i = blockIdx.x;
@@ -9140,10 +9151,23 @@ void cs_kernel(cs_args_t *__UNIFORM__ args){
 
 int main(){
   warm_sink = table[599](0x1234);             // early high-text exec
+  // EVERY core runs main() (all cores self-start, VX_schedule.sv:230). These two
+  // init loops are IDEMPOTENT — every core writes the SAME values to the same
+  // addresses — so concurrent execution is harmless: there is no read-modify-write
+  // and the final value is identical whatever the order. Each core also completes
+  // the whole of data_buf BEFORE its own spawn, so its kernel always reads a fully
+  // initialised buffer written by itself.
   for (int i = 0; i < DATA_N; i++) data_buf[i] = (i * 2654435761u) ^ (i << 3);
-  for (int i = 0; i < N; i++){ in_buf[i] = i*7 + 1; out_buf[i] = 0; }
+
+  uint32_t total = (uint32_t)vx_num_cores() * vx_num_warps() * vx_num_threads();
+  if (total > MAX_TOTAL) total = MAX_TOTAL;
+
+  for (uint32_t i = 0; i < total; i++) in_buf[i] = i*7 + 1;
+  // out_buf is DELIBERATELY NOT zeroed here. It lives in .bss and is already zero
+  // in the loaded image, so the old `out_buf[i] = 0` was redundant — and once every
+  // core has real work it becomes DESTRUCTIVE: a core still in its init loop would
+  // wipe results another core had already written (the OBS-026 failure mode).
   cs_args_t args; args.in = in_buf; args.out = (int*)out_buf;
-  uint32_t total = N;
   vx_spawn_threads(1, &total, nullptr, (vx_kernel_func_cb)cs_kernel, &args);
   return 0;   // scoreboard (DUT vs SimX out_buf) is the authority
 }

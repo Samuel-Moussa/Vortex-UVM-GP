@@ -12,6 +12,10 @@
 // limitations under the License.
 
 `include "VX_platform.vh"
+// Needed for `STALL_TIMEOUT_SCALE (VX_config.vh). Same pattern as the other
+// libs/ modules that need config macros (VX_avs_adapter.sv, VX_stream_xbar.sv).
+// Include-guarded (VX_CONFIG_VH), so this is safe/idempotent.
+`include "VX_define.vh"
 
 `TRACING_OFF
 module VX_mem_scheduler #(
@@ -88,7 +92,20 @@ module VX_mem_scheduler #(
     output wire                             mem_rsp_ready
 );
     localparam BATCH_SEL_WIDTH = `UP(MEM_BATCH_BITS);
-    localparam STALL_TIMEOUT   = 10000000;
+    // Memory-response guard. NOTE: this one is in SIMULATION TIME units, not
+    // cycles — it is compared against a `$time` delta below, unlike the
+    // cycle-domain `STALL_TIMEOUT` in VX_config.vh/VX_gpu_pkg.sv. The two are
+    // NOT interchangeable (at 1ns/1ps with a 10ns clock, 1 cycle = 10,000 time
+    // units, so the cycle-domain value would be ~100x tighter here).
+    // Was a hardcoded 10000000 (= 1,000 cycles), which did not scale with cache
+    // depth: enabling L2+L3 made a full L1->L2->L3->DRAM miss chain exceed it
+    // and produced tens of thousands of FALSE timeouts on runs that completed
+    // correctly (docs/RTL_OBSERVATIONS.md OBS-017). Scale it by the same factor
+    // as the cycle-domain guard, and allow an explicit override.
+`ifndef MEM_STALL_TIMEOUT
+`define MEM_STALL_TIMEOUT (10000000 * `STALL_TIMEOUT_SCALE)
+`endif
+    localparam STALL_TIMEOUT   = `MEM_STALL_TIMEOUT;
     localparam TAG_ID_WIDTH    = TAG_WIDTH - UUID_WIDTH;
     localparam REQQ_TAG_WIDTH  = UUID_WIDTH + CORE_QUEUE_ADDRW;
     localparam MERGED_TAG_WIDTH= UUID_WIDTH + MEM_QUEUE_ADDRW;

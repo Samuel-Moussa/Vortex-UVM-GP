@@ -14,6 +14,11 @@
 \documentclass[conference]{IEEEtran}
 \usepackage[utf8]{inputenc}
 \usepackage[T1]{fontenc}
+\usepackage{amsmath}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,calc}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.16}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{url}
@@ -65,13 +70,18 @@ instruction-granularity verifiable (residual~0 over 5{,}432 retirements
 on the flagship case), with a precisely characterized soundness boundary
 at asynchronous interrupt timing. Every verdict class is proven
 non-vacuous by permanent fault-injection tests. The environment achieves
-100\% functional and 91.0\% total coverage on the primary configuration
-(43/43 tests) and 85.2\% at two clusters, using only machine-generated,
+98.1\% covergroup-bin and 94.7\% total coverage on the primary
+configuration (50/50 runs) and 94.6\% at two clusters, using only machine-generated,
 RTL-cited structural exclusions. Beyond the methodology, we report the
 defects and limitations the flow exposed in \emph{both} models: RTL
 findings including a JALR target-LSB ISA deviation whose skewed PC
 propagates into architectural results, a non-scaling watchdog macro
-(\code{1**N}), and silent misaligned-access corruption; and
+(\code{1**N}), silent misaligned-access corruption, and a reset relay
+that drives an \emph{unknown} reset for one cycle into every module
+behind it---the last found by restoring an assertion that had been
+guarded off during bring-up, and whose repair \emph{reduced} branch
+coverage because part of that coverage had been obtained from the
+unknown-reset state itself; and
 reference-model findings including a misaligned-fetch bug found by the
 lockstep itself. We close with a prioritized enhancement roadmap for
 both the RTL and the reference model.
@@ -134,7 +144,7 @@ with \code{file:line} evidence and a disposition---including a
 reference-model fetch bug found \emph{by} the lockstep, demonstrating
 that a lockstep flow verifies the golden model as much as the DUT.
 \item \textbf{Honest coverage closure} (Section~\ref{sec:coverage}):
-100\%/91.0\% (functional/total) on the primary configuration using only
+98.1\%/94.7\% (covergroup bins/total) on the primary configuration using only
 machine-generated, per-configuration, RTL-cited structural exclusions,
 with unreachable-versus-unhit distinguished by evidence and structural
 ceilings root-caused rather than waived.
@@ -168,11 +178,20 @@ Vortex ships SimX, a functional (non-timing) simulator maintained with
 the RTL. SimX's emulator steps per instruction, returns a retirement
 trace with full SIMT architectural state, and is decoupled from its
 timing model---structurally an RVVI-shaped golden model. Spike cannot
-execute the six SIMT instructions, so SimX is the primary golden model;
-Spike is retained as a planned base-ISA independence audit
-(Section~\ref{sec:enhance}). The consequence---that the golden model is
-maintained by the same project and must itself be treated as a
-verification target---is examined in Section~\ref{sec:reffindings}.
+execute the six SIMT instructions, so SimX is the primary golden model
+and Spike serves as a \emph{secondary, independent} base-ISA
+cross-check. That audit has been carried out: on the same linked ELF,
+Spike, SimX and the DUT retire exactly 11{,}076 architectural
+writebacks and agree on every program counter, destination register and
+value---zero mismatches---with non-vacuity proven by injecting a fault
+at one record and confirming it is named. Its scope is bounded by
+construction and we do not overstate it: Spike is a scalar ISS, so the
+audit covers warp~0 / lane~0 base-ISA execution only and stops at the
+first Vortex custom operation. \textbf{The SIMT axis therefore has no
+independent reference}, and will not obtain one from this direction.
+The consequence---that the primary golden model is maintained by the
+same project and must itself be treated as a verification target---is
+examined in Section~\ref{sec:reffindings}.
 
 \subsection{Related verification flows}
 core-v-verif~\cite{corevverif} established step-and-compare
@@ -188,6 +207,111 @@ for a SIMT GPGPU.
 % =========================================================================
 \section{Verification Environment}
 \label{sec:env}
+
+Fig.~\ref{fig:arch} shows the environment: active agents drive the
+launch protocol and serve memory on the left, the functional reference
+runs in lockstep on the right, and a passive probe layer feeds the two
+checkers and coverage at the bottom.
+
+\begin{figure*}[t]
+\centering
+\begin{tikzpicture}[
+  font=\scriptsize,
+  box/.style={draw, rounded corners=1pt, align=center, inner sep=3pt,
+              minimum height=6mm},
+  agent/.style={box, fill=gray!14},
+  passive/.style={box, fill=gray!4, densely dashed},
+  chk/.style={box, fill=gray!24},
+  arr/.style={-{Stealth[length=2mm]}, semithick},
+  tap/.style={-{Stealth[length=2mm]}, semithick, densely dashed}
+]
+% DUT (center)
+\node[box, minimum width=46mm, minimum height=17mm] (dut)
+  {\textbf{Vortex GPGPU (DUT)}\\
+   clusters $\to$ sockets $\to$ cores\\
+   warps $\times$ threads --- AXI \emph{master}};
+% left: active agents + memory model
+\node[agent, left=13mm of dut.west, anchor=east, yshift=8mm] (host)
+  {host agent (active)};
+\node[agent, below=2.5mm of host] (dcr) {DCR agent (active)};
+\node[agent, below=2.5mm of dcr] (axi) {AXI agent\\(reactive slave)};
+\node[box, below=2.5mm of axi] (mem) {memory model};
+% right: SimX (primary, live over DPI) + Spike (secondary, offline)
+\node[box, right=13mm of dut.east, anchor=west, minimum height=17mm] (simx)
+  {\textbf{SimX} functional\\ reference (DPI-C)\\ per-config co-build};
+\node[passive, above=9mm of simx.north, anchor=south, minimum width=34mm] (spike)
+  {\textbf{Spike} independent ISS --- offline\\
+   base-ISA audit \emph{(warp0/lane0)}};
+% probes row: status left, commit mid, LSU right
+\node[passive] (status) at ($(dut.south)+(-19mm,-10mm)$) {status agent};
+\node[passive] (cprobe) at ($(dut.south)+(0mm,-10mm)$)  {commit probe};
+\node[passive] (lprobe) at ($(dut.south)+(17mm,-10mm)$) {LSU probe};
+% RVVI monitor
+\node[box] (rvvi) at ($(dut.south)+(9mm,-20mm)$)
+  {RVVI monitor (analysis port)};
+% checkers row: coverage left, lockstep mid, end-state right
+\node[chk] (cov) at ($(dut.south)+(-27mm,-32mm)$)
+  {functional\\ coverage};
+\node[chk] (lss) at ($(dut.south)+(3mm,-32mm)$)
+  {lockstep scoreboard\\ per-instruction, per-lane};
+\node[chk] (ess) at ($(dut.south)+(38mm,-32mm)$)
+  {end-state scoreboard\\ bidirectional, byte-exact};
+% arrows: launch
+\draw[arr] (host.east) -- ++(4mm,0) |- ([yshift=5mm]dut.west);
+\draw[arr] (dcr.east)  -- ++(2.5mm,0) |- ([yshift=1mm]dut.west);
+\draw[arr, {Stealth[length=2mm]}-{Stealth[length=2mm]}]
+  (axi.east) -- ++(2.5mm,0) |- ([yshift=-4mm]dut.west);
+\draw[arr] (axi) -- (mem);
+% DPI
+\draw[arr] ([yshift=4mm]dut.east) -- ([yshift=4mm]simx.west)
+  node[midway, above, font=\tiny] {load/DCR/run};
+\draw[arr] ([yshift=-2mm]simx.west) -- ([yshift=-2mm]dut.east)
+  node[midway, below, font=\tiny] {\shortstack{retirement\\records}};
+% taps
+\draw[tap] ([xshift=-19mm]dut.south) -- (status.north);
+\draw[tap] (dut.south) -- (cprobe.north);
+\draw[tap] ([xshift=17mm]dut.south) -- (lprobe.north);
+% probe fan-in
+\draw[arr] (cprobe.south) -- ([xshift=-9mm]rvvi.north);
+\draw[arr] (lprobe.south) -- ([xshift=8mm]rvvi.north);
+% to checkers
+\draw[arr] (rvvi.south) -- ++(0,-2.5mm) -| (lss.north);
+\draw[arr] (rvvi.south) -- ++(0,-2.5mm) -| ([xshift=5mm]cov.north);
+\draw[arr] (status.south) -- ([xshift=-5mm]cov.north);
+% golden stream: SimX straight down into end-state + lockstep
+\draw[arr] (simx.south) -- ++(0,-27mm) -| ([xshift=8mm]ess.north);
+\draw[arr] (simx.south) -- ++(0,-24.5mm) -| ([xshift=8mm]lss.north);
+% memory model to end-state (bottom rail, below all checkers)
+\draw[arr] (mem.south) |- ($(ess.south)+(-4mm,-5mm)$)
+  -- ($(ess.south)+(-4mm,0)$);
+% load-value feed back to SimX (lower rail, far-right lane)
+\draw[arr, dotted] ([xshift=8mm]lss.south) -- ++(0,-8mm)
+  -| ($(simx.east)+(8mm,0)$) -- (simx.east);
+\node[below] at ($(lss.south)+(28mm,-8mm)$)
+  {load-value feed (pass 2, \S\ref{sec:loadfeed})};
+% offline Spike audit: trace exported from the RVVI monitor and compared
+% off-line. Routed in its OWN far-right lane, outside every box, so it never
+% crosses SimX or the load-value-feed lane.
+\coordinate (spikelane) at ($(simx.east)+(20mm,0)$);
+\draw[tap] (rvvi.east) -- ++(6mm,0) -| (spikelane) |- (spike.east);
+\node[font=\tiny, align=left, anchor=west] at ($(spikelane)+(1.5mm,-9mm)$)
+  {\code{+LOCKSTEP\_TRACE}\\ (off by default)};
+\end{tikzpicture}
+\caption{Environment architecture. Solid gray boxes are active UVM
+agents; dashed boxes are passive probes and offline tools (never
+checkers in the run); dark boxes are the two verdict-rendering
+scoreboards and coverage. The DUT is the bus master; stimulus is a
+compiled program in the memory model. \textbf{Two references, with
+different roles:} SimX is the \emph{primary} golden model, stepped live
+over DPI-C, and models SIMT; Spike is a \emph{secondary, independent}
+scalar ISS used offline on an exported retirement trace to cross-check
+the base-ISA subset only (warp~0 / lane~0, stopping at the first custom
+op). SimX is co-designed with the RTL and is therefore not independent;
+Spike is independent but cannot execute a SIMT kernel. Neither
+substitutes for the other, and the SIMT axis has no independent
+reference (\S\ref{sec:limits}).}
+\label{fig:arch}
+\end{figure*}
 
 \subsection{Role-inverted agent architecture}
 A GPGPU DUT executes programs; it is not driven by them. The
@@ -415,8 +539,38 @@ runs unverifiable. Industrial RVVI flows solve the analogous CPU
 problem by feeding DUT-observed load data to the reference model over a
 ``load bus''; no such mechanism existed for a SIMT multi-core.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}[font=\scriptsize, node distance=3mm,
+  stp/.style={draw, rounded corners=1pt, align=center, inner sep=3pt,
+               minimum width=62mm},
+  arr/.style={-{Stealth[length=2mm]}, semithick}]
+\node[stp] (p1) {\textbf{Pass 1} --- lockstep run\\
+  DUT vs.\ reference; in-region loads compared per lane};
+\node[stp, below=of p1] (cap) {capture divergent racy loads\\
+  key $(\mathit{cid},\mathit{wid},\mathit{PC},\mathit{occurrence})$
+  $\to$ per-lane DUT values};
+\node[stp, below=of cap] (feed) {DPI load-value feed armed\\
+  reference consumes DUT values at exactly those keys};
+\node[stp, below=of feed] (p2) {\textbf{Pass 2} --- reference re-run,
+  full re-compare\\ self-check: $\mathit{consumed}=\mathit{pushed}$};
+\node[stp, below=of p2, fill=gray!14] (v) {\textbf{residual = verdict}\\
+  $0 \Rightarrow$ verified; unexplained $>0 \Rightarrow$ hard error\\
+  + deferred end-state compare vs.\ post-feed reference};
+\draw[arr] (p1) -- (cap);
+\draw[arr] (cap) -- (feed);
+\draw[arr] (feed) -- (p2);
+\draw[arr] (p2) -- (v);
+\end{tikzpicture}
+\caption{The two-pass load-value feed. Only captured racy loads are
+fed; every other divergence in pass 2 remains an error, so the
+mechanism cannot mask a DUT bug.}
+\label{fig:feed}
+\end{figure}
+
 \subsection{The mechanism}
-We implement the load bus as a \emph{sound two-pass trace replay}:
+We implement the load bus as a \emph{sound two-pass trace replay}
+(Fig.~\ref{fig:feed}):
 \begin{enumerate}
 \item \textbf{Pass 1} runs lockstep normally and captures every
 divergent in-region load, keyed by
@@ -436,10 +590,46 @@ only when the feed is armed. The end-state comparison is deferred and
 re-run against the post-feed reference, so final-memory equivalence is
 still independently checked.
 
+\begin{figure}[t]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  ybar, bar width=9pt,
+  width=\columnwidth, height=4.8cm,
+  ymin=0, ymax=175,
+  ylabel={\scriptsize per-instruction mismatches},
+  symbolic x coords={fenceless, interrupt, random jump},
+  xtick=data,
+  enlarge x limits=0.28,
+  legend style={font=\scriptsize, at={(0.5,1.02)}, anchor=south,
+                legend columns=-1, draw=none},
+  nodes near coords,
+  every node near coord/.append style={font=\scriptsize},
+  tick label style={font=\scriptsize},
+  ylabel style={font=\scriptsize},
+]
+\addplot[ybar, fill=gray!35, draw=black]
+  coordinates {(fenceless,138) (interrupt,116) (random jump,95)};
+\addplot[ybar, fill=black, draw=black,
+  nodes near coords style={/pgf/number format/fixed}]
+  coordinates {(fenceless,0) (interrupt,7) (random jump,15)};
+\legend{pass-1 cascade\, , residual after pass 2}
+\end{axis}
+\end{tikzpicture}
+\caption{Divergence collapse under the load feed at 2CL/2C/4W/4T. The
+fenceless case reaches residual 0 (fully verified). The nonzero
+residuals are the two soundness boundaries of
+Section~\ref{sec:limits}: interrupt-delivery timing (7,
+keying-independent) and control-flow-steering races (15, no
+fixed point); both end-state compares pass.}
+\label{fig:residual}
+\end{figure}
+
 \subsection{Flagship result}
 On the pinned fenceless test at 2CL/2C/4W/4T---previously undecidable---%
 pass~1 identified 20 racy loads causing 138 cascaded mismatches; pass~2
-reached \textbf{residual 0 over 5{,}432/5{,}432 retirements}, and the
+reached \textbf{residual 0 over 5{,}432/5{,}432 retirements}
+(Fig.~\ref{fig:residual}), and the
 deferred end-state compare passed. The run is thereby \emph{positively
 verified} equivalent modulo the architecturally-undefined racy loads,
 not merely excused. Injection guards remained red, and the default
@@ -531,23 +721,78 @@ Table~\ref{tab:coverage} summarizes the two banked configurations.
 \toprule
 Metric & 1CL/1C/4W/4T & 2CL/2C/4W/4T \\
 \midrule
-Functional (covergroups) & \textbf{100.0\%} & 92.5\% \\
-Statement & 97.1\% & 96.2\% \\
-Branch & 91.2\% & 89.7\% \\
-Condition & 76.4\% & 69.6\% \\
-Toggle & 78.7\% & 74.3\% \\
-Assertion & 93.8\% & 74.0\% \\
+Covergroup bins (raw) & 370/377 = 98.1\% & 989/1032 = 95.8\% \\
+Covergroup (weighted) & 99.8\% & 99.5\% \\
+Statement & 98.1\% & 98.3\% \\
+Branch & 95.1\% & 95.7\% \\
+Condition & 90.4\% & 88.8\% \\
+Toggle & 82.8\% & 80.5\% \\
+Assertion & 96.9\% & 98.9\% \\
 Directive & 100.0\% & 100.0\% \\
 \midrule
-\textbf{Total} & \textbf{91.0\%} & \textbf{85.2\%} \\
-Tests passing & 43/43 & 40/42\textsuperscript{a} \\
+\textbf{Total} & \textbf{94.7\%} & \textbf{94.6\%} \\
+Runs passing & 50/50 & 50/50 \\
+Coverage instances & 2\,256 & 8\,275 \\
 \bottomrule
-\multicolumn{3}{l}{\footnotesize\textsuperscript{a}The two exceptions
-are reference-model limits, root-caused in} \\
-\multicolumn{3}{l}{\footnotesize Sections~\ref{sec:loadfeed}
-and~\ref{sec:limits}, not DUT failures.}
+\multicolumn{3}{l}{\footnotesize All runs pass at both configurations;
+earlier reported} \\
+\multicolumn{3}{l}{\footnotesize failures were a methodology defect
+(Sec.~\ref{sec:limits}), not} \\
+\multicolumn{3}{l}{\footnotesize DUT divergence. \emph{Runs}, not distinct
+programs: two} \\
+\multicolumn{3}{l}{\footnotesize entries re-run one program under a
+different bus mode.} \\
+\multicolumn{3}{l}{\footnotesize A third configuration enabling the optional
+shared L2/L3} \\
+\multicolumn{3}{l}{\footnotesize caches was also banked (51 runs, all passing,
+93.2\% total);} \\
+\multicolumn{3}{l}{\footnotesize those levels are bypassed in the two banks
+above.}
 \end{tabular}
 \end{table}
+
+% =========================================================================
+
+\subsection{Provenance of the design under verification}
+\label{sec:provenance}
+
+The design is an open-source register-transfer model pinned at a specific
+revision, \emph{with eighteen locally modified files}. Most changes are
+simulator-compatibility fixes made during bring-up. We disclose this because a
+verification result is a statement about a specific artifact, and ``upstream,
+unmodified'' would not describe what we ran.
+
+One of those modifications turned out to matter, and its history is instructive.
+A library counter shipped with two assertions checking for overflow and
+underflow. They fired during bring-up and were guarded off---rewritten to skip
+whenever their inputs were unknown---so that the environment could run at all.
+That guard remained for months. On restoring the original assertion and
+root-causing why it fired, we found a genuine defect: the design distributes
+reset through a relay module that \emph{registers} reset in a flip-flop which
+nothing resets. Its output is therefore unknown from time zero until the first
+clock edge, so every module behind a relay observes an unknown reset for one
+cycle; a reset-conditional then takes its non-reset branch and any assertion
+inside evaluates on unknown operands.
+
+We replaced the relay with an asynchronous-assert, synchronous-deassert
+synchronizer. The counter assertions then pass with no guard at all---twelve
+firings become zero---and the local modification to that counter was retired in
+favor of the unmodified upstream file. The defect is present in the current
+upstream release.
+
+Two consequences deserve emphasis. First, \textbf{the assertion had been
+correct}: what was silenced was a real property of the design, not a testbench
+nuisance. A checker that is switched off to make a bench run is a checker whose
+findings are lost, and the cost here was months of an unobserved
+unknown-value window. Second, \textbf{fixing the defect reduced a coverage
+number}. Branch coverage fell from 95.1\% to 94.5\%: during the unknown-reset
+cycle, modules behind a relay had been executing their normal-operation paths,
+and those executions were \emph{counted as covered branches}. With reset
+correct they no longer occur. Part of the previously reported branch coverage
+had been obtained from a state that cannot legitimately arise---which no
+coverage metric can reveal about itself. We report the lower figure as the
+correct one. (Two variables changed between those measurements, so the delta is
+indicative rather than isolated.)
 
 % =========================================================================
 \section{Findings I: RTL Observations}
@@ -556,7 +801,7 @@ and~\ref{sec:limits}, not DUT failures.}
 Every finding is maintained in an evidence-cited register shipped with
 the work (one entry per finding: what was seen, \code{file:line} and/or
 run evidence, classification, disposition). Table~\ref{tab:rtlobs}
-summarizes the RTL findings as R1--R9; the substantive entries follow.
+summarizes the RTL findings as R1--R10; the substantive entries follow.
 
 \begin{table}[t]
 \caption{RTL findings (summary)}
@@ -568,7 +813,7 @@ summarizes the RTL findings as R1--R9; the substantive entries follow.
 ID & Finding & Class & Disposition \\
 \midrule
 R1 & JALR target LSB not cleared; odd PC propagates via AUIPC & Bug (ISA) & needs RTL fix; stimulus sanitized \\
-R2 & \code{STALL\_TIMEOUT} uses \code{1**N} $\equiv$ 1; watchdog never scales & Bug (latent) & needs RTL fix \\
+R2 & \code{STALL\_TIMEOUT} uses \code{1**N} $\equiv$ 1; watchdog never scales & Bug (latent) & fixed; \emph{independently fixed upstream} \\
 R3 & Misaligned access: no trap; silently retargeted/torn & Hazard & expected per SW contract; gated \\
 R4 & Core self-starts from reset; DCRs have no reset value & Hazard & worked around (reset handshake) \\
 R5 & Per-warp out-of-order commit & Quirk & handled (\S\ref{sec:rules}) \\
@@ -576,9 +821,66 @@ R6 & One load $\to$ multiple commit records, overlapping masks & Quirk & handled
 R7 & uuid encodes flat core id + warp id & Quirk & exploited (\S\ref{sec:rules}) \\
 R8 & Load data not observable at commit arbiter & Observability & closed (LSU probe) \\
 R9 & Write path fire-and-forget (\code{bready} tied high) & Characteristic & cited exclusion \\
+R10 & Reset relay registers reset in a flop nothing resets; \code{reset\_o} is X for one cycle & Bug (X source) & fixed; still upstream \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\subsection{An unknown reset for one cycle, found by restoring a
+silenced assertion (R10)}
+\label{sec:r10}
+
+This finding is reported first because of \emph{how} it was found rather
+than what it is.
+
+The design distributes reset through a relay module. That module registers
+the incoming reset in a flip-flop which has no initial value and which
+nothing resets:
+
+\begin{lstlisting}
+`PRESERVE_NET reg [R-1:0] reset_r;   // no initial value
+always @(posedge clk) begin
+    reset_r[i] <= reset;             // nothing resets THIS flop
+end
+assign reset_o[i] = reset_r[i / F];
+\end{lstlisting}
+
+Its output is therefore unknown from time zero until the first clock edge,
+so every module instantiated behind a relay observes an \emph{unknown reset
+for one cycle}. A reset-conditional in such a module takes its non-reset
+branch---\code{if (X)} is not true---so logic intended to be held in reset
+executes, and any assertion inside that branch evaluates on unknown
+operands.
+
+The path to it is the point. A library counter in the same design ships
+with assertions checking for overflow and underflow. Those assertions fired
+during bring-up, at 5, 15 and 25\,ns, on the instruction- and data-cache
+miss-status counters. They were guarded off---rewritten to skip whenever
+their inputs were unknown---so that the environment could run, and the
+guard stayed for months. Restoring the original assertion and asking why it
+fired produced the diagnosis above. \textbf{The assertion had been correct
+the entire time}: it was reporting a real property of the design, and what
+had been suppressed was the report, not the problem.
+
+We replaced the relay with an asynchronous-assert, synchronous-deassert
+synchronizer, so that the relay output asserts whenever reset asserts
+regardless of flip-flop state. The counter assertions then pass with no
+guard at all---twelve firings become zero---and the local modification to
+the counter was retired in favour of the unmodified upstream file. A
+fifty-one-run regression passes with the assertions armed, and both
+fault-injection guards were re-confirmed to fail on injection. The defect
+is present in the current upstream release.
+
+Two observations generalize beyond this design. First, \textbf{a checker
+disabled to make a bench run is a checker whose findings are lost}, and the
+loss is silent and open-ended: here it was months, and the affected surface
+was every module behind a relay, not merely the one that happened to carry
+an assertion. Second, \textbf{fixing the defect reduced a coverage number}
+(Section~\ref{sec:provenance}): branch coverage fell because modules behind
+a relay had been executing their normal-operation paths during the unknown
+window, and those executions were counted as covered branches. No coverage
+metric can report that some of its own coverage came from a state that
+cannot legitimately arise.
 
 \subsection{JALR does not clear the target LSB (R1)}
 The RISC-V specification requires JALR to clear the least-significant
@@ -761,10 +1063,13 @@ extensions) is planned, not done.
 \item \textbf{Unverifiable residue.} A minority of random-program runs
 remain unverifiable due to reference-model aborts; the abort-hardening
 sweep (Section~\ref{sec:enhance}) targets zero.
-\item \textbf{Structural coverage ceilings.} Toggle coverage plateaus
-near 78\% for root-caused structural reasons (write-through
-configuration, constant address high bits); we report the true value
-rather than gaming it.
+\item \textbf{Structural coverage ceilings.} Toggle coverage plateaus in
+the low 80s for root-caused structural reasons---dominated by a
+\emph{read-only instruction cache} whose write-data path is elaborated
+but undrivable (26\% of the whole gap from one subtree), plus
+write-through data caching and constant address high bits. We report the
+true value rather than gaming it, and we corrected our own attribution
+when measurement contradicted it (Section~\ref{sec:coverage}).
 \item \textbf{No trap architecture.} Exception-path verification is
 unimplementable on this DUT (there are no exceptions); the
 corresponding generator profiles are excluded as unimplementable
@@ -799,16 +1104,70 @@ programming completes, removing the integration hazard.
 
 \subsection{Reference model}
 \begin{enumerate}
-\item \textbf{Abort hardening}: route all 56 abort sites through
-self-documenting macros (PC + instruction word; done for 14), then
-classify each as garbage-input (keep aborting, now explained) versus
-genuinely unimplemented (implement, recovering verifiability)---driving
-the unverifiable class to zero.
+\item \textbf{Abort hardening} (\emph{completed since the first draft;
+retained here because the classification is the transferable result}).
+Auditing the abort sites showed they were not one population but two.
+The majority lay in the disassembly formatter---off the execution path
+entirely, reached only when a trace line is printed---so aborting there
+destroyed an otherwise fully checked run because the model could not
+\emph{name} an instruction; these now emit a placeholder. The remainder
+are genuine semantic refusals, and for those aborting is
+\emph{correct}: a golden model that guessed a writeback would corrupt
+every later comparison while still reporting agreement. Those sites now
+record the PC, instruction word and offending sub-field before
+aborting, and the co-simulation layer returns a distinct
+\emph{golden-halt} sentinel (refused at a known point) rather than the
+former anonymous crash code---so the instructions retired \emph{before}
+the refusal remain valid evidence, and the truncated tail is excluded
+from the verdict rather than counted as divergence. Re-measuring the
+constrained-random suite afterwards showed the unverifiable class was
+already empty: every retained profile produced real end-state
+comparisons. Because nothing in the suite then exercises the halt path,
+it is proven non-vacuous by a gated injection, in the same discipline
+as the negative tests of Section~\ref{sec:verdicts}.
 \item \textbf{Populate the retirement uuid}, upgrading lockstep
 alignment to a strict 1:1 key.
 \item \textbf{Spike base-ISA audit}: cross-check the model's RV32IM
 semantics against an independent simulator on the non-SIMT subset.
 \end{enumerate}
+
+\subsection{Upstream contribution}
+\label{sec:upstream}
+
+We regard the findings of Section~\ref{sec:rtlfindings} as belonging to the
+Vortex project rather than to this report, and they are being submitted
+upstream as individual issues against the public repository, each with
+the exact source location, a reproducer, and our assessment of
+severity.\footnote{Prepared as a standing document in our repository so
+that the submitted text and the text analysed here cannot drift apart.}
+Two points of discipline govern that submission and are worth stating,
+because they are what separate a useful report from a noisy one.
+
+First, \emph{severity is claimed conservatively}. Of the findings,
+only the JALR specification deviation is a conformance bug with silent
+data-corruption consequences; the stall-watchdog items are
+verification-guard defects that make correct runs appear broken but do
+not affect the datapath, and we label them as such. Misclassifying a
+guard defect as a design defect would be the fastest way to lose a
+maintainer's attention.
+
+Second, \emph{every claim is re-verified against upstream before
+filing}. All findings were made at a pinned revision; a finding already
+fixed upstream costs reviewer time and costs the reporter credibility,
+so re-checking each cited line against current \texttt{master} is a
+precondition of submission rather than a courtesy.
+
+We also offer the independent base-ISA cross-check of
+Section~\ref{sec:limits} back to the project. We deliberately do
+\emph{not} propose extending the scalar reference simulator to the SIMT
+model: the warp, thread-mask and reconvergence-stack state that Vortex
+requires cannot be hosted by a single-hart processor model without
+re-architecting it, and the result would be a second implementation of
+the existing reference rather than an independent check on it. Scoping
+the independent reference to the scalar subset---which carries the
+overwhelming majority of dynamic instructions, and where the external
+simulator is the actual specification authority---is what makes the
+audit meaningful.
 
 \subsection{Methodology}
 \begin{enumerate}
@@ -830,6 +1189,82 @@ integration with seeded regression, graded sign-off, and per-seed
 triage.
 \end{enumerate}
 
+\subsection{Toward tape-out: a categorized roadmap}
+\label{sec:tapeout}
+
+The work reported here is \emph{front-end functional verification} of an
+RTL model. Silicon sign-off requires substantially more, and the two
+categories below are deliberately separated because they demand different
+tooling, different skills, and---critically---different claims. Neither
+list is a statement of partial progress: every item is currently absent
+unless noted.
+
+\subsubsection{Remaining front-end (RTL functional) work}
+\begin{enumerate}
+\item \textbf{Stimulus diversity, not volume.} The generator is
+seed-controlled, and a ten-seed sweep across all nine profiles has since been
+run: ninety additional distinct programs (verified distinct by content hash),
+all passing, and \emph{no measurable coverage gain}---every category
+bit-identical except toggle at $+0.06\%$. That is a robustness result, not a
+coverage one. The binding constraint is the generator's reach: it emits
+user-mode integer code with machine-mode control-register writes removed, so
+every seed explores the same region and coverage saturates inside it. The
+remaining work is stimulus of a different \emph{kind}---privileged and
+exception behaviour, and bus error responses---not more samples of the same
+kind.
+\item \textbf{Error and exception verification.} The bus responder
+always returns \texttt{OKAY}; no \texttt{SLVERR}/\texttt{DECERR}
+injection exists, so no error-recovery path is exercised. Architectural
+exception and interrupt stimulus is likewise absent, and must be designed
+around the observation that this design terminates by deasserting a busy
+signal rather than by a breakpoint instruction.
+\item \textbf{Formal property verification} on arbitration-heavy control
+(cache miss-status handling, commit arbitration), where dynamic
+simulation is weakest and state space is small enough for proof.
+\item \textbf{X-propagation and reset randomization.} Uninitialized-state
+bugs are invisible to a two-state functional flow; several unreset
+elements have already been identified structurally but never exercised
+under randomized reset.
+\item \textbf{Configuration-matrix breadth.} Three points are sampled of
+a parameter space spanning cluster, core, warp, thread and cache-tier
+dimensions.
+\item \textbf{Coverage-model provenance.} The functional model is
+self-authored rather than traced to a specification document, so
+coverage closure measures the model, not the specification.
+\item \textbf{Independent SIMT reference.} The scalar base-ISA axis has
+an independent cross-check; the SIMT axis does not, and this is a
+structural ceiling rather than an unfinished task.
+\end{enumerate}
+
+\subsubsection{Back-end and ASIC sign-off work (entirely out of scope here)}
+\begin{enumerate}
+\item \textbf{Gate-level simulation} on the synthesized netlist, then
+with back-annotated timing, to catch synthesis mismatches and
+timing-dependent behavior a register-transfer flow cannot see.
+\item \textbf{Static timing analysis} sign-off across process, voltage
+and temperature corners.
+\item \textbf{Design-for-test:} scan insertion, ATPG pattern generation
+and fault-coverage sign-off, plus memory built-in self-test.
+\item \textbf{Clock- and reset-domain-crossing analysis}, structural and
+functional, including metastability modeling.
+\item \textbf{Lint and structural sign-off} against a synthesis-clean
+rule set.
+\item \textbf{Low-power verification:} power intent, retention and
+isolation checking, and power-aware simulation.
+\item \textbf{Physical-design closure:} floorplan, place and route,
+parasitic extraction, signal- and power-integrity analysis.
+\item \textbf{Equivalence checking} between register-transfer source,
+synthesized netlist and post-layout netlist.
+\item \textbf{Post-silicon:} bring-up plan, characterization, and a
+path from silicon failures back into this regression.
+\end{enumerate}
+
+A useful way to read the two lists: the front-end items would raise the
+strength of the claims made in this paper, whereas the back-end items are
+prerequisites for a different claim entirely---that the design is
+manufacturable and will function in silicon. Nothing in this work speaks
+to the latter.
+
 % =========================================================================
 \section{Conclusion}
 \label{sec:conclusion}
@@ -846,8 +1281,8 @@ sound region-filtered load compare, and a two-pass load-value feed that
 turned an architecturally-undefined racy multi-core program from
 unverifiable into positively verified (residual 0 over 5{,}432
 retirements), while honestly delimiting its own soundness boundary at
-asynchronous interrupt timing. Coverage closed at 100\% functional /
-91.0\% total on the primary configuration with only machine-generated,
+asynchronous interrupt timing. Coverage closed at 98.1\% covergroup bins /
+94.7\% total on the primary configuration with only machine-generated,
 RTL-cited exclusions.
 
 The checking depth paid for itself in findings on both sides of the

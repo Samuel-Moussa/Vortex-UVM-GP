@@ -12,6 +12,154 @@ or a banked report. Nothing here is asserted without a citable artifact.
 
 ---
 
+# ⚠️ SUPERSEDING RESULT BLOCK — 2026-08-19 (READ THIS FIRST; IT SUPERSEDES THE 08-17 BLOCK BELOW)
+
+**THE HEADLINE OF THIS MILESTONE IS AN RTL DEFECT, NOT A COVERAGE NUMBER.**
+
+## Four banks (never blended; each is one consistent compile)
+
+| bank | total | runs | design |
+|---|---|---|---|
+| `bank_1CL_1C_4W_4T_relayfix_20260818` | **94.72%** | **51/51, 0 FAILED** | **reset defect FIXED** |
+| `bank_1CL_1C_4W_4T` | 94.72% | 50/50, 0 FAILED | pre-fix (X window) |
+| `bank_2CL_2C_4W_4T` | 94.55% | 50/50, 0 FAILED | pre-fix (X window) |
+| `bank_2CL_2C_4W_4T_L2L3_20260818` | 93.18% | 51/51, 0 FAILED | pre-fix, **L2+L3 ENABLED** |
+
+**Decision 2026-08-19: the 2CL and L2/L3 banks are NOT being re-run on the fixed design** (~28h to
+chase a sub-1% branch difference while totals are unchanged). They are valid measurements of the
+pre-fix design and are labelled as such. **Do not compare them to the relayfix bank on BRANCHES.**
+
+## OBS-045 — the reset distribution produced an X window (found, fixed, still upstream)
+
+`VX_reset_relay.sv` registered reset in a flop **nothing resets**, so `reset_o` was **X from time 0
+until the first posedge** at EVERY `` `RESET_RELAY `` site. Every module behind a relay saw an
+UNKNOWN reset for one clock; `if (X)` took the ELSE branch. Fixed with an async-assert /
+sync-deassert synchroniser. **The defect is present in the current upstream release** — reportable
+alongside OBS-012.
+
+**The discovery chain is the citable part:** upstream's `VX_pending_size` counter assertions fired
+during bring-up → they were guarded off with `$isunknown` so the bench could run → that guard hid
+the X window for months → restoring the assertion and root-causing it exposed the defect. **Our
+local `VX_pending_size` modification is now RETIRED** (byte-identical to upstream, assertions ARMED
+and SILENT, 12 firings → 0). The modification moved from the CHECKER to the DEFECT.
+
+## ⚠ Fixing the bug LOWERED a coverage number, and the lower number is the correct one
+
+Branches **95.09% → 94.53%** (10 fewer COVERED). During the X-reset cycle, modules behind a relay
+executed their NORMAL-OPERATION paths, and those executions were **counted as covered branches**.
+With reset correct they no longer occur. ⇒ **part of the previously-banked branch coverage came from
+a state that cannot legitimately arise — something no coverage metric can reveal about itself.**
+⚠ Two variables changed (relay fix AND `cache_tier` newly at 1CL), so the delta is INDICATIVE, not
+isolated; a controlled one-variable run was not done. Say so if it is quoted.
+
+## L2/L3 exercised for the first time in the project
+
+Both levels had always been PASSTHRU — the suite had no path from its config to the compile. After
+plumbing it: **all four shared-cache instances covered on hit AND miss** (L2 cluster0 15,268 /
+cluster1 15,323 / L3 bank0 13,464 / bank1 14,304) and a **196,868-word byte-exact** end-state
+compare (`cache_tier`) — 6x the previous largest in the suite. Honest summary: the hierarchy was
+**reached and validated, not thoroughly exercised** (conditions 79.27% there: one kernel of 51
+targets that control logic).
+
+## Other results this milestone
+
+* **Blocking hits-invariant merge gate** — fails the merge if a structural waiver changes a COVERED
+  bin count. Found two real waiver defects, one active for weeks.
+* **Measured `RV_TIMEOUT` = 6.7M** (3x the measured 2,230,168 max). The old 600k was cutting four of
+  six riscv-dv profiles at ~1/3 of their run. **OBS-042:** the suite had been reporting those TB
+  timeouts as *"FAILED (RTL assertion)"* — a DUT accusation for our own budget shortfall.
+* **Negative result (publishable):** enlarging a kernel's working set 16x *reduced* contention
+  coverage (13→11 terms; +4→+0 in a second experiment). Contention comes from **issue density, not
+  miss volume**.
+* **⚠ A vacuous Gate-0 pass was nearly accepted** — the negative tests report PASSED when the
+  injection plusargs are absent, because nothing is injected. **Verify the injection message, never
+  the verdict.** Validated properly: both RED at `0x800075d8`.
+* **RTL provenance: 18 files differ from upstream `7a52ee5`** (OBS-040). `VX_pending_size` left the
+  list; `VX_reset_relay` joined it. Composition improved; the count did not. **Both papers now carry
+  a provenance disclosure section — do not publish without it.**
+* **Upstream comparison:** pin 2025-09-22 vs HEAD 2026-07-29 = 2,127 commits, 302 RTL files, FPU
+  restructured. **OBS-011 was independently fixed upstream** (external corroboration). **OBS-012
+  (JALR LSB) is STILL PRESENT at HEAD** — a live defect in the current release.
+
+## New observations this milestone
+OBS-039 (run count ≠ program count) · OBS-040 (18 modified RTL files) · OBS-041 (refutes the
+inherited MREQ_SIZE port-width claim) · OBS-042 (timeout misreported as RTL assertion) ·
+OBS-043 (stale suite logs; caused a retracted false finding) · OBS-044 (double-staging) ·
+OBS-045 (the reset X window). Corrections to OBS-011, OBS-032, OBS-040.
+
+---
+
+# ⚠️ SUPERSEDING RESULT BLOCK — 2026-08-17 (superseded by the block above; still accurate on the 50-run banks)
+
+**The 2026-07-16 audit below remains valid FOR THE BANKS THAT EXISTED THEN.** It is a dated
+snapshot and is deliberately not rewritten — rewriting an audited document in place would
+destroy the guarantee that made it worth auditing. Every headline number it states has since
+been superseded by a later bank. Quote THIS block.
+
+| Metric | 1CL/1C/4W/4T | 2CL/2C/4W/4T |
+|---|---|---|
+| Covergroup bins (raw) | **370/377 = 98.14%** | **989/1032 = 95.83%** |
+| Covergroup (weighted) | 99.79% | 99.52% |
+| Statement | 98.10% | 98.32% |
+| Branch | 95.09% | 95.71% |
+| Condition | 90.41% | 88.77% |
+| Toggle | 82.83% | 80.47% |
+| Assertion | 96.85% | 98.87% |
+| Directive | 100.00% | 100.00% |
+| **Total** | **94.72%** | **94.55%** |
+| Runs staged / failed | **50 / 0** | **50 / 0** |
+| Coverage instances | 2,256 | 8,275 |
+
+Banked 2026-08-16 at `cov/bank_{1CL_1C_4W_4T,2CL_2C_4W_4T}/`, logs at
+`results/run_suite_logs_{1CL,2CL}_storm_20260816/`. Both verified by RE-READING the banked
+copy, not the live file. Total is still Questa's unweighted 7-category mean.
+
+**Corrections this block makes to the audit below — all of them material:**
+
+1. **"100% functional" was never raw-bin coverage.** It was the *weighted* covergroup metric,
+   which excludes three weight-0 red herrings by design. Raw bins were 374/377 then and are
+   370/377 now (the denominator moved when the coverage model was rewritten). **State both, or
+   state "weighted" explicitly** — an unqualified "100% functional coverage" is the single most
+   attackable claim in the old text.
+2. **"43/43 tests" is wrong twice.** It is a count of *runs*, not distinct programs, and two
+   riscv-dv entries (`riscv_pmp_test`, `riscv_non_compressed_instr_test`) are **byte-identical
+   programs** (FW-1b) — one program counted twice. The current suite is **50 runs**, of which
+   two re-run one program under a different bus mode and four are one test entry under four
+   program kinds (OBS-039). **Say "50 simulation runs", never "50 programs".**
+3. **"40/42 at 2CL, 2 = golden-model limits" is FALSIFIED.** All four historical 2CL failures
+   now pass with real byte-exact compares; they were ONE methodology defect (OBS-027), not four
+   divergences. The current result is **50/50, 0 FAILED, at BOTH configurations.**
+4. **The toggle root-cause named the wrong cache.** The old text blames the write-through
+   dcache. Measured: the **icache** is 51,340 bins / 22,730 missing / 55.7% versus dcache
+   86,604 / 9,524 / 89.0% — **26.4% of the entire toggle gap from one subtree**, because
+   `VX_socket.sv:106` instantiates it with `.WRITE_ENABLE(0)`. Positive control: `rsp_data.data`
+   toggles 45–46× on all 512 bits, so the read path is alive and only the write direction is
+   dead. The "~78% is the structural ceiling" conclusion was also too pessimistic — toggle is
+   now 82.83% / 80.47% after config-aware waivers plus real stimulus.
+5. **A merge-time integrity gate now exists** and did not when the audit was written.
+   `merge_coverage.sh` applies exclusions in two stages split by justification class and
+   **fails the merge** if a structural exclusion changes any COVERED bin count. It caught two
+   real defects on first execution, one of which had been silently discarding a covered
+   condition term for weeks. Any coverage number produced before that gate existed was
+   unverified in this respect.
+
+**New evidence available to the paper that post-dates the audit:**
+- **196,868 words byte-exact** in a single end-state compare (`cache_tier`, 2CL with L2+L3
+  enabled) — 6× the previous largest, 0 errors.
+- **The shared cache hierarchy exercised for the first time**: L2 (both clusters) and L3 (both
+  banks) hit paths covered, 13,464–15,323 hits per instance. Every prior bank had both levels
+  as pure passthrough.
+- **A published negative result**: enlarging a kernel's working set 16× *reduced* contention
+  coverage (13→11 terms, and +4→+0 in a second independent experiment). Contention comes from
+  issue density, not miss volume.
+- **OBS-032 resolved by measurement, hypothesis falsified**: the testbench's 4×-deeper cache
+  fill queue was suspected of suppressing back-pressure coverage; rebuilding at the RTL default
+  produced **bit-identical branch, condition and statement counts**. The suspected coverpoint is
+  sized by a different parameter that already matched the RTL default.
+- **A third configuration (L2+L3 enabled) is being banked**; do not quote it until it lands.
+
+---
+
 # ✅ VERIFICATION STATEMENT (audit of this document, 2026-07-16)
 
 Every claim in this document was re-verified against primary artifacts on 2026-07-16
@@ -60,8 +208,10 @@ Every claim in this document was re-verified against primary artifacts on 2026-0
 | **4. First light** | 2026-03 | **Smoke test SUCCESS 2026-03-16** (`03643d1`); run-script hardening (startup-addr parsing, DPI linking, hex overflow — `c6fa229`, the vacuous-PASS fix); scoreboard/coverage-collector bring-up (`5d30f4e`, `a4626e5`); AXI4-compliance interface refactor (`4518334`); mem_model R-beat checking (`f2f8736`). |
 | **5. Architecture restructure** | 2026-04 → 2026-05 | EBREAK infinite-loop fix + monitor optimization (`9b69d68`); GLIBCXX ABI fix (`ee11d66`); **the major restructure** (`cc83410`, 2026-05-05): tb_top → pure structural wrapper, memory responses fully delegated to UVM agent drivers, clean package hierarchy (= §5.5 of the 43-issue report); XLEN→32 (`0f92090`); SimX arch configurable from scripts (`4dfe44e`). |
 | **6. Trust the bench (Gate-0)** | 2026-06 | Derived widths (`5f19a67`), decoded-EBREAK completion (`a46a109`), real instr count (`b14efc5`), honest error gate (`df6206e`), riscv-dv end-to-end (`5f6ddff`), passive commit probe, INV-1/INV-2 root-causes, negative fault-injection validation. History rewritten 2026-06-28 to strip attribution trailers. |
-| **7. Coverage closure** | 2026-06 → 2026-07-10 | Functional 100% (17 covergroups, `d65441d`/`ff37765`); config-aware exclusion generator (`ae809f4`); two per-config banks; total 79.20→**91.00%** (`199401c`…`6e6a81b`); bidirectional scoreboard (`fe10b83`); 2CL divergence investigation. |
-| **8. Industrial upgrade** | 2026-07-14 → now | RVVI lockstep A0 (`7aac709`) → divergence/multi-core (`eb08c04`) → first-divergence pinpoint (`b029fe7`/`28c84ab`) → SimX fetch-bug fix (`6dfe665`) → RVVI load-bus, residual 0 (`2dd48ea`) → interrupt-timing boundary characterized (`2614ee0`). |
+| **7. Coverage closure** | 2026-06 → 2026-07-10 | *(historical row — these figures are SUPERSEDED, see the top block.)* Weighted covergroup metric 100% (17 covergroups, `d65441d`/`ff37765`); config-aware exclusion generator (`ae809f4`); two per-config banks; total 79.20→**91.00%** (`199401c`…`6e6a81b`); bidirectional scoreboard (`fe10b83`); 2CL divergence investigation. |
+| **8. Industrial upgrade** | 2026-07-14 → 2026-08-06 | RVVI lockstep A0 (`7aac709`) → divergence/multi-core (`eb08c04`) → first-divergence pinpoint (`b029fe7`/`28c84ab`) → SimX fetch-bug fix (`6dfe665`) → RVVI load-bus, residual 0 (`2dd48ea`) → interrupt-timing boundary characterized (`2614ee0`). |
+| **9. Methodology repairs** | 2026-08-07 → 2026-08-15 | B2 scoreboard collapsed to a single source of truth (`f279357`); Spike independent base-ISA audit, 11,076/11,076 agree (`8e1a3b2`); per-config kernel rebuild — kernels had been compiled for one topology regardless of the requested config (OBS-028, `3ffa321`); OBS-027 methodology defect resolved ⇒ the four "expected" 2CL failures all pass with real compares; device-sized grids in 7 kernels. |
+| **10. Coverage maximisation** | 2026-08-16 → 2026-08-17 | Toggle root-caused to the read-only **icache**, not the dcache (OBS-033/034); three targeted kernels (`isa_probe`, `unit_storm`, `storm_big`); **blocking hits-invariant merge gate** which found two waivers deleting real coverage; L2/L3 plumbed end-to-end and their hit paths covered for the first time via `cache_tier` (196,868 words byte-exact); OBS-032 resolved by measurement with the hypothesis falsified; OBS-035…039 filed. **Banks: 1CL 94.72%, 2CL 94.55%, 50/50 runs, 0 failures at both.** |
 
 ---
 
@@ -76,8 +226,10 @@ Every claim in this document was re-verified against primary artifacts on 2026-0
   kernels and constrained-random RISC-V programs; the correctness verdict is a byte-exact
   final-memory comparison against **SimX** (Vortex's own functional simulator) integrated
   as a golden reference via **DPI-C co-simulation**.
-- Headline results: **100% functional coverage, 91.00% total coverage (primary config),
-  43/43 tests passing, 0 unexplained failures**; a second full coverage bank at a scaled
+- Headline results (**UPDATED 2026-08-16** — the old line read "100% functional / 91.00% /
+  43/43", which is superseded and, on the first two counts, misleading; see the superseding
+  block at the top): **98.14% of covergroup bins (99.79% weighted), 94.72% total coverage on
+  the primary configuration, 50/50 simulation runs passing, 0 failures**; a second full bank at a scaled
   multi-cluster configuration (85.16% total).
   - *Evidence:* `docs/Coverage_Report_2026-07-10.md` (banked report, both configs);
     coverage banks `vortex_uvm_env/cov/bank_1CL_1C_4W_4T/` and `bank_2CL_2C_4W_4T/`.
@@ -207,6 +359,10 @@ The bench itself was audited and repaired before any metric was trusted:
   `r_valid/r_data_stable` reachable-but-not-hit, left honestly uncovered).
 
 ## 7. Coverage results (per-config banks, never blended)
+
+> ⚠️ **SUPERSEDED — this table is the 2026-07-10 bank.** Current banked numbers are in the
+> superseding block at the top of this document (1CL **94.72%**, 2CL **94.55%**, 50/50 runs
+> passing at both). Kept for provenance: it is the bank the 2026-07-16 audit verified.
 
 | Metric | 1CL/1C/4W/4T (primary) | 2CL/2C/4W/4T (scale) |
 |---|---|---|
@@ -536,7 +692,7 @@ Closes Part I's two biggest open items.
 | `0984bdf` / `d65441d` / `ff37765` | TCU verification / FPU op-decode / TCU multi-warp + timing waivers |
 | `9fc45ae` `855f61e` `ae809f4` | RTL-cited structural exclusions + config-aware generator |
 | `6692541` | Coverage report (two banks) |
-| `199401c` `dcadb3d` `c525dfd` `6e6a81b` | Total-coverage push: vote_shfl, wide_stress+throttle, div_edge+flood-infra, flood run → 91.00% |
+| `199401c` `dcadb3d` `c525dfd` `6e6a81b` | Total-coverage push: vote_shfl, wide_stress+throttle, div_edge+flood-infra, flood run → 91.00% *(the 2026-07 bank; superseded)* |
 | `554080e` | SimX RVVI export (`simx_retire_t` + cosim DPI) — pre-built enabler for Part II |
 
 ### Key commits (branch / Part II)
@@ -595,6 +751,12 @@ Coverage Report Totals BY INSTANCES: Number of Instances 2247
     Toggles                     425432    334632     90800         1    78.65%
 Total coverage (filtered view): 91.00%
 ```
+
+> ⚠️ **The raw tool output in this appendix is the 2026-07-10 bank, reproduced exactly as the
+> 2026-07-16 audit verified it. It is EVIDENCE OF THAT AUDIT and is deliberately not updated —
+> altering archived tool output would defeat the purpose of archiving it.** For current
+> numbers re-run the same command against the present banks:
+> `vcover report -summary vortex_uvm_env/cov/bank_1CL_1C_4W_4T/merged.ucdb` → total 94.72%.
 
 `vcover report -summary vortex_uvm_env/cov/bank_2CL_2C_4W_4T/merged.ucdb`:
 

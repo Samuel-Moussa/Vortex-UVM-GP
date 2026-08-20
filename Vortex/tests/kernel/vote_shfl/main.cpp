@@ -22,11 +22,15 @@
 #include <vx_spawn.h>
 #include <VX_config.h>      // NUM_CLUSTERS, NUM_CORES, NUM_WARPS, NUM_THREADS
 
-#define TOTAL (NUM_CLUSTERS * NUM_CORES * NUM_WARPS * NUM_THREADS)
+// OBS-028: was `(NUM_CLUSTERS * NUM_CORES * NUM_WARPS * NUM_THREADS)`, but those
+// VX_config.h macros are FROZEN at 1/1/4/4 (kernels are never rebuilt per config),
+// so this evaluated to 16 = ONE core's capacity at every config and vx_spawn_threads
+// correctly idled every other core. Query the DEVICE at runtime instead.
+#define MAX_TOTAL 128            // static bound for g_out: 8 cores x 16 threads/core
 
 typedef struct { uint32_t *out; } vs_args_t;
 
-volatile uint32_t g_out[TOTAL];
+volatile uint32_t g_out[MAX_TOTAL];
 
 void vs_kernel(vs_args_t *__UNIFORM__ args) {
   int tid  = blockIdx.x;
@@ -56,9 +60,11 @@ void vs_kernel(vs_args_t *__UNIFORM__ args) {
 }
 
 int main() {
-  for (int i = 0; i < TOTAL; i++) g_out[i] = 0;
+  // g_out NOT zeroed here: it is .bss (already zero in the loaded image) and with
+  // every core active a core still initialising would wipe another core's results.
   vs_args_t args; args.out = (uint32_t *)g_out;
-  uint32_t total = TOTAL;
+  uint32_t total = (uint32_t)vx_num_cores() * vx_num_warps() * vx_num_threads();
+  if (total > MAX_TOTAL) total = MAX_TOTAL;
   vx_spawn_threads(1, &total, nullptr, (vx_kernel_func_cb)vs_kernel, &args);
   return 0;   // scoreboard (DUT vs SimX end-state of g_out) is the authority
 }

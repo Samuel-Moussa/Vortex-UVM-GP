@@ -48,22 +48,22 @@ package dcr_agent_pkg;
     //==========================================================================
     
     // Transaction class (sequence item)
-    `include "dcr_transaction.sv"
+    `include "dcr_transaction.svh"
     
     // Driver (active component)
-    `include "dcr_driver.sv"
+    `include "dcr_driver.svh"
     
     // Monitor (passive observer)
-    `include "dcr_monitor.sv"
+    `include "dcr_monitor.svh"
     
     // Sequencer (transaction arbiter)
-    `include "dcr_sequencer.sv"
+    `include "dcr_sequencer.svh"
     
     // Sequences (stimulus generators)
-    `include "dcr_sequences.sv"
+    `include "dcr_sequences.svh"
     
     // Agent container (top-level)
-    `include "dcr_agent.sv"
+    `include "dcr_agent.svh"
     
 endpackage : dcr_agent_pkg
 

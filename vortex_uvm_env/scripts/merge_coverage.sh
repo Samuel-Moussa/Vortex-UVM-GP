@@ -46,6 +46,10 @@ RESULTS_ROOT="${ENV_ROOT}/results"
 # Override the config via env, e.g.  COV_NCL=2 COV_NC=2 ./merge_coverage.sh
 GEN_EXCLUDE="${SCRIPTS_DIR}/gen_coverage_exclude.sh"
 COV_NCL="${COV_NCL:-1}"; COV_NC="${COV_NC:-1}"; COV_NW="${COV_NW:-4}"; COV_NT="${COV_NT:-4}"
+# L2/L3 presence (0/1). Must match the COMPILE (make sim L2=1 L3=1): with a level
+# enabled its cache-side buses are live logic and the passthru waiver must not be
+# emitted. run_suite.sh exports these; a bare merge defaults to the L2/L3-off build.
+COV_L2="${COV_L2:-0}"; COV_L3="${COV_L3:-0}"
 COV_DIR="${ENV_ROOT}/cov"
 STAGING="${COV_DIR}/staging"
 OUT_DIR="${COV_DIR}/report"
@@ -76,6 +80,28 @@ case "${1:-}" in
               # unique staged name from the run dir, so re-collecting overwrites
               # the same test rather than double-counting it.
               name="$(echo "$r" | tr '/' '_').ucdb"
+              # OBS-044: simulate.sh ALSO auto-stages every passing run, under a
+              # DIFFERENT key (<test>_<program>.ucdb). Inside the suite that is
+              # invisible because --fresh clears staging first and every run
+              # arrives by one path; but running a test by hand and then
+              # collecting it stages the SAME run twice under two names. Coverage
+              # is a set union so the numbers survive, but the run inventory does
+              # not (a bank appearing to hold 57 runs when 51 executed) and it
+              # adds vcover-6854 duplicate-test-record noise. Skip by CONTENT.
+              dup=""
+              if [[ -s "$src" ]]; then
+                  srcsum="$(md5sum "$src" | cut -d" " -f1)"
+                  for existing in "${STAGING}"/*.ucdb; do
+                      [[ -e "$existing" ]] || continue
+                      if [[ "$(md5sum "$existing" | cut -d" " -f1)" == "$srcsum" ]]; then
+                          dup="$(basename "$existing")"; break
+                      fi
+                  done
+              fi
+              if [[ -n "$dup" ]]; then
+                  echo "Skipped (already staged as ${dup}): $r"
+                  continue
+              fi
               cp "$src" "${STAGING}/${name}"
               echo "Staged: $r  ->  ${name}"
           else
@@ -110,15 +136,72 @@ vcover merge -out "$RAW_UCDB" "${UCDBS[@]}"
 # ---- 3. apply CONFIG-AWARE exclusions once, re-save -------------------------
 if [[ -x "$GEN_EXCLUDE" ]]; then
     EXCLUDE_DO="${COV_DIR}/coverage_exclude.gen.do"
-    echo "Generating config-aware exclusions for ${COV_NCL}CL/${COV_NC}C/${COV_NW}W/${COV_NT}T -> $EXCLUDE_DO"
-    "$GEN_EXCLUDE" "$COV_NCL" "$COV_NC" "$COV_NW" "$COV_NT" > "$EXCLUDE_DO"
+    echo "Generating config-aware exclusions for ${COV_NCL}CL/${COV_NC}C/${COV_NW}W/${COV_NT}T L2=${COV_L2} L3=${COV_L3} -> $EXCLUDE_DO"
+    "$GEN_EXCLUDE" "$COV_NCL" "$COV_NC" "$COV_NW" "$COV_NT" "$COV_L2" "$COV_L3" > "$EXCLUDE_DO"
+    # Split the generated .do by WAIVER CLASS, because the two classes have
+    # fundamentally different semantics and only one of them is hits-invariant:
+    #
+    #   EOTH = third-party IP (cvfpu, HardFloat). That code IS executed; we exclude
+    #          it because it is not the Vortex DUT and we do not claim to verify it.
+    #          Removing it LEGITIMATELY drops covered bins.
+    #   EUR  = structurally-dead logic (tied-off buses, read-only icache, unenterable
+    #          FSMs, vacuous assertions). These bins CANNOT be hit, so removing them
+    #          must change the denominator ONLY.
+    #
+    # Applying them in two stages is what makes the gate below meaningful.
+    grep    -- '-reason EOTH' "$EXCLUDE_DO" > "${COV_DIR}/excl_thirdparty.do" || true
+    grep -v -- '-reason EOTH' "$EXCLUDE_DO" > "${COV_DIR}/excl_structural.do" || true
+    STAGE1_UCDB="${COV_DIR}/merged_stage1.ucdb"
     vsim -viewcov "$RAW_UCDB" -c -do "
-        do ${EXCLUDE_DO};
+        do ${COV_DIR}/excl_thirdparty.do;
+        coverage save ${STAGE1_UCDB};
+        quit -f;" 2>&1 | tee "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error" || true
+    vsim -viewcov "$STAGE1_UCDB" -c -do "
+        do ${COV_DIR}/excl_structural.do;
         coverage save ${MERGED_UCDB};
-        quit -f;" 2>&1 | tee "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error|excluded" || true
-    HNE=$(grep -c "had no effect" "${COV_DIR}/exclude_apply.log" 2>/dev/null || echo 0)
-    [[ "$HNE" -eq 0 ]] || echo "WARN: $HNE exclusion line(s) had no effect (stale path for this config?)"
+        quit -f;" 2>&1 | tee -a "${COV_DIR}/exclude_apply.log" | grep -Ei "had no effect|error|excluded" || true
+    # NOTE: `grep -c` prints "0" AND exits 1 when there are no matches, so the old
+    # `|| echo 0` fired IN ADDITION to grep's own output and set HNE to the two-line
+    # string "0\n0". `[[ "0\n0" -eq 0 ]]` is then a syntax error, which took the
+    # `||` branch and printed a bogus "WARN: 0\n0 exclusion line(s) had no effect".
+    # So this guard — the one that proves the config-aware exclusions actually
+    # matched real RTL paths — could never report a TRUE count either: any genuine
+    # stale-exclusion count would have been reported as garbage too. Use `|| HNE=0`
+    # on the ASSIGNMENT so grep's numeric output is kept and only the exit status is
+    # swallowed.
+    HNE=$(grep -c "had no effect" "${COV_DIR}/exclude_apply.log" 2>/dev/null) || HNE=0
+    [[ "${HNE:-0}" -eq 0 ]] || echo "WARN: $HNE exclusion line(s) had no effect (stale path for this config?)"
     [[ -f "$MERGED_UCDB" ]] || { echo "ERROR: exclusion/save failed"; exit 1; }
+
+    # ---- 3b. HITS-INVARIANT GATE (blocking) ---------------------------------
+    # A STRUCTURAL exclusion removes bins that could never be hit. It must therefore
+    # change the DENOMINATOR ONLY: the number of COVERED bins must be byte-identical
+    # before and after. If covered bins drop, the waiver ate real coverage — the
+    # number goes UP while the verification got WEAKER, which is the exact failure
+    # mode this project must never ship.
+    #
+    # This is not hypothetical. On 2026-08-16 it caught two over-exclusions in one
+    # session: a `-linerange` spanning an FSM (reachable and dead lines interleave,
+    # -3 branch hits) and a `-code c` waiver of `(init_valid | flush_valid)` (Questa
+    # cannot waive ONE FEC input term, only the whole condition: -2 cond hits at 1CL,
+    # -4 at 2CL). Both looked correct and both reported 0 "had no effect".
+    #
+    # "had no effect" only proves a waiver MATCHED something. This proves it matched
+    # the RIGHT something. Keep both.
+    hits_of() {   # $1=ucdb -> "<category> <covered>" per code/cvg category
+        vcover report -summary "$1" 2>/dev/null | awk '
+            /^ *(Assertions|Branches|Conditions|Statements|Toggles|Directives) /{print $1, $3}'
+    }
+    RAW_HITS=$(hits_of "$STAGE1_UCDB")
+    NEW_HITS=$(hits_of "$MERGED_UCDB")
+    if [[ "$RAW_HITS" != "$NEW_HITS" ]]; then
+        echo "ERROR: exclusions changed COVERED bin counts — a waiver is eating real coverage."
+        echo "       A structural waiver may only shrink the denominator, never the hits."
+        diff <(echo "$RAW_HITS") <(echo "$NEW_HITS") | sed 's/^/       /'
+        echo "       Offending .do: ${EXCLUDE_DO}"
+        exit 1
+    fi
+    echo "OK: hits-invariant holds — exclusions shrank the denominator only."
 else
     echo "WARN: $GEN_EXCLUDE missing/not-exec — merging WITHOUT exclusions (cvfpu in denominator!)"
     cp "$RAW_UCDB" "$MERGED_UCDB"
