@@ -57,7 +57,8 @@ export RISCV_DV_HOME=/path/to/your/riscv-dv
 
 ## Part 2 — Run a randomized test in our project
 
-All commands run from **`vortex_uvm_env/`**. The trigger is simple: any
+All commands run from **`Vortex/sim/uvmsim/`** (moved here 2026-08-20, was
+`vortex_uvm_env/`). The trigger is simple: any
 `PROGRAM=` value starting with **`riscv_`** routes through the riscv-dv pipeline
 (`scripts/prepare.sh:275`).
 

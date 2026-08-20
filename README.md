@@ -44,7 +44,8 @@ This repository hosts a complete **UVM verification environment** for the **Vort
 
 | Path | Origin | Role |
 | :--- | :--- | :--- |
-| [`vortex_uvm_env/`](vortex_uvm_env/) | **This project** | The entire UVM environment — agents, scoreboard, coverage, DPI bridge, scripts |
+| [`Vortex/sim/uvmsim/`](Vortex/sim/uvmsim/) | **This project** | The UVM environment source — agents, scoreboard, coverage collector, DPI bridge, scripts (packaged as a Vortex simulator backend, alongside `sim/simx` etc.) |
+| [`vortex_uvm_env/`](vortex_uvm_env/) | **This project** | Coverage banks (`cov/`), run results (`results/`), and project-level docs — not simulator source |
 | [`Vortex/`](Vortex/) | Upstream (Apache-2.0) | The DUT: Vortex RTL + the SimX golden model, pinned @ `7a52ee5` |
 | [`core-v-verif/`](https://github.com/openhwgroup/core-v-verif) | Upstream | riscv-dv generator infrastructure for constrained-random programs |
 
@@ -61,10 +62,10 @@ This repository hosts a complete **UVM verification environment** for the **Vort
 
 ## 🚀 Quick Start
 
-**Prerequisites:** QuestaSim 2021.2+, a RISC-V GCC/LLVM toolchain (`riscv{32,64}-unknown-elf`), and a C++17 compiler for the SimX model. All commands run from `vortex_uvm_env/`.
+**Prerequisites:** QuestaSim 2021.2+, a RISC-V GCC/LLVM toolchain (`riscv{32,64}-unknown-elf`), and a C++17 compiler for the SimX model. All commands run from `Vortex/sim/uvmsim/`.
 
 ```bash
-cd vortex_uvm_env
+cd Vortex/sim/uvmsim
 
 # Full flow: build the SimX DPI library, compile RTL + UVM, simulate.
 make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite TIMEOUT=200000
@@ -156,7 +157,7 @@ Five banks; each is one consistent compile, verified by re-reading the banked co
 
 > **Coverage-exclusion integrity is enforced, not asserted.** Every waiver is
 > generated per-configuration from elaborated RTL parameters with a `file:line`
-> citation ([`gen_coverage_exclude.sh`](vortex_uvm_env/scripts/gen_coverage_exclude.sh)),
+> citation ([`gen_coverage_exclude.sh`](Vortex/sim/uvmsim/scripts/gen_coverage_exclude.sh)),
 > and the merge applies a **blocking hits-invariant gate**: if a structural
 > exclusion changes any *covered* bin count, the merge fails. It caught two
 > waivers that had been silently deleting real coverage.
@@ -218,7 +219,7 @@ retractions and falsified hypotheses).
 
 ## 🧪 Tests
 
-Located in [`vortex_uvm_env/uvm_tests/`](vortex_uvm_env/uvm_tests/) — select with `TEST=<name>`:
+Located in [`Vortex/sim/uvmsim/uvm_tests/`](Vortex/sim/uvmsim/uvm_tests/) — select with `TEST=<name>`:
 
 | Test | Focus |
 | :--- | :--- |
@@ -231,7 +232,7 @@ Located in [`vortex_uvm_env/uvm_tests/`](vortex_uvm_env/uvm_tests/) — select w
 
 `PROGRAM_NAME=<kernel>` resolves an ELF under `Vortex/tests/kernel/<name>/`.
 `riscv_*` programs are generated and compiled through the riscv-dv pipeline in
-[`prepare.sh`](vortex_uvm_env/scripts/prepare.sh); see
+[`prepare.sh`](Vortex/sim/uvmsim/scripts/prepare.sh); see
 [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md).
 
 ---
@@ -263,19 +264,24 @@ make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite \
 
 ```
 Vortex_UVM_GP/
-├── vortex_uvm_env/               ◀ THE VERIFICATION ENVIRONMENT (this project's work)
-│   ├── tb/                       #   vortex_tb_top.sv, interfaces, binds, elaboration asserts
-│   ├── uvm_env/
-│   │   ├── agents/               #   5 agents: axi · mem · dcr · host · status
-│   │   ├── ref_model/            #   SimX DPI bridge (simx_dpi.cpp, simx_pkg.sv)
-│   │   ├── vortex_scoreboard.sv  #   end-state equivalence vs SimX
-│   │   └── vortex_coverage_collector.sv
-│   ├── uvm_tests/                #   test library (see Tests)
-│   ├── scripts/                  #   run.sh → prepare.sh → compile.sh → simulate.sh, run_suite.sh
-│   ├── cov/                      #   per-config coverage banks (bank_1CL…, bank_2CL…)
-│   └── docs/                     #   plan, coverage model, riscv-dv guide, per-fix writeups
+├── Vortex/                       # DUT — Vortex RISC-V GPGPU RTL + SimX (upstream, pinned; a real git submodule)
+│   └── sim/uvmsim/               ◀ THE VERIFICATION ENVIRONMENT SOURCE (this project's work,
+│       ├── tb/                   #   packaged as a Vortex simulator backend, alongside sim/simx etc.)
+│       │                         #   vortex_tb_top.sv, interfaces, binds, elaboration asserts
+│       ├── uvm_env/
+│       │   ├── agents/           #   5 agents: axi · mem · dcr · host · status
+│       │   ├── ref_model/        #   SimX DPI bridge (simx_dpi.cpp, simx_pkg.sv)
+│       │   ├── vortex_scoreboard.svh          #   end-state equivalence vs SimX
+│       │   └── vortex_coverage_collector.svh
+│       ├── uvm_tests/            #   test library (see Tests)
+│       ├── scripts/              #   run.sh → prepare.sh → compile.sh → simulate.sh, run_suite.sh
+│       └── docs/                 #   testbench-specific writeups
 │
-├── Vortex/                       # DUT — Vortex RISC-V GPGPU RTL + SimX (upstream, pinned)
+├── vortex_uvm_env/                # coverage banks, run results, project-level docs (not sim source)
+│   ├── cov/                       #   per-config coverage banks (bank_1CL…, bank_2CL…)
+│   ├── results/                   #   run logs/waveforms/reports
+│   └── docs/                      #   plan, coverage model, riscv-dv guide, per-fix writeups
+│
 ├── core-v-verif/                 # riscv-dv generator infrastructure (upstream)
 └── docs/                         # coverage reports and investigations
 ```
@@ -346,7 +352,7 @@ exception/interrupt stimulus.
 
 The Vortex DUT RTL and the SimX model are vendored under their upstream
 **Apache-2.0** license — see [`Vortex/LICENSE`](Vortex/LICENSE). The UVM
-verification environment in [`vortex_uvm_env/`](vortex_uvm_env/) is authored by
+verification environment in [`Vortex/sim/uvmsim/`](Vortex/sim/uvmsim/) is authored by
 the team above as a graduation project at **Minia University, Faculty of
 Engineering (2026)**, sponsored by **Seamless Waves (Insspectrum)**.
 
