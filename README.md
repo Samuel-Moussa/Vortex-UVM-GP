@@ -3,7 +3,7 @@
 # Vortex GPGPU — UVM Functional Verification Environment
 
 **A reusable, fully-configurable UVM testbench for the [Vortex](https://github.com/vortexgpgpu/vortex) open-source RISC-V GPGPU,**
-**verified by black-box end-state equivalence against the SimX C++ golden model over DPI-C.**
+**checked by per-instruction lockstep and end-state equivalence against the SimX C++ golden model over DPI-C.**
 
 [![Methodology](https://img.shields.io/badge/Methodology-UVM%201.2-1f6feb?style=flat-square)](https://www.accellera.org/downloads/standards/uvm)
 [![SystemVerilog](https://img.shields.io/badge/SystemVerilog-IEEE%201800-e36209?style=flat-square)](https://ieeexplore.ieee.org/document/8299595)
@@ -294,15 +294,6 @@ Originally scoped as a group project; the verification environment, coverage
 model, lockstep flow, RTL investigations and papers in their current form are
 the work of **Samuel Moussa**. Earlier contributors are credited in the commit
 history for the bring-up phase.
-A group project delivered to one shared verification plan.
-
-| Owner | Lane |
-| :--- | :--- |
-| **Samuel Mousa** | verification infrastructure · full configurability (parameter harness, elaboration asserts, scripts) · constrained-random (riscv-dv) |
-| **Ahmad Mahmoud** | functional & code coverage · scoreboard |
-| **Abanoub Nabil** | Vortex architecture |
-| **Steven Ibrahim** | golden model (SimX / DPI-C) · directed tests · AXI SVA . Regression Tests . Building Configrable master Makefile |
-| **Ahmad Fawzy** | UVM agents |
 
 ---
 
