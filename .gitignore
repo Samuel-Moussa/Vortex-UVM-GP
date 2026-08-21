@@ -52,6 +52,9 @@ vortex_uvm_env/flists/trace/
 trace/
 ramulator*.log
 ramulator*.stats*
+*.vstf
+__pycache__/
+*.pyc
 
 # ---- Vendored / third-party (built or synced separately) --------------------
 core-v-verif/
