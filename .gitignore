@@ -41,10 +41,12 @@ modelsim.ini
 *.cr.mti
 
 # ---- Coverage ---------------------------------------------------------------
-# UCDBs and generated HTML are regenerated; per-config banks under cov/ are kept.
+# On main: coverage banks are regenerated report output, too large to track
+# here (1.5G, 1700+ files) — kept on vortex_merge/industrial_transformations
+# instead. Regenerate locally with `make cov-merge` from Vortex/sim/uvmsim/.
 *.ucdb
 cov_work/
-vortex_uvm_env/cov/report/html/
+vortex_uvm_env/cov/
 
 # ---- Run outputs ------------------------------------------------------------
 vortex_uvm_env/results/
