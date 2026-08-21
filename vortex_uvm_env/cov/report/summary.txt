@@ -1,20 +1,20 @@
 QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
-Start time: 09:11:07 on Aug 16,2026
+Start time: 21:56:44 on Aug 20,2026
 vcover report -summary /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/cov/merged.ucdb 
-Coverage Report Totals BY INSTANCES: Number of Instances 8275
+Coverage Report Totals BY INSTANCES: Number of Instances 2256
 
     Enabled Coverage              Bins      Hits    Misses    Weight  Coverage
     ----------------              ----      ----    ------    ------  --------
-    Assertions                     355       351         4         1    98.87%
-    Branches                     10063      9625       438         1    95.64%
-    Conditions                    1176      1040       136         1    88.43%
-    Covergroups                     54        na        na         1    99.52%
-        Coverpoints/Crosses        220        na        na         1        na
-            Covergroup Bins       1032       985        47         1    95.44%
+    Assertions                     127       123         4         1    96.85%
+    Branches                      2817      2663       154         1    94.53%
+    Conditions                     313       283        30         1    90.41%
+    Covergroups                     19        na        na         1    99.79%
+        Coverpoints/Crosses        100        na        na         1        na
+            Covergroup Bins        377       370         7         1    98.14%
     Directives                       5         5         0         1   100.00%
-    Statements                   15252     14992       260         1    98.29%
-    Toggles                    1223490    982924    240566         1    80.33%
-Total coverage (filtered view): 94.44%
+    Statements                    4434      4350        84         1    98.10%
+    Toggles                     413172    344615     68557         1    83.40%
+Total coverage (filtered view): 94.72%
 
-End time: 09:11:09 on Aug 16,2026, Elapsed time: 0:00:02
+End time: 21:56:44 on Aug 20,2026, Elapsed time: 0:00:00
 Errors: 0, Warnings: 0
