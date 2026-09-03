@@ -200,7 +200,7 @@ uncovered rather than faked.
    crt0 issues a `csrrs` before `main()`, so this fires immediately.
 
    **Exactly one of the 66 is on our path, and it is a pure name-to-number decoder.**
-   `isacov/isacov_dpi.cpp` implements it: standard CSR names by table, `mhpmcounterN`
+   `isacov/isacov_dpi.c` implements it: standard CSR names by table, `mhpmcounterN`
    parsed, hex literals (`0xfc1` — how every Vortex GPU CSR is spelled with
    `-M numeric,no-aliases`) converted, anything unrecognised returns **-1** rather than
    a plausible wrong number. **It makes no architectural decision and cannot affect a
