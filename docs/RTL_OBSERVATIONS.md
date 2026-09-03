@@ -2536,3 +2536,53 @@ Makefile, so this had apparently never been exercised against a `tests/kernel/*`
 adding `base_addr` when the ELF's own address is already absolute, mirroring the logic
 `simx_load_hex_at` itself already applies for `@`-marker parsing) is cheap but not urgent — nobody
 in this project's actual test flow uses the affected path.
+
+---
+
+## OBS-049 — `op_type` is overloaded across ALU sub-types, and our `cp_alu_op` does not qualify on `xtype` (real coverage defect, found 2026-09-03)
+
+**What we saw.** While auditing which parts of the Vortex ISA the third-party riscvISACOV
+model can and cannot score, the `EX_ALU` dispatch turned out to carry **four disjoint
+opcode namespaces in the same `op_type` field**, selected by `op_args.alu.xtype`
+(`VX_gpu_pkg.sv:205-209`):
+
+| `xtype` | `op_type` means | decode site |
+|---|---|---|
+| `ALU_TYPE_ARITH` | `INST_ALU_*` (14 codes, `VX_gpu_pkg.sv:187-202`) | — |
+| `ALU_TYPE_BRANCH` | `INST_BR_*` (`:229-242`) | `VX_decode.sv:258,269,282,314` |
+| `ALU_TYPE_MULDIV` | `INST_M_*` (`:280-287`) | `VX_decode.sv:183,225` |
+| `ALU_TYPE_OTHER` | `funct3` = VOTE/SHFL (`:265-273`) | `VX_decode.sv:507-517` |
+
+**Evidence of the defect.** `tb/vx_instr_probe.sv:288-306` samples `alu_class_cg` on
+**every** accepted `EX_ALU` dispatch, and `cp_alu_op` (`:108-123`) bins on `op_type`
+alone with **no `xtype` qualifier**. The namespaces collide numerically, so:
+
+* `vote.all` (`funct3=3'b000`), `mul` (`INST_M_MUL=3'b000`) and `beq`
+  (`INST_BR_BEQ=4'b0000`) all increment the **`add`** bin.
+* `sub` (`INST_ALU_SUB=4'b0111`) shares its value with `INST_M_REMU` and `INST_BR_BGE`.
+* Similar collisions exist across `lui`/`auipc`/`slt`/`sltu`.
+
+**Two consequences, both real:**
+1. **`instr_class_cg_alu` hit counts are contaminated.** The bin percentages are still
+   valid as "this bin was reached", but the counts are not attributable to the named
+   instruction. No bin is falsely *covered* by this alone (every colliding code has a real
+   arithmetic producer in these workloads), so **no previously reported coverage number is
+   invalidated** — but the counts must not be quoted per-instruction.
+2. **VOTE and SHFL have no coverage of their own.** These are Vortex-specific warp-level
+   primitives (`vote.all/any/uni/bal`, `shfl.up/down/bfly/idx` — 8 operations) that no
+   third-party model will ever cover, and our own model does not distinguish them either.
+   The `vote_shfl` kernel stimulates them (session 11) and they were credited only with
+   moving an `ALU_TYPE_OTHER` *condition*, never a functional bin.
+
+**Classification: TB coverage-model defect, exposed by an RTL encoding quirk.** The RTL is
+not wrong — reusing the field is a sensible area optimisation and `xtype` disambiguates it
+correctly for execution (`VX_alu_int.sv:193`). The defect is that the probe read one half
+of a two-part key.
+
+**Disposition: OPEN.** Fix = pass `dispatch_if[gi].data.op_args.alu.xtype` into
+`alu_class_cg` and either (a) qualify `cp_alu_op` with `iff (xtype == ALU_TYPE_ARITH)`, or
+(b) better, split into four coverpoints — `cp_alu_op`, `cp_br_op`, `cp_muldiv_op`,
+`cp_vote_shfl_op` — which additionally *creates* the missing VOTE/SHFL and branch-opcode
+coverage rather than only cleaning up the existing bins. Option (b) changes the denominator
+of `instr_class_cg_alu`, so it must be banked as its own measurement and never compared
+across the change.
