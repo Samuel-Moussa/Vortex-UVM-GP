@@ -119,8 +119,26 @@ available" would oversell it.
 | **REG_FPVALUE, FP_RM, FP_FFLAG** (RV32F) | ❌ no published source exists |
 
 The RV32F bins in particular are **our reading of IEEE-754 binary32**, not
-Imperas'. RV32M/Zicsr rest almost entirely on validated templates; **RV32F does
-not, and is the weakest claim in this work.**
+Imperas'.
+
+**IMPORTANT CORRECTION (measured 2026-09-03): none of the four unvalidated
+templates is compiled in at `COVER_LEVEL_BASIC`, so NO number reported in this
+document depends on one.** Verified by reading the coverpoints that actually
+exist in the UCDB:
+
+```
+RV32F::fadd_s_cg -> cp_asm_count cp_fd_reg_assign cp_fs1_reg_assign cp_fs2_reg_assign
+RV32I::add_cg    -> cp_asm_count cp_rd_reg_assign cp_rs1_reg_assign cp_rs2_reg_assign
+                    cp_rd_sign cp_rs1_sign cp_rs2_sign cp_imm_value
+```
+The run log confirms it from the other direction: `REG_VALUE_TOGGLE - Disabled`,
+`MEM_ALIGNED - Disabled`, `CSR_COMPARE - Disabled`. BASIC enables only
+ASM_COUNT, INST_ILLEGAL, REG_ASSIGN, REG_VALUE_SIGN and IMM_VALUE — **all five
+validated by the RV32I byte-diff.** REG_FPVALUE / FP_RM / FP_FFLAG /
+INSTR_DIVIDE only become live under `COVER_LEVEL_EXTENDED`, and the caveat above
+applies from that point on, not before. An earlier note in this project called
+RV32F "the weakest claim in this work" — that was wrong for the reported
+numbers.
 
 ## 6. Deliberate exclusions, each with a reason
 
@@ -138,6 +156,37 @@ not, and is the weakest claim in this work.**
   rm operand yields `dyn`, which is exactly what the RISC-V encoding means.
 * **`cp_imm_value.neg` (Zicsr)** — the CSR immediate is a 5-bit *unsigned* field.
   Structurally unreachable; left honestly uncovered.
+
+## 6b. Does the new model move bins our own model was not moving?
+
+**Two different questions; the answers differ.**
+
+**(a) Did the new stimulus move any of OUR bins? No — not one.** `csr_probe` was
+merged into a COPY of the 1CL bank (the bank itself was not touched):
+
+| | covergroup instances |
+|---|---|
+| `bank_1CL_1C_4W_4T/merged_raw.ucdb` | 19 |
+| the same, merged with the `csr_probe` run | 19 |
+| difference | **none — every instance identical** |
+
+`csr_probe` covered nothing the 50-program bank was already covering: its CSR
+operations were already reaching `cp_sfu_op`'s `csrrw`/`csrrs`/`csrrc` bins. The
+kernel earns its place in the riscvISACOV bank, not in ours.
+
+**(b) Do the two models share any bin at all? No — and that is the point.** Our
+79 coverpoints contain **zero register-level coverage**: nothing asks which
+architectural register an instruction used, what value it held, or what its
+immediate was. We cover *which operation* (`cp_alu_op`, `cp_lsu_op`, `cp_sfu_op`,
+`cp_fpu_op`) crossed with thread mask and warp. riscvISACOV covers *which
+register, holding what, with which immediate*, per mnemonic.
+
+Measured on one kernel (`fpu_test`, all four extensions):
+**158 covergroups, 1,356 / 12,936 bins covered.** Our own model reports 99.79%
+weighted on the same runs. The two are not in conflict — different denominators
+over different axes — but the gap is exactly the independent perspective this
+work exists to provide. ⚠ One kernel is not comparable to a 50-program bank; the
+meaningful figure needs the full bank (§11).
 
 ## 7. Findings this work produced
 
