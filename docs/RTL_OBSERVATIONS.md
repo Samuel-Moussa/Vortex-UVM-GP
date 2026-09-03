@@ -2764,3 +2764,45 @@ lane-divergence coverage). Disposition: **coverage gap G-0 CLOSED** for the addr
 axis (full/partial/scatter × read/write, the point of the gap); `cp_active_lanes`
 partial-mask bins and `cp_misses[2]` left **OPEN, not waived** — genuine stimulus gaps with no
 structural RTL bound established, so no `ignore_bins` is justified for them.
+
+---
+
+## OBS-052 — the `regression_test` PROGRAM_KIND (basic/diverge/dogfood/sgemm) cannot build: `Vortex/runtime/libvortex.a` is absent from disk
+
+**What we saw.** Mid-suite, the 1CL re-run (2026-09-03) failed 4 of ~50 programs at the
+BUILD step, before simulation: `basic`, `diverge`, `dogfood`, `sgemm` — all `PROGRAM_KIND=
+regression_test` (`run_suite.sh:293-296`, `runr()`). Identical failure on all four:
+```
+/usr/bin/ld: cannot find -lvortex: No such file or directory
+[kernel-config] Refusing to run a program built for a DIFFERENT config
+```
+Correctly refused rather than silently running a stale/mismatched ELF (OBS-029 guard
+working as designed) — the build failure itself is the finding, not the refusal.
+
+**Root cause.** `tests/regression/common.mk:66`: `LDFLAGS += -L$(VORTEX_RT_PATH) -lvortex`,
+where `VORTEX_RT_PATH ?= $(ROOT_DIR)/runtime` (`:8`). This is a **different** library from
+the one every other program in this bench uses (`tests/kernel/common.mk:29` links
+`$(VORTEX_KN_PATH)/libvortex.a` under `Vortex/kernel/`, which exists and is current).
+`find Vortex/runtime -iname "libvortex*"` returns **nothing**; `Vortex/runtime/Makefile`
+only builds backend-specific libs (`libvortex-simx.so` via `runtime/simx`, etc.) — nothing
+in the tree currently produces a plain `libvortex.a` under `Vortex/runtime/`.
+
+**Not caused by this session's work** (tb_top split, G-0/G-1 collector changes, riscvISACOV
+integration touch none of `Vortex/runtime` or `tests/regression/`). **Was working as of the
+2026-08-16 bank** — `docs/…` session-3 notes record "regression basic 8/8", and its UCDBs
+are present in `cov/bank_1CL_1C_4W_4T/staging/` under the `regression_test` key. Most likely
+lost as an untracked build artifact during the 2026-08-20 submodule-conversion session,
+which re-cloned `Vortex/` as a real submodule — an artifact never checked into git wouldn't
+survive that. Not yet confirmed against `2026-08-20`'s own logs.
+
+**Impact.** These four are classified UNVERIFIABLE regardless (run-to-completion co-sim
+only, per `run_suite.sh:104` — "diverge/sgemm/dogfood run-to-completion co-sim but classify
+UNVERIFIABLE (spawn)"), so their loss costs stimulus/code-coverage contribution, not a
+scoreboard guarantee. `basic` DOES do a real DUT-vs-SimX compare, so its loss is the one
+with actual verification cost.
+
+**Disposition: OPEN, not fixed this session** — deliberately deferred rather than rebuilt
+mid-suite-run, to avoid touching `Vortex/runtime` while other builds were in flight on the
+same tree. Next step: determine what target actually produces `runtime/libvortex.a` (check
+build history / a pre-submodule-conversion tree) and add it to the kernel-config bootstrap
+list in `CLAUDE.md`'s "fresh-clone bootstrap" section alongside `Vortex/kernel`'s.
