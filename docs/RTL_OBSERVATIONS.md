@@ -2586,3 +2586,99 @@ of a two-part key.
 coverage rather than only cleaning up the existing bins. Option (b) changes the denominator
 of `instr_class_cg_alu`, so it must be banked as its own measurement and never compared
 across the change.
+
+---
+
+## OBS-049 ADDENDUM — FIXED 2026-09-03, and the fix proves the old `cp_alu_op 100%` was not attributable
+
+**Fix applied (option (b) above):** `tb/vx_instr_probe.sv` — `alu_class_cg` now takes
+`op_args.alu.xtype`, `cp_alu_op` is qualified `iff (xtype == ALU_TYPE_ARITH)`, and three new
+coverpoints were added: `cp_branch_op`, `cp_muldiv_op`, `cp_vote_shfl_op`, plus `cp_xtype`.
+
+**Measured, `kernel_launch_test`/`vecadd_lite`, 1CL/1C/4W/4T (run_152018):**
+TEST PASSED, 9,915 cycles, 1,881 instructions — byte-identical to the documented baseline,
+so the change is non-perturbing.
+
+| coverpoint | result |
+|---|---|
+| `cp_xtype` | 3/4 (OTHER absent — vecadd_lite has no VOTE/SHFL) |
+| `cp_alu_op` (now qualified) | **11/14** — `slt`, `czeq`, `czne` correctly ZERO |
+| `cp_branch_op` (new) | 6/10 |
+| `cp_muldiv_op` (new) | 3/8 |
+| `cp_vote_shfl_op` (new) | 0/8 — needs the `vote_shfl` kernel |
+
+**The integrity finding.** The frozen 1CL bank reports `cp_alu_op` = **100.00%, 14/14
+COVERED**. That number cannot be attributed, because the encodings alias EXACTLY:
+
+```
+INST_ALU_ADD  = 4'b0000  ==  INST_BR_BEQ    = 4'b0000  ==  INST_M_MUL = 3'b000  ==  VOTE_ALL
+INST_ALU_CZEQ = 4'b1010  ==  INST_BR_ECALL  = 4'b1010
+INST_ALU_CZNE = 4'b1011  ==  INST_BR_EBREAK = 4'b1011
+```
+(`VX_gpu_pkg.sv:187-201`, `:229-242`, `:280-287`.)
+
+So the bank's `czeq`/`czne` bins are hit by **`ecall`/`ebreak`**, which every riscv-dv program
+executes (`prepare.sh` rewrites `ecall`→`ebreak`, OBS-024) — regardless of whether any Zicond
+instruction ever ran. The probe's own inline comment said `czeq`/`czne` were *"ZERO until a
+Zicond build runs"*, while the bank simultaneously reported them covered; that contradiction
+was the tell. Likewise `bins add`'s count included every `beq` (81 on vecadd_lite alone) and
+every `mul`.
+
+**This does not mean the bins were never legitimately hit** — `multicore_isa` does emit real
+`czeq`/`czne` via inline `.insn`, so in a full-suite bank some hits are genuine. The defect is
+that the unqualified coverpoint **cannot distinguish the two**, so no attribution claim built
+on it is sound.
+
+**Disposition: FIXED in the collector; the affected banks are NOT regenerated.** The three
+frozen banks retain the unqualified coverpoint. Any future statement about ALU-op coverage
+must come from a post-fix bank, and pre/post banks must never be compared on
+`instr_class_cg_alu` — the denominator moved from 14 to 44 bins (14+4+10+8+8).
+
+---
+
+## OBS-050 — `fence.i` is decoded as a plain data `fence`: `funct3` is never read, and `INST_FENCE_I` is dead
+
+**What we saw.** `VX_gpu_pkg.sv:334-336` declares the discriminator:
+```systemverilog
+localparam INST_FENCE_BITS = 1;
+localparam INST_FENCE_D =    1'h0;
+localparam INST_FENCE_I =    1'h1;
+```
+but grep across **all** of `Vortex/hw/rtl/` and `Vortex/sim/simx/` finds **no reference to
+either `INST_FENCE_D` or `INST_FENCE_I` outside their own declarations.** They are dead
+localparams.
+
+The decoder confirms it — `VX_decode.sv:291-297` matches the opcode and never inspects
+`funct3`:
+```systemverilog
+INST_FENCE: begin
+    ex_type = EX_LSU;
+    op_type = INST_LSU_FENCE;
+    op_args.lsu.is_store = 0;
+    op_args.lsu.is_float = 0;
+    op_args.lsu.offset = 0;
+end
+```
+`INST_FENCE = 7'b0001111` (`VX_gpu_pkg.sv:145`) is the opcode shared by `fence` (funct3=000)
+and `fence.i` (funct3=001). **Both therefore produce the identical `INST_LSU_FENCE` op**, which
+drives the *data* path (`VX_lsu_slice.sv:73 req_is_fence` → dcache, per the icache waiver
+evidence). `Zifencei`'s architectural purpose — making stores visible to the *instruction*
+fetch stream — is not implemented. On a machine whose icache is `.WRITE_ENABLE(0)`
+(`VX_socket.sv:106`) with no coherence, self-modifying or JIT-generated code would not become
+visible after a `fence.i`.
+
+**Evidence from coverage.** Generated the `RV32Zifencei` bank (16-row dvplan → 1 covergroup)
+and ran it: `RV32Zifencei::fence_i_cg` = **0.00%, bin `count[1]` ZERO** on `vecadd_lite`. So
+the path is not exercised by current stimulus — the finding rests on the code reading, not on
+an observed failure.
+
+**Classification: latent RTL gap, not a live bug.** Nothing in the current software stack
+emits `fence.i` (the compiler emits it only for `__builtin___clear_cache`), and Vortex has no
+self-modifying-code use case, so the aliasing is harmless *today*. It is an unimplemented
+architectural guarantee that the MISA/decoder surface does not advertise either way.
+
+**Disposition: OPEN, documented, NOT waived.** The `RV32Zifencei` covergroup is retained
+precisely so the zero bin is visible rather than assumed. Closing it properly would require
+either (a) implementing an icache invalidate on `funct3==1`, or (b) an explicit statement that
+Vortex does not implement Zifencei. Note Vortex does **not** claim Zifencei in MISA, so (b) is
+defensible; this is a documentation gap more than a correctness one.
