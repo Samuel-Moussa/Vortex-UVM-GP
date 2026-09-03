@@ -286,14 +286,14 @@ Metric & 1CL/1C/4W/4T & 2CL/2C/4W/4T \\
 Covergroup bins (raw) & 370/377 = 98.1\% & 989/1032 = 95.8\% \\
 Covergroup (weighted) & 99.8\% & 99.5\% \\
 Statement & 98.1\% & 98.3\% \\
-Branch & 95.1\% & 95.7\% \\
+Branch & 94.5\% & 95.7\% \\
 Condition & 90.4\% & 88.8\% \\
-Toggle & 82.8\% & 80.5\% \\
+Toggle & 83.3\% & 80.5\% \\
 Assertion & 96.9\% & 98.9\% \\
 Directive & 100.0\% & 100.0\% \\
 \midrule
 \textbf{Total} & \textbf{94.7\%} & \textbf{94.6\%} \\
-Runs passing & 50/50 & 50/50 \\
+Runs passing & 51/51 & 50/50 \\
 Coverage instances & 2\,256 & 8\,275 \\
 \bottomrule
 \end{tabular}
@@ -301,7 +301,10 @@ Coverage instances & 2\,256 & 8\,275 \\
 
 Table~\ref{tab:fe-coverage} reports the two banked configurations. Banks
 are never blended across configurations: instance counts and signal widths
-differ, so a merged database is not meaningful.
+differ, so a merged database is not meaningful. The primary-configuration
+bank is measured on the reset-corrected design; the two-cluster and L2/L3
+banks predate that correction and are therefore not comparable to it on
+\emph{branch} coverage.
 
 \subsection{Directed stimulus for structural targets}
 Where a coverage gap resisted the existing suite, kernels were written
@@ -364,7 +367,9 @@ bugs is not being maintained honestly.
 \label{sec:provenance}
 
 The design is an open-source register-transfer model pinned at a specific
-revision, \emph{with eighteen locally modified files}. Most changes are
+revision, \emph{with eighteen locally modified files in the synthesizable
+register-transfer tree} (support and co-simulation glue outside that tree
+is additionally modified, and the environment itself is new code). Most changes are
 simulator-compatibility fixes made during bring-up. We disclose this because a
 verification result is a statement about a specific artifact, and ``upstream,
 unmodified'' would not describe what we ran.

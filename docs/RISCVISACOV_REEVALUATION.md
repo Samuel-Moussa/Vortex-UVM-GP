@@ -173,10 +173,10 @@ $ objdump -d -M numeric,no-aliases fft_par16.elf
 80000000:  fc1022f3    csrrs  x5,0xfc1,x0
 80000004:  00000317    auipc  x6,0x0
 80000008:  73c30313    addi   x6,x6,1852
-8000000c:  0062900b    .insn  4, 0x0062900b     <- Vortex custom op, correctly unmatched
+8000000c:  0062900b    .4byte 0x62900b          <- Vortex custom op, correctly unmatched
 ```
 Numeric registers, real mnemonics, and Vortex's custom instructions degrade gracefully to
-`.insn` which matches no RV32I covergroup — exactly right.
+`.4byte` which matches no RV32I covergroup — exactly right.
 
 **So the shim is: build a static `PC → "hex mnemonic ops"` map from the objdump at sim
 start, look it up at each retirement.** Vortex kernels are not self-modifying, so a static
@@ -398,6 +398,6 @@ RTL's complete custom opcode set against `tb/vx_instr_probe.sv`:
 | `INST_ALU_{CZEQ,CZNE}` — Zicond (`VX_gpu_pkg.sv:197-198`) | 2 | ✅ `vx_instr_probe.sv:121-122` |
 | `INST_TCU_WMMA` (`VX_gpu_pkg.sv:445`) | 1 | ✅ `instr_class_cg_tcu` (single op, no decode needed) |
 
-**12 of 12 accounted for, nothing delegated to riscvISACOV.** These render as `.insn` in
+**12 of 12 accounted for, nothing delegated to riscvISACOV.** These render as `.4byte` in
 objdump, so they map to no RV32I covergroup and are correctly scored as nothing by the
 third-party model — the division of labour is enforced by construction, not by convention.
