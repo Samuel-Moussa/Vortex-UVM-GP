@@ -2682,3 +2682,85 @@ precisely so the zero bin is visible rather than assumed. Closing it properly wo
 either (a) implementing an icache invalidate on `funct3==1`, or (b) an explicit statement that
 Vortex does not implement Zifencei. Note Vortex does **not** claim Zifencei in MISA, so (b) is
 defensible; this is a documentation gap more than a correctness one.
+
+## OBS-051 — Gap G-0 closed: `VX_mem_coalescer` had zero functional coverage; `misses` is a cumulative run-total, not a per-request measure
+
+**What we saw.** No coverpoint anywhere in the collector or the probe set observed
+`VX_mem_coalescer` (`Vortex/hw/rtl/libs/VX_mem_coalescer.sv`) — the module that merges per-lane
+LSU requests into wider dcache-line transactions, i.e. the entire reason a GPU memory path is
+faster on coalesced access patterns than scattered ones. Whether a warp's accesses actually
+coalesced, partially coalesced, or fully scattered was invisible to the coverage model.
+
+**`misses` semantics, read from the RTL (not assumed).** The module's own performance-counter
+output, `misses` (`VX_mem_coalescer.sv:41`), is fed by:
+```systemverilog
+wire partial_transfer = (out_req_fire && req_rem_mask_r != '1);
+always @(posedge clk) misses_r <= misses_r + PERF_CTR_BITS'(partial_transfer);
+```
+(`:332-344`). This is a **free-running, wrapping counter accumulated across the whole
+simulation** — it counts every output batch that was NOT the first batch of its input request,
+with no per-request reset. It cannot be binned per-transaction directly; a coverpoint sampling
+its raw value would just be watching a monotonic-ish counter climb, which has no per-bin
+meaning. `VX_mem_unit.sv:143` leaves the `misses` port as `` `UNUSED_PIN `` when
+`` `ifndef PERF_ENABLE `` is not defined at the instantiation site — but `misses_r` itself is
+computed **unconditionally** inside the module, with no `` `ifdef `` around it, so a `bind`
+(which attaches to the module's internal scope, not through its external port connections)
+sees the real accumulating value regardless of how the surrounding design wired the port.
+Confirmed by reading `VX_mem_unit.sv:160-200` in full: the `PERF_ENABLE` split is entirely
+about the port, never the internal logic.
+
+**Fix / new coverage (`Vortex/sim/uvmsim/tb/vx_coalescer_probe.sv`, bound in
+`vortex_tb_top.sv` alongside the other passive probes, registered in
+`Vortex/sim/uvmsim/flists/uvm_env.flist`).** Instead of binning the running counter, the probe
+re-derives the identical `partial_transfer` event **per input request** — a local
+`batch_count_r` increments once per `(req_sent && !is_last_batch)` cycle (`req_sent` =
+`VX_mem_coalescer.sv:243`'s `state_r == STATE_SEND`; `is_last_batch` = `:184`) and is read at
+the `in_req_valid && in_req_ready` handshake, where it still holds its pre-clear value (NBA
+semantics) — i.e. the exact per-request analogue of what `misses_r` accumulates. `cp_misses`
+bins that value 0 (`fully_coalesced`) through `DATA_RATIO-1` (worst case). A second
+coverpoint, `cp_coalesce_kind`, classifies each request as `full_coalesced` (1 output batch),
+`partial` (more than 1 batch but fewer than active-lane-count), or `full_scatter` (batches ==
+active lanes, i.e. zero coalescing benefit) — the actual GPU-relevant behaviour G-0 exists to
+close. Both `NUM_REQS`/`DATA_RATIO`/`OUT_REQS` are the bound instance's own elaborated
+parameters (bind inherits them), never hardcoded; the probe elaborates only where
+`VX_mem_unit.sv:160`'s `` (`NUM_LSU_LANES > 1) && (LSU_WORD_SIZE != DCACHE_WORD_SIZE) ``
+guard instantiates a coalescer at all — config-aware by construction, same principle as
+`vx_cache_probe`.
+
+**Directed kernel (`Vortex/tests/kernel/coalesce_probe/`).** Drives three lane→address layouts
+per warp-group of `NUM_THREADS` lanes at the primary config (1CL/1C/4W/4T, DATA_RATIO=4
+words/line): stride-1-word (full coalesce), stride-2-words (partial: pairs of lanes share a
+line), stride-4-words (full scatter: every lane its own line) — for both a store phase and a
+load phase (two separate `vx_spawn_threads` calls, identical geometry, so task `i` lands on the
+same core both times per `vx_spawn.c:299`'s contiguous distribution; OBS-026-safe, no barrier).
+**Note the briefing's literal "stride 4 words (lanes span 2+ lines)" for the PARTIAL pattern
+does not hold at this config** — a 4-word/16-byte stride puts every lane on its own line (that
+is the SCATTER case), verified by hand-tracing the coalescer's `addr_matches`/batch logic. The
+kernel uses a 2-word/8-byte stride for partial instead, which is what actually produces "lanes
+span 2+ lines" at `NUM_REQS=4`/`DATA_RATIO=4`. Flagging this because the repo/RTL geometry
+should always win over a literal number in a briefing, per project convention.
+
+**Measured result** (`kernel_launch_test PROGRAM_NAME=coalesce_probe`, 1CL/1C/4W/4T, PASSED,
+byte-exact vs SimX, 0 UVM errors, 62,110 cycles / 8,652 instructions):
+`coalesce_cg` at `.../g_coalescers[0]/mem_coalescer/u_coalescer_probe`: **cp_rw 100%** (rd=235,
+wr=4098), **cp_coalesce_kind 100%** (full_coalesced=3981, partial=8, full_scatter=344),
+**cp_misses 75%** (fully_coalesced / partial_transfers[1] / partial_transfers[3] hit;
+`partial_transfers[2]` — i.e. exactly 3 output batches — ZERO: none of the three directed
+patterns happens to produce that batch count; honestly left open, not waived, no RTL bound
+proven for it), **cp_active_lanes 50%** (lanes[1] and lanes[4] hit; lanes[2]/lanes[3] ZERO).
+
+**Observation worth flagging.** `cp_active_lanes` bin `lanes[1]` (single-lane request) got
+3,897 hits even though this kernel never issues a partial-mask access itself (every thread in
+every warp is active throughout both spawn phases). That traffic is single-lane background
+activity sharing the SAME coalescer instance — bootstrap/host-side single-thread code before
+the SIMT region, and this kernel's own single-thread `main()` epilogue self-check loop — not an
+artifact of the probe. It shows the coalescer's per-instance coverage reflects **everything**
+routed through it, not just one kernel's data-path traffic, which is correct behaviour but
+worth knowing when attributing bins to a specific stimulus source. `lanes[2]`/`lanes[3]` (2- or
+3-of-4 active lanes) remain a genuine stimulus gap: closing them needs a kernel with actual
+per-lane divergence (e.g. `if (tid < 2) ...`) feeding the coalescer under a partial mask, which
+was out of scope for this directed test (the brief asked for address-pattern coverage, not
+lane-divergence coverage). Disposition: **coverage gap G-0 CLOSED** for the address-pattern
+axis (full/partial/scatter × read/write, the point of the gap); `cp_active_lanes`
+partial-mask bins and `cp_misses[2]` left **OPEN, not waived** — genuine stimulus gaps with no
+structural RTL bound established, so no `ignore_bins` is justified for them.
