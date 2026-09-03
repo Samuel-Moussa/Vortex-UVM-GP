@@ -2869,3 +2869,48 @@ the generated exclude `.do`, and merge.log) — deliberately named `SUSPECT`, no
 untouched and unaffected (they were never regenerated). Next step: bisect the merge
 to find the minimal UCDB set that reproduces the "no effect" warning, before
 attempting any fix.
+
+---
+
+## OBS-053 ADDENDUM — root cause narrowed, workaround proven, fix not yet applied
+
+**Two hypotheses tested directly and both ruled out, not assumed:**
+1. **tb_top split.** Restored the pre-split `vortex_tb_top.sv` (saved backup), recompiled,
+   ran `vecadd_lite`, applied the byte-identical `excl_structural.do` to the resulting
+   UCDB: still 21 "had no effect". The split is not the cause.
+2. **Stale incremental compile.** Both tests above reused the same `flists/work` library,
+   built up across many differently-flagged invocations today (`ISACOV=1` manual runs,
+   the coalescer-probe compile, the tb_top-split verification). Removed `flists/work`
+   entirely, forced a genuinely clean rebuild, ran `vecadd_lite` again (9,905 cycles /
+   1,881 instructions — byte-identical to baseline, confirming DUT behaviour is
+   unaffected): **still 21 "had no effect"**, on a UCDB that could not possibly carry
+   any incremental-compile contamination. Not the cause either.
+
+**Mechanism found.** All 21 failing exclusions target objects under
+`generate if (ENABLE_FULL_AXI_CHECKS) begin : g_full_axi_checks` in
+`tb/vortex_axi_if.sv:538-791`. Tested `coverage exclude -srcfile <file> -linerange 755`
+(the generator's method) against one such object on the clean-compile UCDB — fails
+silently ("had no effect"), denominator unchanged. Tested `coverage exclude -dirpath
+{/vortex_tb_top/vif/axi_if/g_full_axi_checks/cover_aw_burst_incr} -reason EUR` — the
+identical target object, addressed by its hierarchical path instead of file+line —
+**succeeds**: `Directives 16 -> 15` on re-report, confirmed by re-saving and re-querying
+the UCDB (not inferred from silence alone).
+
+**So the defect is specifically that `-srcfile/-linerange` targeting does not reliably
+resolve objects living inside a `generate` scope in this build, while `-dirpath`
+targeting the same object does.** What specifically shifted today to trigger this in a
+build that historically worked (both preserved historical `exclude_apply.log`s show
+zero "had no effect") is NOT yet isolated — tb_top split and incremental staleness are
+ruled out; remaining untested candidates are the new coalescer-probe bind and the new
+files added to `flists/uvm_env.flist` (either could plausibly shift Questa's internal
+line-to-object mapping for generate-scoped content without touching
+`vortex_axi_if.sv`'s own content or line numbers at all).
+
+**Disposition: OPEN, workaround proven, fix not applied.** `gen_coverage_exclude.sh`
+generates `-srcfile/-linerange` exclusions exclusively; switching generate-scoped
+targets (at minimum the AXI ones, possibly others) to `-dirpath` is a viable fix,
+proven on this exact failure. **Not applied without a plan and confirmation first** —
+`gen_coverage_exclude.sh` is a shared script whose output governs all 30 waiver
+entries across every config, not a change to make unreviewed. Merged UCDB from
+today's suite run remains un-banked at
+`cov/bank_1CL_1C_4W_4T_SUSPECT_excludebug_20260903/`.
