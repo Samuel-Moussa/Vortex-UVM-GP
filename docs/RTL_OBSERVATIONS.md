@@ -2806,3 +2806,66 @@ mid-suite-run, to avoid touching `Vortex/runtime` while other builds were in fli
 same tree. Next step: determine what target actually produces `runtime/libvortex.a` (check
 build history / a pre-submodule-conversion tree) and add it to the kernel-config bootstrap
 list in `CLAUDE.md`'s "fresh-clone bootstrap" section alongside `Vortex/kernel`'s.
+
+---
+
+## OBS-053 — NEW merge-time defect: 21 config-aware AXI exclusion lines stopped matching, inflating the apparent coverage drop by ~11 points (found via merge_coverage.sh's own guard)
+
+**What we saw.** The 1CL re-run (2026-09-03, post G-0/G-1/riscvISACOV) merged clean
+(47 staged UCDBs, `hits-invariant holds`) but the merge log also carried:
+```
+WARN: 21 exclusion line(s) had no effect (stale path for this config?)
+```
+This guard exists specifically to catch stale/mismatched waiver paths and has
+previously caught two real defects — this is a third. **Checked both preserved
+historical `exclude_apply.log`s (`bank_1CL_1C_4W_4T/`, `…_relayfix_20260818/`): both
+show ZERO such warnings.** This is a new regression as of today's run, not a
+long-standing quirk newly surfaced.
+
+**Isolated exactly which 21 objects, via `vcover report -directive -details` on
+`merged_raw.ucdb` (pre-exclusion):** 11 `cover property` directives + 10 assertions,
+all in `tb/vortex_axi_if.sv`, all under the `generate if (ENABLE_FULL_AXI_CHECKS)
+begin : g_full_axi_checks` block (`:538-791`) — e.g. `cover_aw_burst_incr` (:755),
+`cover_aw_burst_wrap` (:757), `cover_bresp_slverr`/`cover_bresp_decerr` (:763,:765),
+`cover_rresp_slverr`/`cover_rresp_decerr` (:771,:773), the four `awlen_*` bucket
+covers (:779-785), `cover_concurrent_aw_ar` (:789). All were previously excluded
+under reason `EUR` — structurally unreachable (AXI burst type hardwired FIXED,
+response hardwired OKAY-only) — and every one now reads 0/ZERO in the raw UCDB,
+i.e. genuinely unhit, not newly-covered. **So this is not new real coverage being
+wrongly suppressed — it is the opposite: previously-correct waivers silently not
+applying, making genuinely-unreachable bins count as misses.**
+
+**Ruled out, with evidence, not assumption:**
+- `gen_coverage_exclude.sh` unmodified since its original commit (checked via `git
+  log`/`git diff`) — the generator did not change.
+- `tb/vortex_axi_if.sv` line numbers unchanged (single commit ever, verified
+  lines 507/755/757 match the exclusion `.do`'s targets exactly).
+- `ENABLE_FULL_AXI_CHECKS` still defaults `1'b1` at its declaration (`:41`) with no
+  override at its one instantiation site (`tb/vortex_if.sv:53-57`, itself untouched
+  this session).
+- Not caused by the ISACOV build path — the suite run did not set `ISACOV=1`.
+
+**Not yet root-caused.** Candidate not yet tested: today's merged UCDB set is larger
+and more varied (includes the new `coalesce_probe`/`csr_probe`-adjacent runs, plus
+the pre-existing throttle/flood runs) than prior banks; if any staged UCDB's copy of
+`vortex_axi_if`'s design-unit record differs in shape from another's, a `vcover
+merge` could produce two coexisting records under the same design-unit name, and a
+single `-srcfile/-linerange` exclude pass would only reach one of them. Not
+confirmed — needs a small bisection merge (2-3 UCDBs at a time) to test, which is
+cheap and does not require re-running any simulation.
+
+**Quantified impact on the headline number.** Directives category: 5/5 (100%) →
+5/16 (31.25%); Assertions: 123/127 (96.85%) → 123/137 (89.78%). Both are 1/7 weight
+in the unweighted Total mean, so this alone accounts for **~10.8 of the ~11-point
+drop** in the reported Total (83.79% raw vs. a corrected estimate of ~94.6% —
+consistent with "roughly flat, as expected with no new stimulus for the new
+coverpoints yet," not the double-digit crash the raw number implies).
+
+**Disposition: OPEN. The merged UCDB from this run is NOT banked and must not be
+quoted.** Preserved as evidence only at
+`cov/bank_1CL_1C_4W_4T_SUSPECT_excludebug_20260903/` (merged.ucdb, merged_raw.ucdb,
+the generated exclude `.do`, and merge.log) — deliberately named `SUSPECT`, not
+`bank_`, so it is never mistaken for a trusted result. The frozen defence banks are
+untouched and unaffected (they were never regenerated). Next step: bisect the merge
+to find the minimal UCDB set that reproduces the "no effect" warning, before
+attempting any fix.
