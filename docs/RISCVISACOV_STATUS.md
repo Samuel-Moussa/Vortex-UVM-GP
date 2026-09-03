@@ -188,6 +188,64 @@ over different axes — but the gap is exactly the independent perspective this
 work exists to provide. ⚠ One kernel is not comparable to a 50-program bank; the
 meaningful figure needs the full bank (§11).
 
+## 6c. What the new coverpoints express, which matter, and why we lacked them
+
+**⚠ Do NOT quote the aggregate 10.3% without this breakdown — it is dominated by
+the least informative coverpoint.** Measured from the `fpu_test` UCDB (instance
+counts, so each figure is double-listed by the report; the ratios are unaffected):
+
+| coverpoint | expresses | bins | share | hit |
+|---|---|---|---|---|
+| `cp_*_reg_assign` | WHICH architectural register was rd/rs1/rs2/fd/fs1/fs2/fs3 | 23,612 | **92.0%** | 3-9% |
+| `cp_*_sign` | operand value pos / neg / zero | 1,278 | 5.0% | ~40% |
+| `cp_imm_value` | immediate pos / neg / zero | 384 | 1.5% | 37.5% |
+| `cp_asm_count` | this exact MNEMONIC executed | 314 | 1.2% | 65.6% |
+
+**Excluding `*_reg_assign`: 872/2048 = 42.6%.**
+
+### `cp_asm_count` — important, and a real granularity gain over our model
+
+Our `cp_alu_op` bins on the RTL's `op_type`, and `VX_decode.sv:159-165` gives
+`addi` the **same** `op_type` as `add` (`use_imm` is a separate op_arg). So our
+model has **14 ALU bins where the ISA has 39 instructions** — it cannot
+distinguish `add`/`addi`, `slt`/`slti`, `srl`/`srli`, `and`/`andi`. riscvISACOV
+can. On top of that our ALU bins are contaminated by OBS-049.
+
+### `cp_*_sign` and `cp_imm_value` — important, and we had nothing at all
+
+Operand sign drives comparators, arithmetic-vs-logical shift, divide sign
+handling, branch outcomes, immediate sign-extension and negative address offsets.
+**None of our 79 coverpoints looks at an operand value.**
+
+### `cp_*_reg_assign` — weak for THIS design, and should not be chased
+
+Vortex's register file is a banked RAM with uniform indexing: `x5` vs `x6` is
+structurally symmetric, there is no per-index logic to break, and address-bus
+toggle coverage already exercises the decode. Worse, **which register gets
+allocated is a property of the COMPILER, not the DUT** — reaching `x28` requires
+manufacturing register pressure, which verifies nothing about the hardware. It is
+standard in CPU DV (OpenHW), and it is 92% of this denominator, which is exactly
+why the aggregate number must not be quoted bare.
+
+### Why our model did not have any of this
+
+1. **It was NOT an observability limit.** `dispatch_t` already carries `rd`,
+   `rs1_data`, `rs2_data` and `rs3_data` (`VX_gpu_pkg.sv:635-649`), and
+   `vx_instr_probe` is already bound at `VX_dispatch`. The data was under the
+   probe the whole time; we sampled `op_type`, `tmask` and `wis` and ignored the
+   rest. Adding operand-sign coverage to our own model is a small edit, not a new
+   probe.
+2. **A different question was being asked.** Our model was built to answer *"did
+   we exercise the microarchitecture"* — caches, stalls, divergence, warp
+   scheduling, AXI. riscvISACOV comes from CPU DV, where the ISA **is** the spec,
+   and asks *"did we exercise the instruction space"*.
+3. **The methodology made it feel redundant, and that was the mistake.** Operand
+   values are already checked by end-state equivalence and per-instruction
+   lockstep against SimX, so value *correctness* was covered. But **checking is
+   not covering**: lockstep proves the values we did produce were right; it says
+   nothing about whether we ever tried a negative operand, a zero divisor, or a
+   negative immediate. That distinction is the real lesson from this work.
+
 ## 7. Findings this work produced
 
 **OBS-049 — `op_type` is overloaded across ALU sub-types.** `EX_ALU` carries four
