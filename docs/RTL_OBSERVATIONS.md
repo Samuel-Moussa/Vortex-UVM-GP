@@ -2914,3 +2914,38 @@ proven on this exact failure. **Not applied without a plan and confirmation firs
 entries across every config, not a change to make unreviewed. Merged UCDB from
 today's suite run remains un-banked at
 `cov/bank_1CL_1C_4W_4T_SUSPECT_excludebug_20260903/`.
+
+---
+
+## OBS-053 RESOLUTION — fixed and banked, 2026-09-04
+
+**Fixed in `5ebe2bb84`** (`gen_coverage_exclude.sh`). Full per-line testing (all 60
+lines in `excl_structural.do`, individually, against a clean from-scratch compile)
+found the affected set was exactly and only the 21 `vortex_axi_if.sv` /
+`vortex_mem_if.sv` EUR waivers — every one of them, both inside and outside the
+`g_full_axi_checks` generate scope; every other line (targeting DUT RTL) passed.
+The mechanism: **assertions require `-assertpath`, cover directives require
+`-dirpath`** — Questa's generic `-srcfile/-linerange` form does not reliably
+resolve either object type when the target is `interface`-scoped (as both these
+TB files are) rather than `module`-scoped, in this build. Converted all 21 lines
+to the correct object-specific form, by exact hierarchical name (both interfaces
+instantiate exactly once at a fixed path regardless of config, so this is
+config-invariant here — explicitly NOT done for anything per-core/per-cluster
+replicated, where `-srcfile/-linerange`'s config-generic behaviour is load-bearing).
+
+**Verified, not assumed:** reapplied the fixed exclusion set to the exact same
+`merged_raw.ucdb` from the 2026-09-03 suite run (no re-simulation) —
+`0` "had no effect", Directives back to `5/5 = 100%`, Assertions back to
+`123/127 = 96.85%` — both exactly matching the frozen bank's pre-regression
+values. **Total: 94.62%**, essentially flat against the frozen 94.72%: every
+code-coverage category (branches, conditions, statements, toggles) is
+byte-identical to the frozen bank (same RTL, same stimulus), and the only
+category that moved is covergroup bins (377→436, from today's new coverpoints:
+G-0 coalescing, G-1 ALU/branch/muldiv/VOTE-SHFL split, riscvISACOV Zifencei).
+
+**Banked at `cov/bank_1CL_1C_4W_4T_postG0G1_20260904/`** (merged.ucdb,
+merged_raw.ucdb, the fixed exclusion `.do`, staging). Root `cov/merged.ucdb`
+updated to match. **The frozen defence bank (`cov/bank_1CL_1C_4W_4T/`,
+94.72%) was never touched by any of this** — confirmed by re-reading it after
+the fix. The `..._SUSPECT_excludebug_20260903/` evidence directory is retained
+for provenance, superseded by this bank.
