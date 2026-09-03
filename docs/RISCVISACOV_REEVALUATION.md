@@ -319,3 +319,85 @@ Neither is a substitute for the other, and only the dynamic figure is a verifica
 | 7 | one kernel, non-zero + non-vacuity | ✅ done — 25 of 39 covergroups non-zero, `fence_cg` 100% |
 | 8 | Option A (lane-as-hart) with `tmask` suppression | next |
 | 9' | full 50-program bank → 4th UCDB → written finding | after 8 |
+
+---
+
+## 8. Step 8 DONE — Option A (lane-as-hart) and Option B (lane 0), and what A buys
+
+**Measured 2026-09-03, `vecadd_lite`, 1CL/1C/4W/4T, one build, mode chosen at runtime
+by `+ISACOV_MODE=<A|B>` so the two are directly comparable.**
+
+| | mode B (lane 0) | mode A (lane as hart) |
+|---|---|---|
+| lane-samples | 1,677 | **4,581** (2.73x) |
+| PC lookups / misses | 1,881 / **0** | 1,881 / **0** |
+| fetched-word cross-checks / mismatches | 807 / **0** | 807 / **0** |
+| RV32I covergroups non-zero | 25 / 39 | 25 / 39 |
+| RV32I unweighted mean | **37.07%** | **37.07%** |
+| covered BINS | identical | identical |
+
+`NHART = `NUM_THREADS`, `hart = sid*`SIMD_WIDTH + lane`, every commit beat sampled (not
+just `sop`), and only `tmask[l] == 1` lanes ever sampled.
+
+### The finding: 2.73x more samples buys ZERO additional bins
+
+Not one bin differs between A and B. Only the hit COUNTS move (`add_cg`'s `cp_rd_sign.neg`
+goes 32 -> 119, `cp_rs1_sign.neg` 36 -> 132).
+
+**This is not a defect and not a stimulus gap — it is what an ISA coverage model IS.** At
+`COVER_LEVEL_BASIC` every coverpoint is a function of (mnemonic, register NUMBERS, value
+sign). Across the lanes of a warp the mnemonic and all three register numbers are
+identical by construction — that is what SIMT means — so the only lane-varying quantity is
+the sign of a value, and sign saturates almost immediately.
+
+**So this measurement quantifies the limit of the third-party model on a GPU:**
+riscvISACOV is structurally blind to SIMT width. It can tell us the RV32I instruction
+space was exercised; it can say nothing about thread divergence, mask shapes, warp
+occupancy, barriers or reconvergence. Those are exactly what our own collector covers
+(`cp_active_threads`, `cross_dvg_depth`, `cross_sfu_threads`, `sched_state_cg`), and this
+is the hard evidence that the two models are complementary rather than redundant.
+
+**Report BOTH numbers.** Quoting only A would imply SIMT credit the model cannot give.
+
+### A real defect the A/B comparison exposed in our own shim
+
+The first A/B run came back byte-identical, which was suspicious enough to look at *why*.
+The shim was driving `x_wdata` as "the value written this cycle" — clearing the array and
+setting only the `rd` slot.
+
+**RVVI defines `x_wdata` as a full 32-register SNAPSHOT**, and riscvISACOV depends on it:
+`RISCV_instruction_base.svh:444` reads `current.rs1_val = prev.x_wdata[rs1]` — source
+operand values come from the PREVIOUS retirement's snapshot. With the shortcut, a source
+operand read as 0 unless it happened to be the immediately preceding instruction's `rd`.
+
+Fixed: each hart now carries its own persistent architectural register file, updated on
+every writeback (per-hart is correct for SIMT — each thread has its own registers).
+
+**Honest result of the fix at BASIC level: no bin changed.** Dependency chains in real
+code meant `rs1 == previous rd` often enough that both sign bins were already reached. The
+fix still matters — it is required for any EXTENDED-level `REG_VALUE` / `REG_HAZARD`
+analysis, where feeding fabricated operand values would produce confidently wrong coverage
+— but it must not be claimed as a coverage gain.
+
+### Single top, as required
+
+The binds now live inside `vortex_tb_top` under `` `ifdef ISACOV `` (added at the end of
+its existing bind block), so `vortex_tb_top` remains the ONE elaboration top and the
+second-top workaround is gone. Confirmed live from the run log:
+`vortex_tb_top.dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.u_rvvi_shim
+mode=A NHART=4 LANES=4 sampled=4581`.
+
+### Vortex-specific ISA — confirmed covered by OUR collector, not left to a third party
+
+No third-party model covers Vortex's custom instructions, and none ever will. Checked the
+RTL's complete custom opcode set against `tb/vx_instr_probe.sv`:
+
+| RTL opcode set | count | covered in our collector |
+|---|---|---|
+| `INST_SFU_{TMC,WSPAWN,SPLIT,JOIN,BAR,PRED,CSRRW,CSRRS,CSRRC}` (`VX_gpu_pkg.sv:377-385`) | 9 | ✅ `cp_sfu_op`, all 9 bins (`vx_instr_probe.sv:174-183`) |
+| `INST_ALU_{CZEQ,CZNE}` — Zicond (`VX_gpu_pkg.sv:197-198`) | 2 | ✅ `vx_instr_probe.sv:121-122` |
+| `INST_TCU_WMMA` (`VX_gpu_pkg.sv:445`) | 1 | ✅ `instr_class_cg_tcu` (single op, no decode needed) |
+
+**12 of 12 accounted for, nothing delegated to riscvISACOV.** These render as `.insn` in
+objdump, so they map to no RV32I covergroup and are correctly scored as nothing by the
+third-party model — the division of labour is enforced by construction, not by convention.
