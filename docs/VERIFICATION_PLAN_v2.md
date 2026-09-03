@@ -20,9 +20,20 @@ resolve; it is a layering to make explicit.
 | **L2 — microarchitecture / SIMT** | was the *machine* exercised? warps, masks, divergence, coalescing, banks, hazards, caches | **ours** (`vx_*probe.sv` + collector) | operand values, register indices, per-mnemonic identity |
 | **L3 — system / protocol** | was the *interface* legal and stressed? | **ours** (SVA + `vortex_coverage_collector`) | — |
 
-**L1 is now real:** RV32I (Imperas) + RV32M / RV32Zicsr / RV32F (generated from
-Imperas' own DV plans, generator proven by regenerating RV32I byte-for-byte). See
-`RISCVISACOV_STATUS.md`.
+**L1 is now real: 80 active covergroups.** RV32I 39 (Imperas) + RV32F 26 + RV32M 8 +
+RV32Zicsr 6 + **RV32Zifencei 1** (all generated from Imperas' own DV plans; the generator
+is proven by regenerating RV32I byte-for-byte). See `RISCVISACOV_STATUS.md`.
+
+**RV32D (32 covergroups) is generated but NOT enabled**, and this is deliberate:
+`EXT_D_ENABLE` is gated by `` `ifdef XLEN_64 `` (`VX_config.vh:42`) and the SimX build
+stamp confirms `-DXLEN_32`, so FLEN=32 and MISA bit 3 reads 0. **D is structurally absent
+at the primary config — it is not an untested capability and not a gap.** The bank is
+retained as the deliverable for a future XLEN=64 configuration (checklist item I6).
+
+**Zifencei is a finding, not a pass.** `fence_i_cg` reads 0.00% because
+`VX_decode.sv:291` never inspects `funct3`, so `fence.i` decodes identically to a data
+`fence` and `INST_FENCE_I` (`VX_gpu_pkg.sv:336`) is a dead localparam. Retained
+uncovered on purpose so the zero bin is visible rather than assumed — see **OBS-050**.
 
 **Rule:** never merge L1 and L2 UCDBs, and never quote a blended number. They have
 different denominators over different axes.
@@ -62,7 +73,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | SIMT-6 | TMC | `VX_wctl_unit.sv` | C-END | `tmc_cg` | DONE |
 | SIMT-7 | WSPAWN | `VX_wctl_unit.sv` | C-LOCK only | `wspawn_cg` | PART — **W-9**: spawn args are stack-resident, not staged to SimX, so C-END is undefined |
 | SIMT-8 | Predication | `VX_wctl_unit.sv` | C-END | `cp_sfu_op.pred` | PART — no predicate-**mask** coverpoint |
-| SIMT-9 | **VOTE / SHFL** (8 ops: all/any/uni/bal, up/down/bfly/idx) | `VX_decode.sv:507-517` | C-END | **NONE — and they mis-bin into `cp_alu_op`** | **OPEN — G-1 (OBS-049)** |
+| SIMT-9 | **VOTE / SHFL** (8 ops: all/any/uni/bal, up/down/bfly/idx) | `VX_decode.sv:507-517` | C-END | `cp_vote_shfl_op` 8 bins (**added 2026-09-03**) — the ONLY model that can score these; riscvISACOV has no Zicond/VOTE/SHFL dvplan | **CLOSED — G-1** |
 | SIMT-10 | **SIMD beat splitting / uop sequencing** | `VX_uop_sequencer.sv` | C-LOCK (aggregates beats) | **none** | **OPEN — G-7** |
 | SIMT-11 | Global (cross-core) barrier | `VX_gbar_unit.sv` | — | waived at 1 core | OPEN at ≥2 cores — **W-3** |
 
@@ -132,7 +143,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | ID | Gap | Why it matters | Proposed coverpoints | Cost |
 |---|---|---|---|---|
 | **G-0** | **Memory coalescing** | The defining GPU memory behaviour. A warp's 4 lanes may hit 1 line (fully coalesced), N lines (fully divergent), or anything between — that ratio is the whole point of a GPU memory system, and **we measure none of it.** The RTL even exports `misses` for us. | bind a probe on `VX_mem_coalescer`: `cp_coalesce_ratio` (1 / 2 / … / NUM_REQS lines per request), `cp_access_pattern` (uniform / unit-stride / strided / scattered), `cross` with `tmask` occupancy | ~1 d |
-| **G-1** | ALU class contamination (**OBS-049 ≡ v1 D-1**) | `vote.all`, `mul`, `beq` all score as `add`; `JAL` scores as `srl`; **VOTE/SHFL have no coverage anywhere**; no `default` bin so nothing reads uncovered | pass `op_args.alu.xtype`; split into `cp_alu_arith` / `cp_alu_branch` / `cp_alu_muldiv` / `cp_vote_shfl`, each `iff` its xtype, each with `bins other[] = default` | 0.5 d |
+| ~~**G-1**~~ **CLOSED 2026-09-03** | ALU class contamination (**OBS-049 ≡ v1 D-1**) | `vote.all`, `mul`, `beq` all score as `add`; `JAL` scores as `srl`; **VOTE/SHFL have no coverage anywhere**; no `default` bin so nothing reads uncovered | pass `op_args.alu.xtype`; split into `cp_alu_arith` / `cp_alu_branch` / `cp_alu_muldiv` / `cp_vote_shfl`, each `iff` its xtype, each with `bins other[] = default` | 0.5 d |
 | **G-2** | Branch direction | taken/not-taken is invisible to both layers | `cp_br_taken` cross `cp_alu_branch` | 0.5 d (with G-1) |
 | **G-3** | Divide corner cases | divide-by-zero and −2³¹/−1 are the classic DIV bugs | either enable L1 `COVER_LEVEL_EXTENDED` (`INSTR_DIVIDE`) or add `cp_div_special` in L2 | 0.5 d |
 | **G-4** | Register hazards | `VX_scoreboard.sv` is real hazard logic with no functional coverage | `cp_hazard_type` (RAW/WAW/WAR/none) from the RTL scoreboard's stall reason | 1 d |
@@ -143,8 +154,29 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | **G-9** | LMEM + bank conflicts | scratchpad is a GPU-defining feature; `lmem_stress` runs but scores nothing functional | `cp_lmem_bank_conflict`, `cp_lmem_pattern` | 1 d |
 | **G-10** | Cross-core interaction | `cp_num_cores` is provenance, not behaviour | `cp_core_concurrency`, `cp_mem_arb_winner` | 1 d |
 
-**Do G-0 and G-1 first.** G-0 is the largest genuinely-Vortex hole in the model;
-G-1 is a defect that currently makes three feature rows unmeasurable and inflates
+### G-1 status: CLOSED 2026-09-03 (commit `256e71e88`)
+
+`alu_class_cg` now takes `op_args.alu.xtype`; `cp_alu_op` is qualified
+`iff (xtype == ALU_TYPE_ARITH)`, and `cp_xtype`, `cp_branch_op`, `cp_muldiv_op`,
+`cp_vote_shfl_op` were added. Denominator of `instr_class_cg_alu` moved **14 → 44 bins**,
+so pre/post banks must never be compared on it.
+
+**Measured** (`kernel_launch_test`/`vecadd_lite`, 1CL/1C/4W/4T, run_152018 — PASSED,
+9,915 cycles / 1,881 instructions, identical to baseline, so the change is non-perturbing):
+`cp_xtype` 3/4 · `cp_alu_op` **11/14** (`slt`/`czeq`/`czne` correctly ZERO) ·
+`cp_branch_op` 6/10 · `cp_muldiv_op` 3/8 · `cp_vote_shfl_op` 0/8.
+
+**This closure also invalidated a reported number.** The frozen 1CL bank reports
+`cp_alu_op` = 100.00% (14/14 COVERED). The encodings alias exactly —
+`INST_ALU_CZNE == INST_BR_EBREAK == 4'b1011` — so that bin was scored by `ebreak`,
+which every riscv-dv program executes, while the probe's own comment said `czeq`/`czne`
+were "ZERO until a Zicond build runs". Some hits in a full-suite bank are genuine
+(`multicore_isa` emits real Zicond via inline `.insn`), but the unqualified coverpoint
+**cannot distinguish them**, so no attribution built on it is sound. See the OBS-049
+addendum. **Any future ALU-coverage claim must come from a post-fix bank.**
+
+**Do G-0 first (G-1 is now closed).** G-0 is the largest genuinely-Vortex hole in the model;
+G-1 was a defect that made three feature rows unmeasurable and inflated
 a fourth.
 
 ---
