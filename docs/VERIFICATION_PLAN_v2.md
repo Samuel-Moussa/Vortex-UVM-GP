@@ -149,6 +149,41 @@ a fourth.
 
 ---
 
+## 4b. Inventory reconciliation (independent audit, 2026-09-03)
+
+The existing model was independently re-inventoried file-by-file. **Every gap
+claimed in §3 and §4 is confirmed**, with these specifics:
+
+* **17 covergroups total**, across `vortex_coverage_collector.svh` (5),
+  `vx_instr_probe.sv` (5), `vx_sched_probe.sv` (6), `vx_cache_probe.sv` (1).
+* **`vx_commit_probe.sv`, `vx_lsu_probe.sv` and `vx_dcr_probe.sv` build NO
+  covergroups at all** — they are lockstep/RVVI capture and a RAL peek checker.
+  Both expose `data.rd` and never bin it.
+* **No coverpoint anywhere reads an operand value.** The closest is
+  `dcr_config_cg.cp_data_magnitude` (`:476`), which buckets *DCR configuration
+  write data* — not an ALU/FPU operand. Confirms G-6.
+* **No coverpoint anywhere reads a register index.** Confirms G-6.
+* **No branch/jump bins exist**, and per OBS-022 the commit stream is
+  writeback-domain only, so `beq`/`jalr x0` never even enter it. Confirms G-2.
+* **No M-extension bins exist** in `cp_alu_op`, and there is **no `default` bin**
+  — so mul/div traffic falls into a named arithmetic bin instead of showing as
+  uncovered. Confirms G-1 and its severity.
+* **Zero coverage** of local memory, operand collector, `VX_scoreboard` hazards,
+  cache set/way/replacement, cache bypass, or cross-core arbitration. Confirms
+  G-5, G-4, G-9, G-10 and MEM-9/MEM-10.
+
+The audit also produced a **complete `ignore_bins` register** — 30 waivers with
+file:line and stated reason, all `ignore_bins`, **zero `illegal_bins`**. Notable
+entries that this plan relies on: `cp_route_slot` gated on tag-buffer presence
+(`:356`), the AXI burst/size/len structural set (`:383-404`), the four
+config-provenance `other_cfg` waivers (`:518-554`), `cross_stall_types`
+decode≡issue (`:710-712`, RTL-proven `SIZE(0)` buffer), and the cache probe's
+four structural waivers (`vx_cache_probe.sv:133-207`).
+
+⚠ One inherited assumption is **wrong** and is corrected in §5.1: the TCU
+covergroup is *not* absent by default. `compile.sh:51` promotes
+`+define+EXT_TCU_ENABLE=1` globally, so `tcu_class_cg` is built in every run.
+
 ## 5. Corrections carried into this plan
 
 ### 5.1 To `VERIFICATION_PLAN_v1.md`
