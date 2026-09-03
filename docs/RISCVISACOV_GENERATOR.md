@@ -132,3 +132,104 @@ unrun; anything using a coverage TYPE outside the ten templates (`VECTOR_STATE`,
 `CSR_FIELD_VALUE`, `FP_RM`, `MMU_SCENARIO`, …) will stop the generator with a named error
 rather than emit something plausible and wrong. Adding those is more template work, not a
 different method.
+
+---
+
+# Tier 1 + Tier 2 delivered (2026-09-03)
+
+## Tier 2 — a silent FP-writeback bug in our shim, found and PROVEN fixed
+
+`commit_t.rd` is a **unified** register number, not an architectural index:
+`make_reg_num()` packs it as `(reg_type << RV_REGS_BITS) | idx`
+(`VX_gpu_pkg.sv:910`), and `REG_TYPES == 2` whenever the FPU is built (`:41-45`).
+
+The shim treated it as a plain index, which is wrong twice: `32'b1 << rd` sets **no**
+bit once `rd >= 32`, and `x_wdata[rd]` is an out-of-range write that SystemVerilog
+discards without a warning. **The effect was not corruption but invisibility** — every
+floating-point writeback was dropped, so a future RV32F bank would have read 0% and
+looked like a stimulus gap rather than a shim defect.
+
+Fixed by splitting the number and routing F results to `f_wb`/`f_wdata`, which is what
+RVVI defines them for. **Proven, not assumed** — added split counters and ran `fpu_test`:
+
+```
+mode=A NHART=4 LANES=4 sampled=3717 int_wb=2401 fp_wb=36
+```
+`fp_wb=36` is non-zero for the first time; it was structurally 0 before.
+
+## Tier 1 — RV32Zicsr, and the ImperasDV dependency made concrete
+
+**A new kernel was required.** Histogramming every mnemonic across all 47 kernel ELFs:
+
+| | csrrs | csrrw | csrrsi | csrrwi | csrrc | **csrrci** |
+|---|---|---|---|---|---|---|
+| static occurrences, whole corpus | 4439 | 74 | 41 | 10 | 6 | **0** |
+
+`csrrci` had no producer anywhere, so `rv32zicsr_csrrci_cg` could never leave 0%.
+`Vortex/tests/kernel/csr_probe/` exercises all six forms on FRM/FFLAGS only (the two
+CSRs `sfu_masks` already proved safe — the RTL asserts on `csrw` to 0x301/0x305, which
+is why `prepare.sh` sed-strips those from riscv-dv), with every read folded as `(x & 0)`
+so `out_buf` never depends on per-warp `fcsr`, and FRM restored to RNE at the end.
+
+**Result — `csr_probe`, 1CL/1C/4W/4T, mode A: TEST PASSED, 0 UVM errors, 5,261 lane
+samples, 2,201 PC lookups / 0 misses, 682 word cross-checks / 0 mismatches.**
+
+| covergroup | coverage |
+|---|---|
+| `csrrci_cg` / `csrrsi_cg` / `csrrwi_cg` | **60.62%** |
+| `csrrs_cg` | 57.29% |
+| `csrrw_cg` | 52.60% |
+| `csrrc_cg` | 40.97% |
+
+All six non-zero. `cp_imm_value`'s `neg` bin is **structurally unreachable** for the
+immediate forms — the CSR immediate is a 5-bit UNSIGNED field — and is left honestly
+uncovered rather than faked.
+
+### Two silent-failure traps hit on the way (both now guarded)
+
+1. **`+define+COVER_RV32Zicsr` was silently ignored.** The gating macros are ALL-CAPS
+   (`COVER_RV32ZICSR`) while the include filenames keep mixed case. The compile
+   succeeded, the run passed, and **zero covergroups existed**. `compile.sh` now
+   uppercases, and the sim log's `// RV32ZICSR - Enabled` line is the liveness check.
+2. **RVVI's DPI is an ImperasDV dependency, and Zicsr is the first thing to hit it.**
+   `RISCV_instruction_base.svh:490`, inside `add_csr()`, calls
+   `rvviRefCsrIndex(hart, csrName)`. RVVI declares **66** `import "DPI-C"` functions,
+   all implemented by ImperasDV — a commercial product. QuestaSim does not complain at
+   elaboration; it aborts on first call:
+   `** Fatal: (vsim-160) rvviApiPkg.sv(280): Null foreign function pointer`.
+   crt0 issues a `csrrs` before `main()`, so this fires immediately.
+
+   **Exactly one of the 66 is on our path, and it is a pure name-to-number decoder.**
+   `isacov/isacov_dpi.cpp` implements it: standard CSR names by table, `mhpmcounterN`
+   parsed, hex literals (`0xfc1` — how every Vortex GPU CSR is spelled with
+   `-M numeric,no-aliases`) converted, anything unrecognised returns **-1** rather than
+   a plausible wrong number. **It makes no architectural decision and cannot affect a
+   verdict** — it only supplies the label the coverage model uses for a CSR.
+   Implementing `rvviRefCsr*Value*` would be a different matter, and we do not.
+
+### On ImperasDV itself
+
+Three distinct things are often conflated:
+
+| | licence |
+|---|---|
+| riscvOVPsim **model source** | Apache-2.0, genuinely open |
+| riscvOVPsim **simulator binary** | OVP Fixed Platform Kits — free download, no modification/redistribution, and it expires |
+| **ImperasDV** (the DV product) | commercial; Imperas acquired by Synopsys, 2023 |
+
+Obtaining the free riscvOVPsim would **not** unlock the `CSR_COMPARE` coverpoints —
+those need `idvRefCoverPointNext`, an ImperasDV *runtime* API, not the ISS. And we would
+not want it: we already have a golden reference in per-instruction lockstep (SimX). If
+CSR-compare coverage ever mattered, it should be fed from our own comparison.
+
+## Regression status
+
+* default build (no `ISACOV=1`): **9,915 cycles, 0 errors** — unchanged
+* `ISACOV=1` build without `+ISACOV`: **9,905/9,915 cycles, 0 errors, zero `[ISACOV]` output**
+* both Gate-0 negative guards still fire at `0x800075d8`
+
+## Deliberately NOT done
+
+`csr_probe` is **not** added to `run_suite.sh`. Doing so would change the composition of
+the coverage banks, which are frozen for the defence deck. That is Samuel's call, not a
+side effect of this work.
