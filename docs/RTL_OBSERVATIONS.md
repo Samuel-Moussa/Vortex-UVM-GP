@@ -2801,11 +2801,19 @@ UNVERIFIABLE (spawn)"), so their loss costs stimulus/code-coverage contribution,
 scoreboard guarantee. `basic` DOES do a real DUT-vs-SimX compare, so its loss is the one
 with actual verification cost.
 
-**Disposition: OPEN, not fixed this session** — deliberately deferred rather than rebuilt
-mid-suite-run, to avoid touching `Vortex/runtime` while other builds were in flight on the
-same tree. Next step: determine what target actually produces `runtime/libvortex.a` (check
-build history / a pre-submodule-conversion tree) and add it to the kernel-config bootstrap
-list in `CLAUDE.md`'s "fresh-clone bootstrap" section alongside `Vortex/kernel`'s.
+**Disposition: RESOLVED 2026-09-04.** The name in the original write-up was wrong — it's
+`.so`, not `.a`, and `-lvortex` is satisfied by either. `Vortex/runtime/stub/Makefile`
+(`PROJECT := libvortex.so`, `DESTDIR ?= $(CURDIR)/..`) builds a generic, backend-agnostic
+`libvortex.so` straight into `Vortex/runtime/` — confirmed as the right artifact by finding
+the same file (no backend suffix) in the pre-submodule-conversion backup tree
+(`Vortex_old_embedded_backup/runtime/libvortex.so`). Just never rebuilt after the
+2026-08-20 submodule re-clone (an untracked, gitignored build artifact does not survive a
+re-clone). Fixed with `cd Vortex/runtime && make stub` (isolated to `runtime/`, does not
+touch anything the kernel-config/sim pipeline builds under `tests/kernel/`, so it was safe
+to run alongside an in-flight suite). Confirmed on disk: `Vortex/runtime/libvortex.so`.
+**Not added to git** — correctly gitignored, a local build artifact like every other
+`libvortex-<backend>.so`. Add `cd Vortex/runtime && make stub` to CLAUDE.md's fresh-clone
+bootstrap list, alongside `make -C Vortex/kernel`.
 
 ---
 
