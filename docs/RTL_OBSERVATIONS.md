@@ -2949,3 +2949,48 @@ updated to match. **The frozen defence bank (`cov/bank_1CL_1C_4W_4T/`,
 94.72%) was never touched by any of this** — confirmed by re-reading it after
 the fix. The `..._SUSPECT_excludebug_20260903/` evidence directory is retained
 for provenance, superseded by this bank.
+
+---
+
+## OBS-054 — `runthr`/`runflood` reuse the base program's name, so a merge cannot tell the throttled/flooded run apart from the plain one
+
+**What we saw.** Both the 2CL-with and 2CL-without merges (2026-09-04, overnight pipeline)
+hit `vcover-6854`:
+```
+Multiple test data records with the same name encountered during the merge...
+Test data records named 'kernel_launch_test_vecadd_lite' are from different simulations.
+...
+Test data records named 'kernel_launch_test_mem_stress' are from different simulations.
+```
+**Confirmed this is NOT specific to my reconstruction** — grepped the SAME two errors
+out of `run_suite.sh`'s own official merge log (`run_suite_logs/merge.log`) for the
+identical 2CL run. Both the "official" with-bank and my derived without-bank carry
+this defect equally.
+
+**Root cause.** `run_suite.sh`'s `runthr()`/`runflood()` (throttle/flood AXI-backpressure
+variants) call `make sim-only PROGRAM_NAME="$1" ...` with the SAME `PROGRAM_NAME` as the
+plain run of that program — `vecadd_lite` runs once plain and once under
+`+AXI_THROTTLE`, `mem_stress` once plain and once under `+AXI_FLOOD`. `simulate.sh:289`
+derives the internal UCDB test-record name purely from `${TEST_NAME}_${PROG_SHORT}` —
+which is identical for both invocations, since neither throttle nor flood mode changes
+`PROGRAM_NAME`. `vcover merge` cannot disambiguate two coverage records with the exact
+same internal name; it emits the suppressible error and — per Questa's own behaviour for
+this class of collision — resolves it by keeping one and discarding the other, silently.
+
+**Impact, bounded but real.** At most 2 of 49 2CL programs are affected. Whichever of
+each pair (plain vs backpressure-mode) survives is not something we currently control or
+even observe from the log — the error names the COLLISION, not the winner. The
+backpressure-specific branches/toggles/assertions those two variants exist specifically
+to exercise (AXI stall/backpressure paths per `run_suite.sh:103-104`'s own comment) may
+be undercounted by whichever run lost.
+
+**This defect is NOT new today** — it exists in the pipeline as long as `runthr`/
+`runflood` have existed, and would affect ANY prior bank that included both a throttled
+and plain run of the same program (need to check whether the frozen 2CL bank's own merge
+log shows the same collision — not yet checked).
+
+**Disposition: OPEN, not fixed.** A real fix would give the throttle/flood variant a
+distinct internal test-record name (e.g. `simulate.sh` deriving `stage_name` from
+`${TEST_NAME}_${PROG_SHORT}_${MODE_SUFFIX}` when `AXI_THROTTLE`/`AXI_FLOOD` is armed) —
+not done, since it's a shared script and needs a plan + confirmation first per project
+rule 8, and was found overnight with no one to confirm against.
