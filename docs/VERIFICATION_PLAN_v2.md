@@ -82,7 +82,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | # | Feature | RTL | Coverage | Status |
 |---|---|---|---|---|
 | ISS-1 | Instruction buffer occupancy / per-warp arbitration | `VX_ibuffer.sv` | none | **OPEN — G-8** |
-| ISS-2 | **Register hazards (RAW/WAW/WAR)** | `VX_scoreboard.sv` | none in L2; **L1 has `REG_HAZARD` but only at EXTENDED level** | **OPEN — G-4** |
+| ISS-2 | **Register hazards (RAW/WAW)** | `VX_scoreboard.sv` | L2 `reg_hazard_cg` (`vx_hazard_probe.sv`) `cp_hazard_type` none/raw_only/waw_only/raw_and_waw, cross with `cp_wid`; L1 has `REG_HAZARD` but only at EXTENDED level | **CLOSED — G-4 (2026-09-04)**. WAR removed from scope: `inuse_regs` only ever reserves a register on its producer's `rd`, never a source read, and per-warp issue is strictly in-order, so a write can never chase an earlier read on the same warp — WAR is structurally unreachable, not merely unobserved. |
 | ISS-3 | **Operand collector / GPR bank conflicts** (`NUM_GPR_BANKS`) | `VX_opc_unit.sv`, `VX_operands.sv` | none | **OPEN — G-5** |
 | ISS-4 | Gather unit / PE switching | `VX_gather_unit.sv`, `VX_pe_switch.sv` | none | OPEN |
 
@@ -146,7 +146,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | ~~**G-1**~~ **CLOSED 2026-09-03** | ALU class contamination (**OBS-049 ≡ v1 D-1**) | `vote.all`, `mul`, `beq` all score as `add`; `JAL` scores as `srl`; **VOTE/SHFL have no coverage anywhere**; no `default` bin so nothing reads uncovered | pass `op_args.alu.xtype`; split into `cp_alu_arith` / `cp_alu_branch` / `cp_alu_muldiv` / `cp_vote_shfl`, each `iff` its xtype, each with `bins other[] = default` | 0.5 d |
 | **G-2** | Branch direction | taken/not-taken is invisible to both layers | `cp_br_taken` cross `cp_alu_branch` | 0.5 d (with G-1) |
 | **G-3** | Divide corner cases | divide-by-zero and −2³¹/−1 are the classic DIV bugs | either enable L1 `COVER_LEVEL_EXTENDED` (`INSTR_DIVIDE`) or add `cp_div_special` in L2 | 0.5 d |
-| **G-4** | Register hazards | `VX_scoreboard.sv` is real hazard logic with no functional coverage | `cp_hazard_type` (RAW/WAW/WAR/none) from the RTL scoreboard's stall reason | 1 d |
+| ~~**G-4**~~ **CLOSED 2026-09-04** | Register hazards | `VX_scoreboard.sv` is real hazard logic with no functional coverage | `cp_hazard_type` (RAW/WAW/none — WAR proven structurally unreachable, see ISS-2) from `operands_busy[]`, no RTL change | 1 d (actual: <1 d, verified non-vacuous on `mem_stress`) |
 | **G-5** | GPR bank conflicts | `NUM_GPR_BANKS` collector is a real arbiter that can starve | `cp_bank_conflict_degree`, cross with warp | 1 d |
 | **G-6** | Operand values, incl. FP specials | **L2 has ZERO operand-value coverage, and `dispatch_t` already carries `rs1_data`/`rs2_data`/`rs3_data`/`rd` at a probe we already bind** — a small edit, not a new probe | `cp_rs1_sign`, `cp_rs2_sign`, `cp_fp_class` (NaN/Inf/denorm/±0), `cp_imm_sign` | 0.5 d |
 | **G-7** | uop / SIMD beat splitting | `sop`/`eop` beat sequences are already in `commit_t` and unsampled | `cp_beats_per_instr`, cross with `tmask` | 0.5 d |

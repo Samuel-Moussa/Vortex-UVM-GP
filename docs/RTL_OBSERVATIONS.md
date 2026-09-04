@@ -2997,8 +2997,39 @@ be undercounted by whichever run lost.
 and plain run of the same program (need to check whether the frozen 2CL bank's own merge
 log shows the same collision — not yet checked).
 
-**Disposition: OPEN, not fixed.** A real fix would give the throttle/flood variant a
-distinct internal test-record name (e.g. `simulate.sh` deriving `stage_name` from
-`${TEST_NAME}_${PROG_SHORT}_${MODE_SUFFIX}` when `AXI_THROTTLE`/`AXI_FLOOD` is armed) —
-not done, since it's a shared script and needs a plan + confirmation first per project
-rule 8, and was found overnight with no one to confirm against.
+**Disposition: RESOLVED 2026-09-04** (`9428682d0`). `simulate.sh` now derives
+`COV_TESTNAME` as `${TEST_NAME}_${PROG_SHORT}${COV_TESTNAME_SUFFIX}`, with the suffix
+(`_thr`/`_flood`) applied only when `AXI_THROTTLE`/`AXI_FLOOD` is armed — a plain run is
+byte-identical. Used for both the internal `coverage save -testname` and the staging
+filename. Confirmed via a clean 53/53-staged, 0-FAILED 1CL suite re-run same session.
+
+---
+
+## OBS-055 — `VX_scoreboard`'s hazard-detection scoreboard can only ever produce RAW/WAW; WAR is structurally unreachable by design
+
+**What we saw.** While closing coverage gap G-4 (register-hazard functional coverage,
+`docs/VERIFICATION_PLAN_v2.md` ISS-2), read `VX_scoreboard.sv:122-186` in full to find
+the real hazard-detection signal. `inuse_regs` (the in-use-register bitmap) is only ever
+SET on a producing instruction's own `rd`, at `staging_fire` (`:154-155`, "reserve rd"),
+and only ever CLEARED on that same register's `writeback_fire` (`:151-152`, "release
+rd"). A source-register read is never written into `inuse_regs` at all — there is no
+code path that reserves a register because something is about to READ it.
+
+**Why this matters.** Combined with strictly in-order per-warp issue (one `VX_scoreboard`
+issue slot per warp, instructions from the same warp can only leave `staging_if` in
+program order), this makes WAR (write-after-read) **provably impossible** on this design,
+not merely rare or unobserved: a later instruction's write can never "chase" an earlier
+instruction's read of the same register on the same warp, because the earlier read has
+already happened (in-order issue) by the time any later write could occur. Every hazard
+`VX_scoreboard` can ever stall on is either RAW (a source operand's register is still
+reserved by an earlier producer) or WAW (this instruction's own `rd` is still reserved by
+an earlier producer) — confirmed empirically too: `vx_hazard_probe.sv`'s `cp_hazard_type`
+covergroup, sampled from the real `operands_busy[]` signal, has exactly 4 reachable
+combinations (none/raw_only/waw_only/raw_and_waw) and no WAR case exists to even express.
+
+**Disposition: EXPECTED BEHAVIOUR, not a bug.** This is a normal consequence of in-order
+issue with a producer-only reservation scheme — cross-referenced against `docs/
+VERIFICATION_PLAN_v2.md`'s ISS-2 row, which previously listed "RAW/WAW/WAR" as the
+coverage target; corrected there in the same commit as this observation. Logged because
+it is a real, RTL-derived microarchitectural fact worth stating precisely rather than
+silently dropping a letter from an acronym.
