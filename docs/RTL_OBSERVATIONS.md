@@ -3033,3 +3033,58 @@ VERIFICATION_PLAN_v2.md`'s ISS-2 row, which previously listed "RAW/WAW/WAR" as t
 coverage target; corrected there in the same commit as this observation. Logged because
 it is a real, RTL-derived microarchitectural fact worth stating precisely rather than
 silently dropping a letter from an acronym.
+
+---
+
+## OBS-056 — targeted riscvISACOV gap-hunt (single-kernel `+ISACOV` runs): 78/80 RV32I/M/F/Zicsr/Zifencei covergroups now real, 2 structurally dead
+
+**What we did.** Per-program (not full-suite) `+ISACOV +ISACOV_MAP=<per-elf map>` runs,
+each individually verified against the 6-point checklist (compile clean, `[ISACOV] loaded
+N entries` with N>0, fresh map per program, **`word MISMATCHES : 0`** on every single run —
+no exceptions — TEST PASSED), then merged incrementally into a scratch bank
+(`cov/isacov_gaphunt/merged.ucdb`, NOT the frozen defence banks) to see which covergroups
+were still zero and pick the next candidate. Order: `vecadd_lite` (baseline, 546/6469 raw
+bins) → `fpu_test`+`div_edge`+`csr_probe`+`sfu_masks` (971/6469) → `isa_probe`+`fpu_mt`
+(1268/6469) → `unit_storm`+`storm_big` (no change — confirmed these don't add anything new)
+→ new directed kernel `isacov_fill` (1444/6469, **78/80 covergroups touched**).
+
+**New kernel: `Vortex/tests/kernel/isacov_fill/`.** Forces, via inline asm / C idioms the
+compiler reliably lowers to the exact opcode, every mnemonic no other kernel in the suite
+naturally emits: `bge`, `lb`/`lh`/`lhu`/`sh`, register-form `sll`/`sra`/`srl` (runtime, not
+compile-time, shift amount), `slt`, `ori`, `nop`, `mulh`/`mulhsu`/`mulhu`, `fle.s`,
+`fsgnjx.s`. Verified byte-exact vs SimX with `LOCKSTEP=1` (0 UVM errors) before trusting
+any coverage number from it.
+
+**Real defect found and fixed while building it — a genuine SIMT-divergence pitfall for
+hand-written inline asm.** The first version fed `bge` **per-lane-differing** operands
+(via the same `idx = (k+tid)%NPAIR` rotation used for every other op in the loop). Since a
+hand-assembled branch bypasses the compiler's normal split/join codegen, and different
+lanes within the same warp genuinely took different branch directions, this produced real
+SIMT divergence with no compiler-inserted reconvergence markers — `LOCKSTEP=1` caught it
+immediately as a cascade of `DUT-ORPHAN` errors starting at the branch's PC (both SimX and
+the DUT implement `bge`/`mulh`/`mulhsu`/`fle.s`/`fsgnjx.s` correctly — confirmed by reading
+`sim/simx/decode.cpp`/`execute.cpp` directly before assuming a SimX gap). **Fix:** the
+`bge` comparison now uses operands indexed by the loop counter `k` alone (warp-uniform,
+identical across all lanes), never `tid`/`idx`. Every *other* instruction in the loop keeps
+per-lane-differing operands — that's fine, since ALU results differing per lane is normal
+SIMT execution and only a genuinely-diverging *branch* is the hazard. Lesson for future
+directed kernels: any hand-assembled control-flow instruction (branch/jump) must use
+warp-uniform operands unless the kernel's actual purpose is testing divergence.
+
+**The 2 residual zero covergroups are structural, not stimulus gaps — verified, not
+assumed:**
+- `rv32zifencei_fence_i_cg` — already known (OBS-050): `fence.i` decodes identically to
+  `fence` in this RTL.
+- `rv32i_nop_cg` — **new finding**: its only coverpoint, `cp_asm_count`
+  (`third_party/riscvISACOV/source/coverage/RV32I_coverage.svh:1874-1878`), is gated
+  `` `ifdef COVER_TYPE_ASM_COUNT ``, a define our `compile.sh` never sets (we build at
+  `COVER_LEVEL_BASIC`, not the level that enables per-instruction execution counting). The
+  covergroup has **zero active coverpoints** at our build configuration — confirmed the
+  `nop` instruction genuinely executes (present in `isacov_fill.dump`), so no amount of
+  stimulus could ever move this bin; only rebuilding with `COVER_TYPE_ASM_COUNT` defined
+  would.
+
+**Disposition: campaign at its natural stopping point for RV32I/M/F/Zicsr/Zifencei at the
+current build level** — every stimulus-fixable covergroup is now real. Not yet banked into
+the frozen defence banks or merged with the L2/L3 suite result; `cov/isacov_gaphunt/` is a
+scratch working area pending a decision on final integration.
