@@ -203,6 +203,20 @@ counts, so each figure is double-listed by the report; the ratios are unaffected
 
 **Excluding `*_reg_assign`: 872/2048 = 42.6%.**
 
+> **⚠ SUPERSEDED 2026-09-06 — this table and the 42.6% are from a single `fpu_test`
+> UCDB and are kept only for the ratio argument.** After the targeted gap-hunt campaign
+> (OBS-056) the measured figures on the merged gap-hunt bank
+> (`cov/isacov_gaphunt/`) are:
+>
+> | stage | bins | coverage |
+> |---|---|---|
+> | raw (everything) | 1,444/6,469 | 22.32% |
+> | + EUR structurally unreachable (`fence_i_cg`, `nop_cg`) | 1,444/6,467 | 22.33% (hits-invariant, gated) |
+> | **+ EOTH `*_reg_assign` excluded — the quotable ISA-behaviour figure** | **429/516** | **83.14%** (89.28% weighted) |
+>
+> Applied reproducibly by `scripts/isacov_exclude.do` + `apply_isacov_exclude.sh`.
+> The reasoning below is unchanged and is what justifies the EOTH class.
+
 ### `cp_asm_count` — important, and a real granularity gain over our model
 
 Our `cp_alu_op` bins on the RTL's `op_type`, and `VX_decode.sv:159-165` gives

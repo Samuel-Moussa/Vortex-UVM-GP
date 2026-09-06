@@ -35,6 +35,22 @@ identically to `fence`, OBS-050) and `rv32i_nop_cg` (its coverpoint checks
 required so every *other* instruction gets a register-numbered, non-pseudo mnemonic — and
 `nop` is purely a pseudo-op alias for `addi x0,x0,0`; the literal string "nop" can never
 appear in a map built this way, see OBS-056).
+**Exclusions applied 2026-09-06** via `scripts/isacov_exclude.do` +
+`apply_isacov_exclude.sh`, in two gated classes that are never merged into one number:
+
+| stage | bins | coverage | meaning |
+|---|---|---|---|
+| raw | 1,444/6,469 | 22.32% | everything, including register-index bins |
+| **+ EUR** (structurally unreachable) | 1,444/6,467 | 22.33% | `fence_i_cg` + `nop_cg`; **hits-invariant, gated and proven** — denominator only |
+| **+ EOTH** (not a claimed target) | **429/516** | **83.14%** (89.28% weighted) | register-index (`*_reg_assign`) bins excluded per W-13 |
+
+**The 83.14% figure is the defensible headline, and it must always be quoted with the
+statement that register-index bins are excluded and why.** `*_reg_assign` is 92% of the
+raw denominator and is *not* structurally unreachable — it is reachable with different
+stimulus, and is excluded as a scope decision (uniform-indexed banked RAM, no per-index
+logic; register allocation is a compiler property, not a DUT property). Claiming it as
+"unreachable" would be false and is explicitly avoided in the exclusion file.
+
 **Decision: the gap-hunt bank (`cov/isacov_gaphunt/merged.ucdb`) is retained as a
 standalone, separately-labeled artifact — it is NOT merged into the frozen L1/L2/L3
 suite banks** (different sampling scope: incremental single-program runs, not a config
@@ -68,7 +84,7 @@ self-check (C-SENT) is **IMPLEMENTED-UNVERIFIED** — the DUT graded its own hom
 | **C-LOCK** | Per-instruction lockstep vs SimX | **`+LOCKSTEP_INJECT` — PROVEN: 1 injection → exactly 1 `field_mismatch data`** (v1's D-8 said this was unwired; it is wired at `tb/vx_commit_probe.sv:60,116-118`) |
 | **C-SVA** | 40 concurrent assertions (AXI / mem / DCR / status) | assertion-fire evidence captured |
 | **C-RAL** | DCR register model + backdoor probe | `+DCR_RAL_INJECT` |
-| **C-ISA** | **third-party ISA coverage (riscvISACOV) — CLOSED/FROZEN 2026-09-06** | targeted per-program gap-hunt (`cov/isacov_gaphunt/merged.ucdb`, kept separate from the frozen suite banks): 1,444/6,469 raw bins (22.32%), 78/80 covergroups real (52.43% weighted); 0 map misses / 0 word mismatches on every run (see OBS-056) |
+| **C-ISA** | **third-party ISA coverage (riscvISACOV) — CLOSED/FROZEN 2026-09-06** | targeted per-program gap-hunt (`cov/isacov_gaphunt/`, kept separate from the frozen suite banks): **ISA-behaviour coverage 429/516 bins = 83.14%, 89.28% weighted**, register-index bins excluded by documented scope decision (W-13); 78/80 covergroups real; 0 map misses / 0 word mismatches on every run (see OBS-056) |
 | **C-ASSERT-GATE** | RTL runtime assertions counted into the verdict | `misalign_neg` — must report FAILED |
 
 ---

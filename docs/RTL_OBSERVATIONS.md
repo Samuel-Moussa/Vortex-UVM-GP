@@ -3095,6 +3095,17 @@ assumed:**
   only decoding pseudo-op names specially in the map generator (accepting the corresponding
   risk to every other covergroup's register-numbering) would.
 
+**Exclusions applied (2026-09-06), two gated classes.** `scripts/isacov_exclude.do` +
+`apply_isacov_exclude.sh`. **EUR** = structurally unreachable (`fence_i_cg`, `nop_cg`):
+1,444/6,469 → 1,444/6,467, **hit count unchanged — the apply script FAILS the run if an
+EUR exclusion moves a hit**, so the hits-invariant property is proven, not asserted.
+**EOTH** = reachable but not a claimed verification target (`*_reg_assign`, 92% of the raw
+denominator): → **429/516 = 83.14% bins, 89.28% weighted**. The two classes are reported
+separately and never merged; `*_reg_assign` is explicitly NOT claimed to be unreachable
+(it is reachable with different stimulus — it is a scope decision per W-13: uniform-indexed
+banked register RAM with no per-index logic, and register allocation is a compiler property
+rather than a DUT property).
+
 **Disposition: CLOSED/FROZEN 2026-09-06.** Campaign complete for RV32I/M/F/Zicsr/Zifencei
 at the current build level — every stimulus-fixable covergroup is now real (78/80), and the
 2 residual zeros are proven structural, not gaps. **Decision made:** `cov/isacov_gaphunt/
