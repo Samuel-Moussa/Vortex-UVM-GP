@@ -3075,16 +3075,33 @@ warp-uniform operands unless the kernel's actual purpose is testing divergence.
 assumed:**
 - `rv32zifencei_fence_i_cg` — already known (OBS-050): `fence.i` decodes identically to
   `fence` in this RTL.
-- `rv32i_nop_cg` — **new finding**: its only coverpoint, `cp_asm_count`
-  (`third_party/riscvISACOV/source/coverage/RV32I_coverage.svh:1874-1878`), is gated
-  `` `ifdef COVER_TYPE_ASM_COUNT ``, a define our `compile.sh` never sets (we build at
-  `COVER_LEVEL_BASIC`, not the level that enables per-instruction execution counting). The
-  covergroup has **zero active coverpoints** at our build configuration — confirmed the
-  `nop` instruction genuinely executes (present in `isacov_fill.dump`), so no amount of
-  stimulus could ever move this bin; only rebuilding with `COVER_TYPE_ASM_COUNT` defined
-  would.
+- `rv32i_nop_cg` — **corrected finding (an earlier version of this entry misidentified the
+  cause as a missing build define — that was wrong and is retracted below).**
+  `COVER_TYPE_ASM_COUNT` IS defined in our build: `COVER_LEVEL_BASIC` cascades to it
+  (`RISCV_coverage_common.svh:56-68`), and `compile.sh:211` sets
+  `+define+COVER_LEVEL_BASIC`. The covergroup's coverpoint `cp_asm_count`
+  (`RV32I_coverage.svh:1874-1878`) IS compiled in and checks
+  `ins.ins_str == "nop"`. **The real, verified cause:** `gen_disass_map.sh:32` disassembles
+  with `objdump -M numeric,no-aliases` — required so every *other* RV32I instruction gets a
+  register-numbered, non-pseudo mnemonic (e.g. `csrrs x5,...` not `csrr t0,...`, which is
+  what makes every other covergroup's register-index coverpoints work at all). `nop` is
+  *purely* a disassembler-side pseudo-op for `addi x0,x0,0` — confirmed directly: the same
+  ELF disassembled with `-M numeric,no-aliases` prints `addi x0,x0,0` at this PC, and only
+  with default (aliased) objdump flags prints `nop`. So the literal string `"nop"` can
+  never appear in any map this pipeline generates, and `rv32i_nop_cg`'s hardcoded
+  `ins.ins_str == "nop"` check can never be satisfied — **not a build-define gap, but an
+  unavoidable consequence of the same disassembly-fidelity choice that makes the other 79
+  covergroups correct.** No amount of stimulus, and no build-define change, closes this;
+  only decoding pseudo-op names specially in the map generator (accepting the corresponding
+  risk to every other covergroup's register-numbering) would.
 
-**Disposition: campaign at its natural stopping point for RV32I/M/F/Zicsr/Zifencei at the
-current build level** — every stimulus-fixable covergroup is now real. Not yet banked into
-the frozen defence banks or merged with the L2/L3 suite result; `cov/isacov_gaphunt/` is a
-scratch working area pending a decision on final integration.
+**Disposition: CLOSED/FROZEN 2026-09-06.** Campaign complete for RV32I/M/F/Zicsr/Zifencei
+at the current build level — every stimulus-fixable covergroup is now real (78/80), and the
+2 residual zeros are proven structural, not gaps. **Decision made:** `cov/isacov_gaphunt/
+merged.ucdb` is retained as a standalone, clearly-labeled supplementary artifact — it is
+NOT merged into the frozen L1/L2/L3 suite banks (different sampling scope: incremental
+single-program targeted runs, not a config sweep over the full suite). No further ISACOV
+stimulus work is planned at this build level; reopening would require either special-casing
+pseudo-op mnemonics in `gen_disass_map.sh` at the cost of every other covergroup's
+register-numbering fidelity (for `rv32i_nop_cg`) or an RTL change to decode `fence.i`
+distinctly from `fence` (for `rv32zifencei_fence_i_cg`) — neither is in scope.

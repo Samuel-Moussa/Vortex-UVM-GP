@@ -24,6 +24,22 @@ resolve; it is a layering to make explicit.
 RV32Zicsr 6 + **RV32Zifencei 1** (all generated from Imperas' own DV plans; the generator
 is proven by regenerating RV32I byte-for-byte). See `RISCVISACOV_STATUS.md`.
 
+**L1 gap-hunt CLOSED/FROZEN 2026-09-06 (OBS-056).** A targeted, per-program `+ISACOV`
+campaign (baseline `vecadd_lite` → directed kernels `fpu_test`/`div_edge`/`csr_probe`/
+`sfu_masks`/`isa_probe`/`fpu_mt` → new kernel `isacov_fill`, each individually verified
+0 map misses / 0 word mismatches) drove **78/80 covergroups from zero to real**, ending at
+1,444/6,469 raw bins (22.32%) / 52.43% weighted. **2 covergroups are permanently 0% by
+construction, not stimulus gaps** — `rv32zifencei_fence_i_cg` (`fence.i` decodes
+identically to `fence`, OBS-050) and `rv32i_nop_cg` (its coverpoint checks
+`ins_str=="nop"`, but our disassembly generator runs `objdump -M numeric,no-aliases` —
+required so every *other* instruction gets a register-numbered, non-pseudo mnemonic — and
+`nop` is purely a pseudo-op alias for `addi x0,x0,0`; the literal string "nop" can never
+appear in a map built this way, see OBS-056).
+**Decision: the gap-hunt bank (`cov/isacov_gaphunt/merged.ucdb`) is retained as a
+standalone, separately-labeled artifact — it is NOT merged into the frozen L1/L2/L3
+suite banks** (different sampling scope: incremental single-program runs, not a config
+sweep). Campaign closed; no further ISACOV stimulus work planned at this build level.
+
 **RV32D (32 covergroups) is generated but NOT enabled**, and this is deliberate:
 `EXT_D_ENABLE` is gated by `` `ifdef XLEN_64 `` (`VX_config.vh:42`) and the SimX build
 stamp confirms `-DXLEN_32`, so FLEN=32 and MISA bit 3 reads 0. **D is structurally absent
@@ -52,7 +68,7 @@ self-check (C-SENT) is **IMPLEMENTED-UNVERIFIED** — the DUT graded its own hom
 | **C-LOCK** | Per-instruction lockstep vs SimX | **`+LOCKSTEP_INJECT` — PROVEN: 1 injection → exactly 1 `field_mismatch data`** (v1's D-8 said this was unwired; it is wired at `tb/vx_commit_probe.sv:60,116-118`) |
 | **C-SVA** | 40 concurrent assertions (AXI / mem / DCR / status) | assertion-fire evidence captured |
 | **C-RAL** | DCR register model + backdoor probe | `+DCR_RAL_INJECT` |
-| **C-ISA** | **NEW — third-party ISA coverage (riscvISACOV)** | disassembly-format experiment: 0.00% → 2.55% on identical data; plus 0 map misses / 0 word mismatches per run |
+| **C-ISA** | **third-party ISA coverage (riscvISACOV) — CLOSED/FROZEN 2026-09-06** | targeted per-program gap-hunt (`cov/isacov_gaphunt/merged.ucdb`, kept separate from the frozen suite banks): 1,444/6,469 raw bins (22.32%), 78/80 covergroups real (52.43% weighted); 0 map misses / 0 word mismatches on every run (see OBS-056) |
 | **C-ASSERT-GATE** | RTL runtime assertions counted into the verdict | `misalign_neg` — must report FAILED |
 
 ---
