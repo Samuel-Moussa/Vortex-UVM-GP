@@ -137,7 +137,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 
 | # | Feature | RTL | Coverage | Status |
 |---|---|---|---|---|
-| **MEM-1** | **Memory coalescing** — per-warp address divergence collapsed into cache lines | **`VX_mem_coalescer.sv`**, instantiated `VX_mem_unit.sv:160`, exports a `misses` counter | **NONE** | **OPEN — G-0, the highest-value gap in this plan** |
+| **MEM-1** | **Memory coalescing** — per-warp address divergence collapsed into cache lines | **`VX_mem_coalescer.sv`**, instantiated `VX_mem_unit.sv:160`, exports a `misses` counter | `coalesce_cg` (`vx_coalescer_probe.sv`): `cp_coalesce_kind`, `cp_active_lanes`, `cp_misses`, `cp_rw`, crossed | **CLOSED — G-0** |
 | MEM-2 | Load/store byte/half/word | `VX_lsu_slice.sv` | `cp_lsu_op` | DONE |
 | MEM-3 | Float load/store | `VX_lsu_slice.sv` | L1 `flw_cg`/`fsw_cg` ✅; L2 `lsu_args_t.is_float` unsampled | PART |
 | MEM-4 | **Unaligned access** | `VX_lsu_slice.sv:189` | — | **WAIVED — W-10.** Not a gap: Vortex **does not support** misaligned data access. The RTL asserts, there is no trap, the access is silently torn (OBS-013). Guarded by the `misalign_neg` negative test, which MUST report FAILED. v1 listed this as OPEN and the founding plan graded it FAIL; both are mis-specified. |
@@ -174,13 +174,13 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 
 | ID | Gap | Why it matters | Proposed coverpoints | Cost |
 |---|---|---|---|---|
-| **G-0** | **Memory coalescing** | The defining GPU memory behaviour. A warp's 4 lanes may hit 1 line (fully coalesced), N lines (fully divergent), or anything between — that ratio is the whole point of a GPU memory system, and **we measure none of it.** The RTL even exports `misses` for us. | bind a probe on `VX_mem_coalescer`: `cp_coalesce_ratio` (1 / 2 / … / NUM_REQS lines per request), `cp_access_pattern` (uniform / unit-stride / strided / scattered), `cross` with `tmask` occupancy | ~1 d |
+| ~~**G-0**~~ **CLOSED** | **Memory coalescing** | `vx_coalescer_probe.sv` bound on `VX_mem_coalescer`, `coalesce_cg`: `cp_coalesce_kind` (3/3), `cp_active_lanes`, `cp_misses` (from the RTL's own `misses`/`batch_count_r`), `cp_rw`, both crosses. Measured in the frozen defence banks (§6 of the PPT handover). | CLOSED |
 | ~~**G-1**~~ **CLOSED 2026-09-03** | ALU class contamination (**OBS-049 ≡ v1 D-1**) | `vote.all`, `mul`, `beq` all score as `add`; `JAL` scores as `srl`; **VOTE/SHFL have no coverage anywhere**; no `default` bin so nothing reads uncovered | pass `op_args.alu.xtype`; split into `cp_alu_arith` / `cp_alu_branch` / `cp_alu_muldiv` / `cp_vote_shfl`, each `iff` its xtype, each with `bins other[] = default` | 0.5 d |
 | **G-2** | Branch direction | taken/not-taken is invisible to both layers | `cp_br_taken` cross `cp_alu_branch` | 0.5 d (with G-1) |
 | **G-3** | Divide corner cases | divide-by-zero and −2³¹/−1 are the classic DIV bugs | either enable L1 `COVER_LEVEL_EXTENDED` (`INSTR_DIVIDE`) or add `cp_div_special` in L2 | 0.5 d |
 | ~~**G-4**~~ **CLOSED 2026-09-04** | Register hazards | `VX_scoreboard.sv` is real hazard logic with no functional coverage | `cp_hazard_type` (RAW/WAW/none — WAR proven structurally unreachable, see ISS-2) from `operands_busy[]`, no RTL change | 1 d (actual: <1 d, verified non-vacuous on `mem_stress`) |
 | **G-5** | GPR bank conflicts | `NUM_GPR_BANKS` collector is a real arbiter that can starve | `cp_bank_conflict_degree`, cross with warp | 1 d |
-| **G-6** | Operand values, incl. FP specials | **L2 has ZERO operand-value coverage, and `dispatch_t` already carries `rs1_data`/`rs2_data`/`rs3_data`/`rd` at a probe we already bind** — a small edit, not a new probe | `cp_rs1_sign`, `cp_rs2_sign`, `cp_fp_class` (NaN/Inf/denorm/±0), `cp_imm_sign` | 0.5 d |
+| ~~**G-6**~~ **PARTIAL — CLOSED 2026-09-06** | Operand values | `classify_sign()` (mask-qualified, 4-way: ZERO/POS/NEG/MIXED) wired into `alu_class_cg` (`cp_rs1_sign`,`cp_rs2_sign`), `lsu_class_cg` (`cp_rs2_sign`, store data), `fpu_class_cg` (`cp_rs1_sign`,`cp_rs2_sign`,`cp_rs3_sign` gated to fmadd/fnmadd). Verified non-vacuous on `vecadd_lite`: ALU/LSU sign 4/4 real incl. MIXED (genuine per-lane value divergence, not just activity); FPU correctly 0/0 (no float ops in this kernel — `fpu_test`/`fpu_mt` will fill it). Non-perturbing: 9,915 cyc / 1,881 instr, unchanged. **`cp_fp_class` (NaN/Inf/denorm) and `cp_imm_sign` NOT done** — deliberately scoped out as a separate, larger follow-up (real IEEE exponent-field decode vs the reused two's-complement MSB test). | done: <0.5 d |
 | **G-7** | uop / SIMD beat splitting | `sop`/`eop` beat sequences are already in `commit_t` and unsampled | `cp_beats_per_instr`, cross with `tmask` | 0.5 d |
 | **G-8** | Ibuffer occupancy | per-warp fetch buffering / starvation | `cp_ibuf_occupancy` per warp | 0.5 d |
 | **G-9** | LMEM + bank conflicts | scratchpad is a GPU-defining feature; `lmem_stress` runs but scores nothing functional | `cp_lmem_bank_conflict`, `cp_lmem_pattern` | 1 d |
@@ -207,9 +207,9 @@ were "ZERO until a Zicond build runs". Some hits in a full-suite bank are genuin
 **cannot distinguish them**, so no attribution built on it is sound. See the OBS-049
 addendum. **Any future ALU-coverage claim must come from a post-fix bank.**
 
-**Do G-0 first (G-1 is now closed).** G-0 is the largest genuinely-Vortex hole in the model;
-G-1 was a defect that made three feature rows unmeasurable and inflated
-a fourth.
+**G-0 and G-1 are both closed.** G-0 was the largest genuinely-Vortex hole in the model;
+G-1 was a defect that made three feature rows unmeasurable and inflated a fourth.
+**Next highest-value open item: G-6 (operand values).**
 
 ---
 
