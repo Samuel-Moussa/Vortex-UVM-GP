@@ -157,7 +157,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | # | Feature | Check | Status |
 |---|---|---|---|
 | BUS-1..4 | AXI handshake, legality, outstanding, backpressure | C-SVA (30 props) + `axi_transaction_cg` | DONE (outstanding **depth** uncovered) |
-| BUS-5 | AXI error responses | — | WAIVED — W-4 |
+| BUS-5 | AXI error responses | `+AXI_INJECT_ERR` (`axi_driver.svh`) | **UPGRADED 2026-09-06 — real finding, not a scope waiver (OBS-057).** Injected SLVERR/DECERR; `VX_axi_adapter.sv:314,333-334`'s own `RUNTIME_ASSERT`s fired 166/166 times exactly as predicted — **the RTL has no error-handling path, it hard-asserts on the first non-OKAY response.** Data-safe by construction (monitor already skips compare on `rresp!=OKAY`). Closes `cover_bresp/rresp_slverr/decerr` (previously written, never fired). Still WAIVED as a pass/fail target — W-4's original point stands, this RTL cannot be made to pass this stimulus — but now evidence-based, not absence-of-test. |
 | BUS-6 | Custom mem interface | C-END, C-SVA (port 0 only) | PART |
 | BUS-7 | DCR config | **C-RAL** | DONE |
 | BUS-8 | Launch/completion handshake | C-END | DONE |

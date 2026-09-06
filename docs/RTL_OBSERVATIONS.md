@@ -3116,3 +3116,50 @@ stimulus work is planned at this build level; reopening would require either spe
 pseudo-op mnemonics in `gen_disass_map.sh` at the cost of every other covergroup's
 register-numbering fidelity (for `rv32i_nop_cg`) or an RTL change to decode `fence.i`
 distinctly from `fence` (for `rv32zifencei_fence_i_cg`) — neither is in scope.
+
+---
+
+## OBS-057 — Vortex's AXI master hard-asserts every response must be OKAY; it has NO tolerance for a real AXI error response
+
+**What we did.** BUS-5 (`docs/VERIFICATION_PLAN_v2.md`) was waived as "no error-inject
+test" — a scope statement, not a finding. To turn it into one, added `+AXI_INJECT_ERR`
+(plusarg-gated, default OFF, `axi_driver.svh`): every 7th completed B/R transaction returns
+`SLVERR`/`DECERR` (alternating) instead of `OKAY`, matching the exact convention already
+used by `+AXI_THROTTLE`/`+AXI_FLOOD`. This exercises SVA cover properties that were **already
+written and waiting** — `cover_bresp_slverr`/`cover_bresp_decerr`/`cover_rresp_slverr`/
+`cover_rresp_decerr` (`vortex_axi_if.sv:760-772`) — but had never fired in any run to date,
+because nothing had ever driven a non-OKAY response. Verified data-safe before running:
+`axi_monitor.svh`'s inline R-beat compare already guards on `rresp == AXI_OKAY` and skips
+comparison otherwise (its own header comment), so an injected error cannot produce a false
+data mismatch — this is protocol-layer coverage only, by construction.
+
+**What we found.** `VX_axi_adapter.sv:314` and `:333-334` contain hard `` `RUNTIME_ASSERT ``s:
+```
+`RUNTIME_ASSERT(~m_axi_bvalid[i] || m_axi_bresp[i] == 0, ...)
+`RUNTIME_ASSERT(~(m_axi_rvalid[i] && m_axi_rresp[i] != 0), ...)
+```
+`` `RUNTIME_ASSERT `` lowers to `` `ASSERT ``/`$error` (`VX_platform.vh:45`) — non-halting but
+counted, the exact mechanism `simulate.sh`'s `RTL_ERRORS` gate reads
+(`grep -c "^# \*\* Error:"`). Running `+AXI_INJECT_ERR` on `vecadd_lite` **measured, not
+predicted**: the assertion fired **166 times**, exactly matching the injected-error cadence
+(periodic, ~140,000 ps apart, starting at 8,115,000 ps) and exactly matching vsim's own
+native `Errors: 166` tally. **Vortex's AXI master interface does not have an error-handling
+path at all — it treats a slave ever returning a non-OKAY response as an immediate,
+unconditional RTL assertion failure.**
+
+**Why this matters.** A real AXI subsystem (a memory controller behind an interconnect, an
+unmapped address, ECC failure) can legitimately return `SLVERR`/`DECERR`. This RTL has no
+graceful degradation, no trap, no recorded fault state for that case — it simply asserts.
+This is architecturally consistent with OBS-024 (Vortex has no trap architecture) and W-11
+(no `mcause`/trap logic anywhere) — the design was built assuming a bus that never errors,
+the same way it was built assuming instructions never take traps.
+
+**Disposition: real RTL limitation, confirmed by actual fault injection, not by absence of
+a test.** Upgrades BUS-5/W-4 from a scope waiver to an evidence-based one: the waiver is no
+longer "we chose not to test error responses," it is "we tested them, and the RTL hard-fails
+on the first one." `+AXI_INJECT_ERR` is available and working (`axi_driver.svh`) as a
+fault-injection capability — like `misalign_neg`, running it MUST show a failure (166 RTL
+assertion errors), and that failure is the correct, expected result, not a testbench defect.
+Not yet wired into `run_suite.sh` as a permanent registered negative test (scope decision,
+not a limitation) — the capability exists and is proven; formalizing it as a named
+regression test is a small follow-up if wanted.
