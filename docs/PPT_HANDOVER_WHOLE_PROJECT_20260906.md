@@ -11,6 +11,48 @@ supersessions are called out explicitly.
 figures in this project are easy to overstate, and the whole credibility of the work rests
 on stating them precisely.
 
+**⚠ UPDATE 2026-09-06 (later same day) — read this before using anything below.** Six more
+backlog gaps closed after this doc was first written, plus one new, significant finding.
+Pushed: outer repo branch `feat/riscvisacov-coverage` (`b259b28`), submodule branch
+`fft-poc` (`b16e0090d`), both to Samuel's own fork (`origin`). **If reading this from a
+stale clone, re-pull first.**
+
+- **G-0 reconciled** — was stale-marked OPEN in the plan; `vx_coalescer_probe.sv` was
+  already closed and banked. No code change, doc fix only.
+- **G-3 (divide corners) CLOSED** — `cp_div_special` in `alu_class_cg`, reusing rs1/rs2 data
+  already wired for G-6. Real on `div_edge` (`normal`=53, `mixed`=224). Honest gap: the
+  "pure" `by_zero`/`overflow` bins (all active lanes agreeing) stayed 0 — `div_edge`'s
+  per-lane operand rotation means lanes rarely hit the identical corner simultaneously.
+- **G-7 (commit beat-splitting) CLOSED** — new `beat_cg` in `vx_commit_probe.sv`, which had
+  ZERO covergroups before this. `cp_beat_kind` (sop/eop -> single/first/middle/last) —
+  **4/4 real on first run** (`vecadd_lite`: single=1609, first=68, middle=136, last covered).
+- **G-9 (LMEM bank conflicts) PARTIAL** — new `vx_lmem_probe.sv` bound to `VX_local_mem`,
+  reusing the RTL's own bank-select decode (`req_bank_idx`). Real on `lmem_stress`
+  (`idle`=15865, `no_conflict`=56) but `conflict` stayed 0 — the kernel's access pattern is
+  bank-friendly by construction and never drives two lanes onto the same bank at once. Needs
+  a bank-hostile kernel to close.
+- **G-6 FULLY CLOSED** (was partial) — added `cp_imm_sign` (3/3 real) and `cp_fp_class`, a
+  REAL IEEE-754 binary32 decode (exponent/mantissa fields, not a reuse of the sign-bit
+  trick) — 2/6 real on `fpu_test` (`normal`=29, **`denorm`=2**, a genuine denormal value
+  occurred organically and was classified correctly). `zero`/`inf`/`nan` need dedicated
+  special-value stimulus — honest open gap.
+- **OBS-057 — NEW, significant finding.** Added `+AXI_INJECT_ERR` (plusarg-gated, default
+  OFF, same convention as `+AXI_THROTTLE`/`+AXI_FLOOD`) to `axi_driver.svh`: every 7th B/R
+  transaction returns SLVERR/DECERR instead of OKAY. Checked data-safety FIRST (the monitor
+  already skips its inline compare when `rresp != OKAY`) before running. Result, measured
+  not assumed: **`VX_axi_adapter.sv`'s own `RUNTIME_ASSERT`s fired 166/166 times**, exactly
+  matching the injected cadence and vsim's native error tally. **Vortex's AXI master has NO
+  error-handling path at all — any real bus error is an unconditional RTL assertion
+  failure.** Upgrades BUS-5/W-4 from "we didn't test this" to "we tested this and here's
+  exactly what breaks." Closes 4 SVA `cover` properties that were written and waiting
+  (`cover_bresp/rresp_slverr/decerr`, `vortex_axi_if.sv:760-772`) but had never fired.
+
+**All of the above verified non-perturbing** (identical cycle/instruction counts to
+pre-change baselines) **and NOT YET merged into a fresh full-suite bank** — the 94.72%/
+94.55% headline totals below predate tonight's probes. A full re-run to reflect them in an
+updated headline number has not been done (real multi-hour cost, not launched without
+being asked).
+
 ---
 
 ## 1. What the project is, in one paragraph
