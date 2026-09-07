@@ -35,11 +35,18 @@ The RISC-V verification ecosystem is mature and industry-standard, and this proj
 
 | Standard component | Adopted as |
 | :--- | :--- |
-| **OpenHW Group UVM methodology** | the base agent/driver/monitor/scoreboard architecture this environment is built on |
+| **Accellera UVM 1.2** (IEEE 1800.2) | the base class library our agent/driver/monitor/scoreboard architecture is written to — **not** OpenHW Group's own testbench/environment, which is CPU-scoped and not reused here |
 | **RVVI** (RISC-V Verification Interface) | the reference concept for instruction-retirement lockstep against a golden model — realized here via SimX co-simulation, since RVVI itself has no notion of a warp or a thread mask to lock against |
-| **Google riscv-dv** | the constrained-random **base-ISA** stimulus generator our SIMT kernels ride on top of |
+| **Google riscv-dv**, via OpenHW Group's `core-v-verif` packaging | the constrained-random **base-ISA** stimulus generator our SIMT kernels ride on top of — the *only* piece taken from `core-v-verif`; its UVM environment is not used |
 | **Spike** | an *independent* golden reference for base-ISA cross-checking, layered underneath SimX |
 | **riscv-isacov**-style functional coverage | the model this project's covergroups extend |
+
+> **Our UVM environment is original, not a derivative of OpenHW Group's.** Every
+> agent, the scoreboard, the coverage collector, the DPI bridge, and the SIMT
+> probes in [`Vortex/sim/uvmsim/`](Vortex/sim/uvmsim/) were designed and written
+> for this project's warp/mask/divergence semantics from scratch. `core-v-verif`
+> is vendored for exactly one thing — the riscv-dv constrained-random generator
+> plumbing — never for its (CPU-scoped, single-hart) UVM testbench architecture.
 
 **The gap:** every one of those tools models a **single scalar hart executing one instruction stream**. None has a semantic concept of a *warp*, a *dynamic per-thread execution mask*, a *divergence/reconvergence (IPDOM) stack*, *memory coalescing*, or *scratchpad bank contention* — the exact dimensions that make a GPU a GPU. Run unmodified against Vortex, that scalar stack measurably leaves the GPU-specific coverage bins at **0% hits** (divergence depth, bank conflicts, coalescing classification) — not because those hazards can't happen, but because nothing upstream knew to look for them.
 
