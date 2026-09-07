@@ -11,6 +11,38 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
+**▶▶▶ RESUME HERE — 2026-09-07 (LATEST). This block supersedes every block below it as the cold-start
+entry point; the blocks below remain accurate history for their own dates.** For the full, currently
+accurate status use `Vortex/sim/uvmsim/docs/Vortex_UVM_Technical_Dossier.md` (updated same day) and
+`docs/VERIFICATION_PLAN_v2.md` — both are more current than the rest of this file, whose newest
+entry below is 2026-08-20 and does not reflect anything from 2026-09-03 onward.
+
+**What landed since 2026-08-20, briefly:** G-3/G-6/G-7/G-9 closed; register-hazard coverage closed
+with WAR proven structurally unreachable by construction (OBS-055); a full riscv-isacov-style ISA
+covergroup layer (Imperas' third-party VIP) was integrated over an extended RVVI-TRACE interface —
+78/80 covergroups real, proven disjoint from this project's own SIMT covergroup layer; an AXI
+error-injection capability found the DUT's AXI master has no error-handling path at all (OBS-057,
+166/166 assertion firings); a local-memory bank-conflict coverage bin that had read zero for the
+project's entire history turned out to be a **probe defect, not a stimulus gap** (OBS-060, fixed);
+an original, from-scratch SIMT-aware random-kernel generator (`simtgen`, two axes: divergence and
+memory) was built after evaluating and rejecting reuse of an external academic fuzzer's generator
+(inseparable from its own checking stack — see `docs/GENERATOR_SCOPING_DECISION.md`), and used to
+close `cp_split_depth` (3/4→4/4) and `cp_bank_conflict`/`cp_coalesce_kind` (→3/3) — in an **isolated
+merge, not yet folded into the frozen topology banks**; a second, independent compiler/toolchain
+path (POCL/OpenCL-C via `llvm-vortex`) was validated end-to-end (`saxpy` PASSED, IPC 0.997); and a
+significant, previously undocumented configuration fact was found and dynamically confirmed — the
+primary "RV32IMF" config actually elaborates with **FLEN=64 and the RISC-V D-extension MISA bit
+set** (OBS-061), logged as an open scoping item, not yet resolved.
+
+**▶ NEXT, in order:** (1) scope OBS-061's four open follow-ups (architectural reachability beyond
+the FPU register file; whether the frozen coverage banks are diluted; SimX F-only soundness;
+intentional-choice-vs-defect); (2) a full-suite re-run to fold `simtgen`'s three closed bins into
+the banked totals — a genuine multi-hour cost, not launched speculatively; (3) the `simtgen`
+`barrier` and `vote_shfl` axes remain declared but unimplemented. See the Technical Dossier's own
+Part XI roadmap for the complete, currently accurate list.
+
+---
+
 **CURRENT MILESTONE (2026-08-12): Phase A COMPLETE · B2 CLOSED · B1 FULLY CLOSED (2CL gate discharged, `3c622cd`) · `.svh` DONE (`59b7ea2`) · icache waivers APPLIED (`5c4b70f`) · I3 CLOSED (verified from `simx_config.stamp`) · 1CL RE-BANKED CLEAN & SAVED (`3217dbc`: 45/45, total 91.08%, cg bins 398/403).**
 **NEXT: fix the three 2CL budgets + the two TB defects they exposed, THEN re-bank 2CL.** The first 2CL attempt gave 37/45 staged / 8 FAILED and is NOT a bank — see ▶▶ NEXT ACTION. None of the 8 is a DUT defect: 3 are budget (SimX's own `MAX_CYCLES` cap and two DUT `+TIMEOUT`s), 3 runs are 2 real OBS-009-class divergences, 2 are the documented expected pair. Two genuine TB defects were found in the process (scoreboard ignored the `-2` sentinel; `MAX_CYCLES` hardcoded) — both fixed, not yet committed.
 
