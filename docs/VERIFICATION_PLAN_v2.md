@@ -1,0 +1,316 @@
+# Vortex GPGPU — Enhanced Verification Plan v2
+
+**Date:** 2026-09-03 · **DUT:** Vortex RISC-V GPGPU · **Env:** `Vortex/sim/uvmsim`
+**Supersedes** `VERIFICATION_PLAN_v1.md` (corrections in §5) and the founding
+`VERIFICATION_PLAN.md` (re-scoped targets in §5.3).
+
+**Target: verifying the features that make Vortex a GPU**, not re-verifying RISC-V.
+
+---
+
+## 1. The organising principle: three coverage layers, with owners
+
+The central lesson of the riscvISACOV work is that our model and a third-party ISA
+model do not overlap **at all** — they share no bin. That is not redundancy to
+resolve; it is a layering to make explicit.
+
+| layer | question | owner | blind to |
+|---|---|---|---|
+| **L1 — ISA** | was the *instruction space* exercised? mnemonic, register index, operand sign, immediate | **riscvISACOV** (third party, independent) | **everything SIMT** — proven: lane-as-hart (4,581 samples) and lane-0-only (1,677) cover the *identical* bin set |
+| **L2 — microarchitecture / SIMT** | was the *machine* exercised? warps, masks, divergence, coalescing, banks, hazards, caches | **ours** (`vx_*probe.sv` + collector) | operand values, register indices, per-mnemonic identity |
+| **L3 — system / protocol** | was the *interface* legal and stressed? | **ours** (SVA + `vortex_coverage_collector`) | — |
+
+**L1 is now real: 80 active covergroups.** RV32I 39 (Imperas) + RV32F 26 + RV32M 8 +
+RV32Zicsr 6 + **RV32Zifencei 1** (all generated from Imperas' own DV plans; the generator
+is proven by regenerating RV32I byte-for-byte). See `RISCVISACOV_STATUS.md`.
+
+**L1 gap-hunt CLOSED/FROZEN 2026-09-06 (OBS-056).** A targeted, per-program `+ISACOV`
+campaign (baseline `vecadd_lite` → directed kernels `fpu_test`/`div_edge`/`csr_probe`/
+`sfu_masks`/`isa_probe`/`fpu_mt` → new kernel `isacov_fill`, each individually verified
+0 map misses / 0 word mismatches) drove **78/80 covergroups from zero to real**, ending at
+1,444/6,469 raw bins (22.32%) / 52.43% weighted. **2 covergroups are permanently 0% by
+construction, not stimulus gaps** — `rv32zifencei_fence_i_cg` (`fence.i` decodes
+identically to `fence`, OBS-050) and `rv32i_nop_cg` (its coverpoint checks
+`ins_str=="nop"`, but our disassembly generator runs `objdump -M numeric,no-aliases` —
+required so every *other* instruction gets a register-numbered, non-pseudo mnemonic — and
+`nop` is purely a pseudo-op alias for `addi x0,x0,0`; the literal string "nop" can never
+appear in a map built this way, see OBS-056).
+**Exclusions applied 2026-09-06** via `scripts/isacov_exclude.do` +
+`apply_isacov_exclude.sh`, in two gated classes that are never merged into one number:
+
+| stage | bins | coverage | meaning |
+|---|---|---|---|
+| raw | 1,444/6,469 | 22.32% | everything, including register-index bins |
+| **+ EUR** (structurally unreachable) | 1,444/6,467 | 22.33% | `fence_i_cg` + `nop_cg`; **hits-invariant, gated and proven** — denominator only |
+| **+ EOTH** (not a claimed target) | **429/516** | **83.14%** (89.28% weighted) | register-index (`*_reg_assign`) bins excluded per W-13 |
+
+**The 83.14% figure is the defensible headline, and it must always be quoted with the
+statement that register-index bins are excluded and why.** `*_reg_assign` is 92% of the
+raw denominator and is *not* structurally unreachable — it is reachable with different
+stimulus, and is excluded as a scope decision (uniform-indexed banked RAM, no per-index
+logic; register allocation is a compiler property, not a DUT property). Claiming it as
+"unreachable" would be false and is explicitly avoided in the exclusion file.
+
+**Decision: the gap-hunt bank (`cov/isacov_gaphunt/merged.ucdb`) is retained as a
+standalone, separately-labeled artifact — it is NOT merged into the frozen L1/L2/L3
+suite banks** (different sampling scope: incremental single-program runs, not a config
+sweep). Campaign closed; no further ISACOV stimulus work planned at this build level.
+
+**RV32D (32 covergroups) is generated but NOT sampled by riscvISACOV** — `ISACOV_EXTS`
+lists only `RV32I RV32M RV32Zicsr RV32F`, a deliberate L1 scope decision, and that part is
+correct. **⚠ CORRECTED 2026-09-07, then CONFIRMED BY DYNAMIC ELABORATION same day — see
+OBS-061.** The RTL-level claim in the previous version of this paragraph was WRONG. It said
+D is "gated by `` `ifdef XLEN_64 `` and therefore structurally absent." That is false, and
+this is no longer just static reasoning about macro order: an isolated Questa elaboration
+replicating the flist's exact define sequence (`+define+XLEN_32 +define+EXT_D_ENABLE=1`,
+`VX_config.vh` included after) printed, via `$display`:
+```
+FLEN_PROBE: FLEN=64 EXT_D_ENABLED=1 XLEN=32
+```
+**The primary "RV32IMF" config elaborates with FLEN=64 and MISA bit 3 (D) set to 1.** Cause:
+`sim/uvmsim/flists/vortex_rtl.flist:22` carries `+define+EXT_D_ENABLE=1`, listed *before*
+`VX_config.vh` in the same flist — a testbench-side command-line define that pre-empts the
+RTL's own `` `ifdef XLEN_64 `` gate (`VX_config.vh:42-46`) before it ever runs. D-extension
+hardware **is elaborated at the primary RV32 config regardless of XLEN**, and it is never
+stimulated by any kernel (`-march=rv32imaf`) or by riscv-dv (`--target=rv32im`). This matches
+`INDUSTRIAL_TRANSFORMATION_PLAN.md`'s G3, which had it right; this document had it wrong.
+The SimX build-stamp fact (`-DXLEN_32`, so the golden model has no D support) is real but
+answers a different question — it says SimX cannot verify D-op results, not that D hardware
+is absent from the RTL under test. **Open, unresolved as of this correction (OBS-061 items
+1-4): whether the extra FPU width is architecturally reachable beyond the register file;
+whether unstimulated D-only branches/toggles are already excluded from the frozen L2/L3
+code-coverage banks (94.72%/94.55%) by an existing waiver — checked, NONE FOUND in
+`gen_coverage_exclude.sh` — or whether they sit uncovered and dilute those totals; whether
+this is an undocumented intentional choice (build D-capable hardware once, ahead of a future
+XLEN=64 config) or a real defect.** Do not quote the frozen L2/L3 totals as unaffected by
+this until OBS-061 is scoped. The bank is retained as the deliverable for a future
+XLEN=64 configuration (checklist item I6) regardless of this correction.
+
+**Zifencei is a finding, not a pass.** `fence_i_cg` reads 0.00% because
+`VX_decode.sv:291` never inspects `funct3`, so `fence.i` decodes identically to a data
+`fence` and `INST_FENCE_I` (`VX_gpu_pkg.sv:336`) is a dead localparam. Retained
+uncovered on purpose so the zero bin is visible rather than assumed — see **OBS-050**.
+
+**Rule:** never merge L1 and L2 UCDBs, and never quote a blended number. They have
+different denominators over different axes.
+
+**Rule (inherited from v1, kept verbatim):** a feature checked only by an in-kernel
+self-check (C-SENT) is **IMPLEMENTED-UNVERIFIED** — the DUT graded its own homework.
+
+---
+
+## 2. Checking mechanisms
+
+| ID | Mechanism | Non-vacuity proof |
+|---|---|---|
+| **C-END** | End-state equivalence vs SimX (byte-exact, poison/tolerance gated) | `negative_result_test` — fires at `0x800075d8` |
+| **C-REV** | Reverse pass → dropped-store detection | `negative_dropped_store_test` — fires at `0x800075d8` |
+| **C-LOCK** | Per-instruction lockstep vs SimX | **`+LOCKSTEP_INJECT` — PROVEN: 1 injection → exactly 1 `field_mismatch data`** (v1's D-8 said this was unwired; it is wired at `tb/vx_commit_probe.sv:60,116-118`) |
+| **C-SVA** | 40 concurrent assertions (AXI / mem / DCR / status) | assertion-fire evidence captured |
+| **C-RAL** | DCR register model + backdoor probe | `+DCR_RAL_INJECT` |
+| **C-ISA** | **third-party ISA coverage (riscvISACOV) — CLOSED/FROZEN 2026-09-06** | targeted per-program gap-hunt (`cov/isacov_gaphunt/`, kept separate from the frozen suite banks): **ISA-behaviour coverage 429/516 bins = 83.14%, 89.28% weighted**, register-index bins excluded by documented scope decision (W-13); 78/80 covergroups real; 0 map misses / 0 word mismatches on every run (see OBS-056) |
+| **C-ASSERT-GATE** | RTL runtime assertions counted into the verdict | `misalign_neg` — must report FAILED |
+
+---
+
+## 3. Feature decomposition — Vortex first
+
+Status: **DONE** · **PART** · **OPEN** · **WAIVED**
+
+### 3.1 SIMT control — the defining features
+
+| # | Feature | RTL | Check | Coverage | Status |
+|---|---|---|---|---|---|
+| SIMT-1 | Warp scheduling, active/stalled occupancy | `VX_schedule.sv` | C-END | `sched_state_cg` | DONE |
+| SIMT-2 | Divergence: split, mask partition | `VX_split_join.sv` | C-END, C-LOCK | `divergence_cg` | DONE |
+| SIMT-3 | Nesting depth (IPDOM stack) | `VX_ipdom_stack.sv` | C-END | `cp_split_depth` | DONE |
+| SIMT-4 | Reconvergence: join, then/else | `VX_split_join.sv` | C-END | `reconverge_cg` | DONE |
+| SIMT-5 | Local barrier | `VX_wctl_unit.sv` | C-END, C-SENT | `barrier_cg` | DONE |
+| SIMT-6 | TMC | `VX_wctl_unit.sv` | C-END | `tmc_cg` | DONE |
+| SIMT-7 | WSPAWN | `VX_wctl_unit.sv` | C-LOCK only | `wspawn_cg` | PART — **W-9**: spawn args are stack-resident, not staged to SimX, so C-END is undefined |
+| SIMT-8 | Predication | `VX_wctl_unit.sv` | C-END | `cp_sfu_op.pred` | PART — no predicate-**mask** coverpoint |
+| SIMT-9 | **VOTE / SHFL** (8 ops: all/any/uni/bal, up/down/bfly/idx) | `VX_decode.sv:507-517` | C-END | `cp_vote_shfl_op` 8 bins (**added 2026-09-03**) — the ONLY model that can score these; riscvISACOV has no Zicond/VOTE/SHFL dvplan | **CLOSED — G-1** |
+| SIMT-10 | **SIMD beat splitting / uop sequencing** | `VX_uop_sequencer.sv` | C-LOCK (aggregates beats) | **none** | **OPEN — G-7** |
+| SIMT-11 | Global (cross-core) barrier | `VX_gbar_unit.sv` | — | waived at 1 core | OPEN at ≥2 cores — **W-3** |
+
+### 3.2 Issue, operands, hazards
+
+| # | Feature | RTL | Coverage | Status |
+|---|---|---|---|---|
+| ISS-1 | Instruction buffer occupancy / per-warp arbitration | `VX_ibuffer.sv` | none | **OPEN — G-8** |
+| ISS-2 | **Register hazards (RAW/WAW)** | `VX_scoreboard.sv` | L2 `reg_hazard_cg` (`vx_hazard_probe.sv`) `cp_hazard_type` none/raw_only/waw_only/raw_and_waw, cross with `cp_wid`; L1 has `REG_HAZARD` but only at EXTENDED level | **CLOSED — G-4 (2026-09-04)**. WAR removed from scope: `inuse_regs` only ever reserves a register on its producer's `rd`, never a source read, and per-warp issue is strictly in-order, so a write can never chase an earlier read on the same warp — WAR is structurally unreachable, not merely unobserved. |
+| ISS-3 | **Operand collector / GPR bank conflicts** (`NUM_GPR_BANKS`) | `VX_opc_unit.sv`, `VX_operands.sv` | none | **OPEN — G-5** |
+| ISS-4 | Gather unit / PE switching | `VX_gather_unit.sv`, `VX_pe_switch.sv` | none | OPEN |
+
+### 3.3 Execute
+
+| # | Feature | Check | L1 (riscvISACOV) | L2 (ours) | Status |
+|---|---|---|---|---|---|
+| EX-1 | Integer ALU | C-END, C-LOCK | ✅ per mnemonic (39) | `cp_alu_op` 14 bins, **contaminated** | PART — **G-1** |
+| EX-2 | **Branch / jump, taken vs not-taken** | C-LOCK (PC) | mnemonics ✅, direction ✗ | **none** | **OPEN — G-2** |
+| EX-3 | M-extension | C-END, C-LOCK | ✅ **RV32M bank, 8 cgs** | none | PART — L1 closes identity; **divide-by-zero / signed-overflow still open (G-3)** |
+| EX-4 | Zicond CZEQ/CZNE | C-END | ✗ (no dvplan exists, ever) | `cp_alu_op` czeq=16 czne=20 **hit** | **DONE** (v1 said OPEN — stale) |
+| EX-5 | FPU op classes | C-END, C-LOCK | ✅ RV32F 26 cgs | `cp_fpu_op` 13 bins | DONE |
+| EX-6 | FP rounding mode | C-END | `cp_rm` (EXTENDED) | **none** — `fpu_args_t.frm` unsampled | OPEN — G-6 |
+| EX-7 | FP special values (NaN/Inf/denormal/±0) | C-LOCK | `REG_FPVALUE` (EXTENDED, **our template, unvalidated**) | none | OPEN — G-6 |
+| EX-8 | CSR access | C-END | ✅ **RV32Zicsr 6/6 cgs** | `cp_sfu_op` 3 bins | PART — CSR **address** uncovered in both |
+| EX-9 | Tensor core WMMA | C-END | ✗ never | `tcu_class_cg` mask only | PART — operand shape/precision uncovered |
+| EX-10 | Perf-counter CSRs | — | — | — | WAIVED — W-1 |
+
+### 3.4 GPU memory — where the biggest gap is
+
+| # | Feature | RTL | Coverage | Status |
+|---|---|---|---|---|
+| **MEM-1** | **Memory coalescing** — per-warp address divergence collapsed into cache lines | **`VX_mem_coalescer.sv`**, instantiated `VX_mem_unit.sv:160`, exports a `misses` counter | `coalesce_cg` (`vx_coalescer_probe.sv`): `cp_coalesce_kind`, `cp_active_lanes`, `cp_misses`, `cp_rw`, crossed | **CLOSED — G-0** |
+| MEM-2 | Load/store byte/half/word | `VX_lsu_slice.sv` | `cp_lsu_op` | DONE |
+| MEM-3 | Float load/store | `VX_lsu_slice.sv` | L1 `flw_cg`/`fsw_cg` ✅; L2 `lsu_args_t.is_float` unsampled | PART |
+| MEM-4 | **Unaligned access** | `VX_lsu_slice.sv:189` | — | **WAIVED — W-10.** Not a gap: Vortex **does not support** misaligned data access. The RTL asserts, there is no trap, the access is silently torn (OBS-013). Guarded by the `misalign_neg` negative test, which MUST report FAILED. v1 listed this as OPEN and the founding plan graded it FAIL; both are mis-specified. |
+| MEM-5 | Local memory / scratchpad | `VX_local_mem.sv` | none (code coverage only, 73.19% toggle) | OPEN — G-9 |
+| MEM-6 | LMEM bank conflicts | `VX_local_mem.sv` | `lmem_bank_cg.cp_bank_conflict` (`vx_lmem_probe.sv`) — 100.00%, 3/3 bins | CLOSED — G-9 |
+| MEM-7 | Cache hit/miss | `VX_cache_bank.sv` | `cache_event_cg` | DONE |
+| MEM-8 | MSHR | `VX_cache_mshr.sv` | `cp_mshr_stall` binary | PART — no occupancy histogram |
+| MEM-9 | Set/way/bank distribution, replacement | `VX_cache_repl.sv` | none | OPEN |
+| MEM-10 | Bypass path | `VX_cache_bypass.sv` | none | OPEN |
+| MEM-11 | L2/L3 | `VX_cache_cluster.sv` | config-keyed | PART — own bank exists (93.18%) |
+| MEM-12 | Cross-core arbitration | `VX_mem_arb.sv` | none | OPEN — G-10 |
+| MEM-13 | Dropped store | — | **C-REV** | DONE (AXI path only) |
+| MEM-14 | Atomics | — | — | WAIVED — W-2 |
+
+### 3.5 Bus, system, multi-core, termination
+
+| # | Feature | Check | Status |
+|---|---|---|---|
+| BUS-1..4 | AXI handshake, legality, outstanding, backpressure | C-SVA (30 props) + `axi_transaction_cg` | DONE (outstanding **depth** uncovered) |
+| BUS-5 | AXI error responses | `+AXI_INJECT_ERR` (`axi_driver.svh`) | **UPGRADED 2026-09-06 — real finding, not a scope waiver (OBS-057).** Injected SLVERR/DECERR; `VX_axi_adapter.sv:314,333-334`'s own `RUNTIME_ASSERT`s fired 166/166 times exactly as predicted — **the RTL has no error-handling path, it hard-asserts on the first non-OKAY response.** Data-safe by construction (monitor already skips compare on `rresp!=OKAY`). Closes `cover_bresp/rresp_slverr/decerr` (previously written, never fired). Still WAIVED as a pass/fail target — W-4's original point stands, this RTL cannot be made to pass this stimulus — but now evidence-based, not absence-of-test. |
+| BUS-6 | Custom mem interface | C-END, C-SVA (port 0 only) | PART |
+| BUS-7 | DCR config | **C-RAL** | DONE |
+| BUS-8 | Launch/completion handshake | C-END | DONE |
+| MC-1 | Multi-core same kernel | C-END | PART |
+| MC-2 | Cross-core functional interaction | C-END | OPEN — G-10 |
+| MC-3 | Multi-cluster | C-END | PART (2CL bank 94.55%) |
+| **TERM-1** | **Termination: `tmc x0` → `busy` deassert** (NOT ebreak — OBS-024) | C-END, C-SVA | DONE |
+| **TERM-2** | **RTL runtime-assertion error gate** | **C-ASSERT-GATE** | DONE — `misalign_neg` |
+| ~~EXC-2~~ | ~~Trap cause classification~~ | — | **WAIVED — W-11. Vortex has NO trap architecture**: no trap logic in `VX_decode.sv` or `VX_csr_data.sv`; `mcause` exists only as a number in `VX_types.vh:59`. You cannot cover trap causes on a machine that does not take traps. v1 listed OPEN; founding plan graded FAIL. Re-scoped to TERM-1/TERM-2. |
+
+---
+
+## 4. Gap-closure backlog (ranked by verification value, not by effort)
+
+| ID | Gap | Why it matters | Proposed coverpoints | Cost |
+|---|---|---|---|---|
+| ~~**G-0**~~ **CLOSED** | **Memory coalescing** | `vx_coalescer_probe.sv` bound on `VX_mem_coalescer`, `coalesce_cg`: `cp_coalesce_kind` (3/3), `cp_active_lanes`, `cp_misses` (from the RTL's own `misses`/`batch_count_r`), `cp_rw`, both crosses. Measured in the frozen defence banks (§6 of the PPT handover). | CLOSED |
+| ~~**G-1**~~ **CLOSED 2026-09-03** | ALU class contamination (**OBS-049 ≡ v1 D-1**) | `vote.all`, `mul`, `beq` all score as `add`; `JAL` scores as `srl`; **VOTE/SHFL have no coverage anywhere**; no `default` bin so nothing reads uncovered | pass `op_args.alu.xtype`; split into `cp_alu_arith` / `cp_alu_branch` / `cp_alu_muldiv` / `cp_vote_shfl`, each `iff` its xtype, each with `bins other[] = default` | 0.5 d |
+| **G-2** | Branch direction | taken/not-taken is invisible to both layers | **RE-SCOPED 2026-09-06**: not observable at this probe's dispatch-stage bind point (`commit_t`/`dispatch_t` carry no `taken` bit) — the real signal is on `VX_branch_ctl_if` (`VX_alu_int` → `VX_schedule`), a NEW bind point, not a reuse. Costlier than originally listed. | 1 d (revised) |
+| ~~**G-3**~~ **CLOSED 2026-09-06** | Divide corner cases | `cp_div_special` (`classify_div_special()`) added to `alu_class_cg`, reusing the rs1_data/rs2_data already read for G-6 — zero-divisor (all 4 div/rem ops) and INT_MIN/-1 overflow (signed DIV/REM only, DIVU/REMU correctly excluded). Verified on `div_edge`: `normal`+`mixed` real (53/224 hits); **`by_zero`/`overflow` "pure" bins (all active lanes agreeing) still ZERO** — `div_edge` rotates operand pairs per-lane (`idx=(k+tid)%NPAIR`), so lanes rarely land on the identical corner simultaneously. Recorded honestly as a narrow residual stimulus gap, not force-closed. | done: ~20 min |
+| ~~**G-4**~~ **CLOSED 2026-09-04** | Register hazards | `VX_scoreboard.sv` is real hazard logic with no functional coverage | `cp_hazard_type` (RAW/WAW/none — WAR proven structurally unreachable, see ISS-2) from `operands_busy[]`, no RTL change | 1 d (actual: <1 d, verified non-vacuous on `mem_stress`) |
+| **G-5** | GPR bank conflicts | `NUM_GPR_BANKS` collector is a real arbiter that can starve | `cp_bank_conflict_degree`, cross with warp | 1 d |
+| ~~**G-6**~~ **CLOSED 2026-09-06** | Operand values | `classify_sign()` (mask-qualified ZERO/POS/NEG/MIXED) in `alu_class_cg`/`lsu_class_cg`/`fpu_class_cg`; `cp_imm_sign` (scalar, gated on `use_imm`) — **3/3 real** on `fpu_test`; `cp_rs1_class` — a REAL IEEE-754 binary32 decode (exponent/mantissa fields, not the sign reuse), gated to rs1 — **2/6 real on `fpu_test`: `normal`=29, `denorm`=2 (a genuine denormal value occurred organically and was classified correctly)**; `zero`/`inf`/`nan` need dedicated special-value stimulus, an honest open gap (`rs2`/`rs3` class coverage also deliberately not attempted — scope kept to rs1). All non-perturbing, all verified non-vacuous. | done: ~1.5 h total |
+| ~~**G-7**~~ **CLOSED 2026-09-06** | uop / SIMD beat splitting | New `beat_cg` in `vx_commit_probe.sv` (previously built NO covergroups at all — plan §4b): `cp_beat_kind` ({sop,eop} → single/first/middle/last), crossed with active-thread occupancy. Verified on `vecadd_lite`: **4/4 real** (single=1609, first=68, middle=136, last covered). Non-perturbing (9915 cyc/1881 instr, unchanged). | done: ~15 min |
+| **G-8** | Ibuffer occupancy | per-warp fetch buffering / starvation | `cp_ibuf_occupancy` per warp | 0.5 d |
+| **G-9** | LMEM + bank conflicts | **CLOSED 2026-09-07 — probe-classification fix applied and verified, see OBS-060 + its ADDENDUM.** New `vx_lmem_probe.sv` bound directly to `VX_local_mem`, reusing the RTL's OWN bank-select decode (`req_bank_idx`, `VX_local_mem.sv:65-71`) rather than re-deriving it. `cp_bank_conflict` classifies each cycle's requests as idle/no_conflict/conflict. The original framing ("`lmem_stress`'s access pattern happens to be bank-friendly, needs a bank-hostile kernel") was **falsified by direct test**: a deliberately bank-hostile `simtgen` memory-axis kernel drove all `NUM_THREADS` lanes onto the same bank on the same cycle with distinct addresses (verified: `idx = base + tid*nt`, `tid*nt mod nt == 0`) — and `conflict` **still read 0** (`idle=70498, no_conflict=192, conflict=0`) because the classifier gated on ACCEPTED (`req_valid && req_ready`) requests, and `VX_local_mem.sv`'s `VX_stream_xbar` (`NUM_OUTPUTS=NUM_BANKS`) structurally accepts at most one winner per bank per cycle — making "2+ accepted same bank same cycle" a logical impossibility, not a rare event. **Fix applied (`vx_lmem_probe.sv:60-68,77`): reclassify on `req_valid` alone (contention *offered*, not *accepted*)** — no RTL touched, no bind-site change needed. Re-run against the SAME 6 bank-hostile programs, byte-exact PASS on all 6: `idle=70460, no_conflict=61, conflict=169`, `cp_bank_conflict` **100.00%** (3/3 bins). `vecadd_lite` sanity re-run unchanged (9915 cycles, 0 errors) — confirms the change is observability-only. | probe: ~20 min; fix: ~30 min, verified 2026-09-07 |
+| **G-10** | Cross-core interaction | `cp_num_cores` is provenance, not behaviour | `cp_core_concurrency`, `cp_mem_arb_winner` | 1 d |
+
+### G-1 status: CLOSED 2026-09-03 (commit `256e71e88`)
+
+`alu_class_cg` now takes `op_args.alu.xtype`; `cp_alu_op` is qualified
+`iff (xtype == ALU_TYPE_ARITH)`, and `cp_xtype`, `cp_branch_op`, `cp_muldiv_op`,
+`cp_vote_shfl_op` were added. Denominator of `instr_class_cg_alu` moved **14 → 44 bins**,
+so pre/post banks must never be compared on it.
+
+**Measured** (`kernel_launch_test`/`vecadd_lite`, 1CL/1C/4W/4T, run_152018 — PASSED,
+9,915 cycles / 1,881 instructions, identical to baseline, so the change is non-perturbing):
+`cp_xtype` 3/4 · `cp_alu_op` **11/14** (`slt`/`czeq`/`czne` correctly ZERO) ·
+`cp_branch_op` 6/10 · `cp_muldiv_op` 3/8 · `cp_vote_shfl_op` 0/8.
+
+**This closure also invalidated a reported number.** The frozen 1CL bank reports
+`cp_alu_op` = 100.00% (14/14 COVERED). The encodings alias exactly —
+`INST_ALU_CZNE == INST_BR_EBREAK == 4'b1011` — so that bin was scored by `ebreak`,
+which every riscv-dv program executes, while the probe's own comment said `czeq`/`czne`
+were "ZERO until a Zicond build runs". Some hits in a full-suite bank are genuine
+(`multicore_isa` emits real Zicond via inline `.insn`), but the unqualified coverpoint
+**cannot distinguish them**, so no attribution built on it is sound. See the OBS-049
+addendum. **Any future ALU-coverage claim must come from a post-fix bank.**
+
+**G-0 and G-1 are both closed.** G-0 was the largest genuinely-Vortex hole in the model;
+G-1 was a defect that made three feature rows unmeasurable and inflated a fourth.
+**Next highest-value open item: G-6 (operand values).**
+
+---
+
+## 4b. Inventory reconciliation (independent audit, 2026-09-03)
+
+The existing model was independently re-inventoried file-by-file. **Every gap
+claimed in §3 and §4 is confirmed**, with these specifics:
+
+* **17 covergroups total**, across `vortex_coverage_collector.svh` (5),
+  `vx_instr_probe.sv` (5), `vx_sched_probe.sv` (6), `vx_cache_probe.sv` (1).
+* **`vx_commit_probe.sv`, `vx_lsu_probe.sv` and `vx_dcr_probe.sv` build NO
+  covergroups at all** — they are lockstep/RVVI capture and a RAL peek checker.
+  Both expose `data.rd` and never bin it.
+* **No coverpoint anywhere reads an operand value.** The closest is
+  `dcr_config_cg.cp_data_magnitude` (`:476`), which buckets *DCR configuration
+  write data* — not an ALU/FPU operand. Confirms G-6.
+* **No coverpoint anywhere reads a register index.** Confirms G-6.
+* **No branch/jump bins exist**, and per OBS-022 the commit stream is
+  writeback-domain only, so `beq`/`jalr x0` never even enter it. Confirms G-2.
+* **No M-extension bins exist** in `cp_alu_op`, and there is **no `default` bin**
+  — so mul/div traffic falls into a named arithmetic bin instead of showing as
+  uncovered. Confirms G-1 and its severity.
+* **Zero coverage** of local memory, operand collector, `VX_scoreboard` hazards,
+  cache set/way/replacement, cache bypass, or cross-core arbitration. Confirms
+  G-5, G-4, G-9, G-10 and MEM-9/MEM-10.
+
+The audit also produced a **complete `ignore_bins` register** — 30 waivers with
+file:line and stated reason, all `ignore_bins`, **zero `illegal_bins`**. Notable
+entries that this plan relies on: `cp_route_slot` gated on tag-buffer presence
+(`:356`), the AXI burst/size/len structural set (`:383-404`), the four
+config-provenance `other_cfg` waivers (`:518-554`), `cross_stall_types`
+decode≡issue (`:710-712`, RTL-proven `SIZE(0)` buffer), and the cache probe's
+four structural waivers (`vx_cache_probe.sv:133-207`).
+
+⚠ One inherited assumption is **wrong** and is corrected in §5.1: the TCU
+covergroup is *not* absent by default. `compile.sh:51` promotes
+`+define+EXT_TCU_ENABLE=1` globally, so `tcu_class_cg` is built in every run.
+
+## 5. Corrections carried into this plan
+
+### 5.1 To `VERIFICATION_PLAN_v1.md`
+* **D-8 is FALSE** — `+LOCKSTEP_INJECT` is wired at `tb/vx_commit_probe.sv:60,116-118` and has been run (1 injection → 1 mismatch). C-LOCK's non-vacuity is proven. Strike it from P1.
+* **EX-4 stale** — Zicond bins are hit (czeq 16 / czne 20 in the 1CL bank).
+* **TCU config row wrong** — `compile.sh:51` promotes `+define+EXT_TCU_ENABLE=1` globally; the TCU is on in **every** build.
+* **"Toggle/line not measured in-repo"** — the banks are in the outer repo: **1CL 94.72% · 2CL 94.55% · L2/L3 93.18%**.
+* **D-1 ≡ OBS-049** — one defect, track once (G-1).
+* v1's D-2..D-7 are **confirmed correct**; **D-3 (`vortex_sanity_test` cannot fail) should be top priority** — a test that cannot fail, counted in a pass tally, is the most damaging item on that list.
+
+### 5.2 To the founding plan's sign-off bar
+Two of its four failing rows are **mis-specified targets, not verification failures**:
+* *"Memory access patterns — aligned / unaligned"* → unaligned is **unsupported** (W-10).
+* *"Exception / interrupt types — all covered"* → **no trap architecture** (W-11).
+
+Restate both as: *"unsupported behaviours are guarded by negative tests that must
+fail"* — which is a stronger, and true, claim.
+
+---
+
+## 6. Waiver register (additions to v1's W-1..W-9)
+
+| ID | Waived | Reason | Evidence |
+|---|---|---|---|
+| **W-10** | Unaligned data access | Not implemented: RTL asserts, no trap, access silently torn | `VX_lsu_slice.sv:189`, OBS-013, `misalign_neg` |
+| **W-11** | Trap-cause / interrupt coverage | No trap architecture exists | no trap logic in `VX_decode.sv` / `VX_csr_data.sv`; `mcause` is a bare number at `VX_types.vh:59` |
+| **W-12** | L1 ISA coverage of Vortex custom ops (SFU, VOTE/SHFL, TCU, Zicond) | No third-party model covers them and none can — Zicond has no dvplan in riscvISACOV at all | `RISCVISACOV_STATUS.md` §2 |
+| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `RISCVISACOV_STATUS.md` §6c — quote **83.14%** (429/516, EOTH-excluded), never the bare **22.32%** raw figure. *(Corrected 2026-09-07: this row previously said "42.6%/10.3%" — stale numbers from before the L1 gap-hunt campaign updated the headline in §1–§2 of this same document. Two different figures for the same waiver was itself the integrity bug.)* |
+
+---
+
+## 7. Sign-off criteria
+
+1. Every **DONE** row is checked by something other than C-SENT.
+2. Every **WAIVED** row cites RTL, not convenience.
+3. C-END, C-REV and **C-LOCK** are all proven non-vacuous in the standard regression.
+4. C-LOCK runs in the standard regression, not a manual sweep. *(highest-value open item)*
+5. No run reaches PASS with `num_comparisons == 0`.
+6. `vortex_sanity_test` is excluded from every pass tally and labelled un-failable.
+7. The UCDB merge passes the hits-invariant gate.
+8. **L1 and L2 are reported as two numbers, never blended**, with W-13 applied to L1.
+9. G-0 and G-1 closed before any claim that the GPU memory path or the ALU is covered.

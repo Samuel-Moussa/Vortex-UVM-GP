@@ -724,14 +724,14 @@ Metric & 1CL/1C/4W/4T & 2CL/2C/4W/4T \\
 Covergroup bins (raw) & 370/377 = 98.1\% & 989/1032 = 95.8\% \\
 Covergroup (weighted) & 99.8\% & 99.5\% \\
 Statement & 98.1\% & 98.3\% \\
-Branch & 95.1\% & 95.7\% \\
+Branch & 94.5\% & 95.7\% \\
 Condition & 90.4\% & 88.8\% \\
-Toggle & 82.8\% & 80.5\% \\
+Toggle & 83.3\% & 80.5\% \\
 Assertion & 96.9\% & 98.9\% \\
 Directive & 100.0\% & 100.0\% \\
 \midrule
 \textbf{Total} & \textbf{94.7\%} & \textbf{94.6\%} \\
-Runs passing & 50/50 & 50/50 \\
+Runs passing & 51/51 & 50/50 \\
 Coverage instances & 2\,256 & 8\,275 \\
 \bottomrule
 \multicolumn{3}{l}{\footnotesize All runs pass at both configurations;
@@ -747,7 +747,13 @@ shared L2/L3} \\
 \multicolumn{3}{l}{\footnotesize caches was also banked (51 runs, all passing,
 93.2\% total);} \\
 \multicolumn{3}{l}{\footnotesize those levels are bypassed in the two banks
-above.}
+above.} \\
+\multicolumn{3}{l}{\footnotesize The 1CL bank is measured on the
+reset-corrected design;} \\
+\multicolumn{3}{l}{\footnotesize the 2CL and L2/L3 banks predate that
+correction and are} \\
+\multicolumn{3}{l}{\footnotesize therefore not comparable to it on
+\emph{branch} coverage.}
 \end{tabular}
 \end{table}
 
@@ -757,7 +763,9 @@ above.}
 \label{sec:provenance}
 
 The design is an open-source register-transfer model pinned at a specific
-revision, \emph{with eighteen locally modified files}. Most changes are
+revision, \emph{with eighteen locally modified files in the synthesizable
+register-transfer tree} (support and co-simulation glue outside that tree
+is additionally modified, and the environment itself is new code). Most changes are
 simulator-compatibility fixes made during bring-up. We disclose this because a
 verification result is a statement about a specific artifact, and ``upstream,
 unmodified'' would not describe what we ran.
@@ -1058,8 +1066,13 @@ or a step-follower is required. The verdict is left honestly red.
 \subsection{Other limitations}
 \begin{itemize}
 \item \textbf{Reference-model independence.} SimX is not independent of
-the DUT; a base-ISA audit against Spike (which cannot execute the SIMT
-extensions) is planned, not done.
+the DUT. A base-ISA audit against Spike has since been completed---DUT,
+SimX and Spike retire an identical 11{,}076 writebacks and agree on every
+PC, destination and value, with non-vacuity proven by injection---but
+Spike cannot execute the SIMT extensions, so that independence covers the
+scalar subset only (warp~0 / lane~0). \emph{The SIMT axis has no
+independent reference, and this is a structural ceiling rather than an
+unfinished task.}
 \item \textbf{Unverifiable residue.} A minority of random-program runs
 remain unverifiable due to reference-model aborts; the abort-hardening
 sweep (Section~\ref{sec:enhance}) targets zero.
@@ -1127,8 +1140,11 @@ it is proven non-vacuous by a gated injection, in the same discipline
 as the negative tests of Section~\ref{sec:verdicts}.
 \item \textbf{Populate the retirement uuid}, upgrading lockstep
 alignment to a strict 1:1 key.
-\item \textbf{Spike base-ISA audit}: cross-check the model's RV32IM
-semantics against an independent simulator on the non-SIMT subset.
+\item \textbf{Spike base-ISA audit} (\emph{completed}): the model's
+RV32IM semantics were cross-checked against an independent simulator on
+the non-SIMT subset, with exact three-way agreement; extending independent
+cross-checking \emph{above} the scalar subset remains open and is
+structurally hard (\S\ref{sec:limits}).
 \end{enumerate}
 
 \subsection{Upstream contribution}
