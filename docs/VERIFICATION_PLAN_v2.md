@@ -56,11 +56,35 @@ standalone, separately-labeled artifact — it is NOT merged into the frozen L1/
 suite banks** (different sampling scope: incremental single-program runs, not a config
 sweep). Campaign closed; no further ISACOV stimulus work planned at this build level.
 
-**RV32D (32 covergroups) is generated but NOT enabled**, and this is deliberate:
-`EXT_D_ENABLE` is gated by `` `ifdef XLEN_64 `` (`VX_config.vh:42`) and the SimX build
-stamp confirms `-DXLEN_32`, so FLEN=32 and MISA bit 3 reads 0. **D is structurally absent
-at the primary config — it is not an untested capability and not a gap.** The bank is
-retained as the deliverable for a future XLEN=64 configuration (checklist item I6).
+**RV32D (32 covergroups) is generated but NOT sampled by riscvISACOV** — `ISACOV_EXTS`
+lists only `RV32I RV32M RV32Zicsr RV32F`, a deliberate L1 scope decision, and that part is
+correct. **⚠ CORRECTED 2026-09-07, then CONFIRMED BY DYNAMIC ELABORATION same day — see
+OBS-061.** The RTL-level claim in the previous version of this paragraph was WRONG. It said
+D is "gated by `` `ifdef XLEN_64 `` and therefore structurally absent." That is false, and
+this is no longer just static reasoning about macro order: an isolated Questa elaboration
+replicating the flist's exact define sequence (`+define+XLEN_32 +define+EXT_D_ENABLE=1`,
+`VX_config.vh` included after) printed, via `$display`:
+```
+FLEN_PROBE: FLEN=64 EXT_D_ENABLED=1 XLEN=32
+```
+**The primary "RV32IMF" config elaborates with FLEN=64 and MISA bit 3 (D) set to 1.** Cause:
+`sim/uvmsim/flists/vortex_rtl.flist:22` carries `+define+EXT_D_ENABLE=1`, listed *before*
+`VX_config.vh` in the same flist — a testbench-side command-line define that pre-empts the
+RTL's own `` `ifdef XLEN_64 `` gate (`VX_config.vh:42-46`) before it ever runs. D-extension
+hardware **is elaborated at the primary RV32 config regardless of XLEN**, and it is never
+stimulated by any kernel (`-march=rv32imaf`) or by riscv-dv (`--target=rv32im`). This matches
+`INDUSTRIAL_TRANSFORMATION_PLAN.md`'s G3, which had it right; this document had it wrong.
+The SimX build-stamp fact (`-DXLEN_32`, so the golden model has no D support) is real but
+answers a different question — it says SimX cannot verify D-op results, not that D hardware
+is absent from the RTL under test. **Open, unresolved as of this correction (OBS-061 items
+1-4): whether the extra FPU width is architecturally reachable beyond the register file;
+whether unstimulated D-only branches/toggles are already excluded from the frozen L2/L3
+code-coverage banks (94.72%/94.55%) by an existing waiver — checked, NONE FOUND in
+`gen_coverage_exclude.sh` — or whether they sit uncovered and dilute those totals; whether
+this is an undocumented intentional choice (build D-capable hardware once, ahead of a future
+XLEN=64 config) or a real defect.** Do not quote the frozen L2/L3 totals as unaffected by
+this until OBS-061 is scoped. The bank is retained as the deliverable for a future
+XLEN=64 configuration (checklist item I6) regardless of this correction.
 
 **Zifencei is a finding, not a pass.** `fence_i_cg` reads 0.00% because
 `VX_decode.sv:291` never inspects `funct3`, so `fence.i` decodes identically to a data
@@ -142,7 +166,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | MEM-3 | Float load/store | `VX_lsu_slice.sv` | L1 `flw_cg`/`fsw_cg` ✅; L2 `lsu_args_t.is_float` unsampled | PART |
 | MEM-4 | **Unaligned access** | `VX_lsu_slice.sv:189` | — | **WAIVED — W-10.** Not a gap: Vortex **does not support** misaligned data access. The RTL asserts, there is no trap, the access is silently torn (OBS-013). Guarded by the `misalign_neg` negative test, which MUST report FAILED. v1 listed this as OPEN and the founding plan graded it FAIL; both are mis-specified. |
 | MEM-5 | Local memory / scratchpad | `VX_local_mem.sv` | none (code coverage only, 73.19% toggle) | OPEN — G-9 |
-| MEM-6 | LMEM bank conflicts | `VX_local_mem.sv` | none | OPEN — G-9 |
+| MEM-6 | LMEM bank conflicts | `VX_local_mem.sv` | `lmem_bank_cg.cp_bank_conflict` (`vx_lmem_probe.sv`) — 100.00%, 3/3 bins | CLOSED — G-9 |
 | MEM-7 | Cache hit/miss | `VX_cache_bank.sv` | `cache_event_cg` | DONE |
 | MEM-8 | MSHR | `VX_cache_mshr.sv` | `cp_mshr_stall` binary | PART — no occupancy histogram |
 | MEM-9 | Set/way/bank distribution, replacement | `VX_cache_repl.sv` | none | OPEN |
@@ -183,7 +207,7 @@ Status: **DONE** · **PART** · **OPEN** · **WAIVED**
 | ~~**G-6**~~ **CLOSED 2026-09-06** | Operand values | `classify_sign()` (mask-qualified ZERO/POS/NEG/MIXED) in `alu_class_cg`/`lsu_class_cg`/`fpu_class_cg`; `cp_imm_sign` (scalar, gated on `use_imm`) — **3/3 real** on `fpu_test`; `cp_rs1_class` — a REAL IEEE-754 binary32 decode (exponent/mantissa fields, not the sign reuse), gated to rs1 — **2/6 real on `fpu_test`: `normal`=29, `denorm`=2 (a genuine denormal value occurred organically and was classified correctly)**; `zero`/`inf`/`nan` need dedicated special-value stimulus, an honest open gap (`rs2`/`rs3` class coverage also deliberately not attempted — scope kept to rs1). All non-perturbing, all verified non-vacuous. | done: ~1.5 h total |
 | ~~**G-7**~~ **CLOSED 2026-09-06** | uop / SIMD beat splitting | New `beat_cg` in `vx_commit_probe.sv` (previously built NO covergroups at all — plan §4b): `cp_beat_kind` ({sop,eop} → single/first/middle/last), crossed with active-thread occupancy. Verified on `vecadd_lite`: **4/4 real** (single=1609, first=68, middle=136, last covered). Non-perturbing (9915 cyc/1881 instr, unchanged). | done: ~15 min |
 | **G-8** | Ibuffer occupancy | per-warp fetch buffering / starvation | `cp_ibuf_occupancy` per warp | 0.5 d |
-| **G-9** | LMEM + bank conflicts | **PARTIAL — CLOSED 2026-09-06 (probe), stimulus gap OPEN.** New `vx_lmem_probe.sv` bound directly to `VX_local_mem`, reusing the RTL's OWN bank-select decode (`req_bank_idx`, `VX_local_mem.sv:65-71`) rather than re-deriving it. `cp_bank_conflict` classifies each cycle's accepted requests as idle/no_conflict/conflict (>=2 lanes mapping to the same bank). Verified on `lmem_stress`: **real and non-vacuous — `idle`=15,865, `no_conflict`=56 — but `conflict` stayed at 0.** Root cause: `lmem_stress`'s access pattern happens to be bank-friendly (naturally spreads lanes across banks), so it never drives two lanes onto the same bank in one cycle. Closing the `conflict` bin needs a deliberately bank-HOSTILE kernel (e.g. stride-NUM_BANKS addressing), not yet written. | probe: ~20 min; kernel: ~1 d (open) |
+| **G-9** | LMEM + bank conflicts | **CLOSED 2026-09-07 — probe-classification fix applied and verified, see OBS-060 + its ADDENDUM.** New `vx_lmem_probe.sv` bound directly to `VX_local_mem`, reusing the RTL's OWN bank-select decode (`req_bank_idx`, `VX_local_mem.sv:65-71`) rather than re-deriving it. `cp_bank_conflict` classifies each cycle's requests as idle/no_conflict/conflict. The original framing ("`lmem_stress`'s access pattern happens to be bank-friendly, needs a bank-hostile kernel") was **falsified by direct test**: a deliberately bank-hostile `simtgen` memory-axis kernel drove all `NUM_THREADS` lanes onto the same bank on the same cycle with distinct addresses (verified: `idx = base + tid*nt`, `tid*nt mod nt == 0`) — and `conflict` **still read 0** (`idle=70498, no_conflict=192, conflict=0`) because the classifier gated on ACCEPTED (`req_valid && req_ready`) requests, and `VX_local_mem.sv`'s `VX_stream_xbar` (`NUM_OUTPUTS=NUM_BANKS`) structurally accepts at most one winner per bank per cycle — making "2+ accepted same bank same cycle" a logical impossibility, not a rare event. **Fix applied (`vx_lmem_probe.sv:60-68,77`): reclassify on `req_valid` alone (contention *offered*, not *accepted*)** — no RTL touched, no bind-site change needed. Re-run against the SAME 6 bank-hostile programs, byte-exact PASS on all 6: `idle=70460, no_conflict=61, conflict=169`, `cp_bank_conflict` **100.00%** (3/3 bins). `vecadd_lite` sanity re-run unchanged (9915 cycles, 0 errors) — confirms the change is observability-only. | probe: ~20 min; fix: ~30 min, verified 2026-09-07 |
 | **G-10** | Cross-core interaction | `cp_num_cores` is provenance, not behaviour | `cp_core_concurrency`, `cp_mem_arb_winner` | 1 d |
 
 ### G-1 status: CLOSED 2026-09-03 (commit `256e71e88`)
@@ -275,7 +299,7 @@ fail"* — which is a stronger, and true, claim.
 | **W-10** | Unaligned data access | Not implemented: RTL asserts, no trap, access silently torn | `VX_lsu_slice.sv:189`, OBS-013, `misalign_neg` |
 | **W-11** | Trap-cause / interrupt coverage | No trap architecture exists | no trap logic in `VX_decode.sv` / `VX_csr_data.sv`; `mcause` is a bare number at `VX_types.vh:59` |
 | **W-12** | L1 ISA coverage of Vortex custom ops (SFU, VOTE/SHFL, TCU, Zicond) | No third-party model covers them and none can — Zicond has no dvplan in riscvISACOV at all | `RISCVISACOV_STATUS.md` §2 |
-| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `RISCVISACOV_STATUS.md` §6c — quote the 42.6% figure that excludes it, never the bare 10.3% |
+| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `RISCVISACOV_STATUS.md` §6c — quote **83.14%** (429/516, EOTH-excluded), never the bare **22.32%** raw figure. *(Corrected 2026-09-07: this row previously said "42.6%/10.3%" — stale numbers from before the L1 gap-hunt campaign updated the headline in §1–§2 of this same document. Two different figures for the same waiver was itself the integrity bug.)* |
 
 ---
 

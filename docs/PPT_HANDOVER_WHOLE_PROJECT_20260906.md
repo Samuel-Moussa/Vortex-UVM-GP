@@ -55,6 +55,58 @@ being asked).
 
 ---
 
+**⚠ UPDATE 2026-09-07 — PPTX edit trail, current file state, and the one open item handed
+to Claude web.**
+
+The defence deck went through several rounds this session, working off the user's own
+`SAMUEL_Vortex_UVM_DEFENCE_v2_11.pptx` (later `v2_14`/`v2_15`, 135 slides, produced
+independently by the user/Claude web):
+
+- **v2_12 / v2_13** — slides 21 and 109 updated with the final ISACOV numbers
+  (429/516 = 83.14%, 89.28% weighted); slide 118 confirmed already correct. (v2_11 was
+  locked open in PowerPoint on the Windows side, so edits saved forward under a new
+  filename each time rather than overwriting in place — that pattern held for every
+  version after.)
+- **v2_16** (edited from the user's `v2_15`) — consistency pass against the source docs
+  above:
+  - "48 observations" → **56** (the catalogue had grown since that slide was written).
+  - "Ten taps" → **eleven** (the count now includes the RVVI shim alongside the nine
+    passive probes — see §4's table, which itself needs a tenth data-path row if quoted
+    verbatim; the taps table above lists ten rows for nine probes + one shim, so "eleven"
+    on the slide should be re-checked against whichever counting convention the deck
+    ultimately uses).
+  - AXI waiver phrasing (slide 33) tightened to match §7/OBS-057's actual finding instead
+    of an earlier, vaguer "not tested" phrasing.
+  - Added the OBS-057 punchline — **166/166 RUNTIME_ASSERT firings, exact match to
+    injected cadence** — to slide 38, which previously stated the injection ran but not
+    its result.
+  - **New slide inserted at position 91**: "APPENDIX B · CONTINUED — the complete probe
+    inventory," an 11-row table listing every probe in §4's table plus the two
+    riscvISACOV-only taps, styled to match the existing appendix table (header `1F5FA8`/
+    `F4F6F8`, data `14181F`, Calibri, `D8DEE6` borders) so it reads as originally authored
+    rather than bolted on.
+  - Slide 24's caption corrected to name all six probes not drawn on the pipeline diagram
+    (hazard, coalescer, LMEM, DCR, and the two ISACOV-only taps), replacing a caption that
+    silently undercounted them.
+  - Slide 42 (appendix index) and slide 117 (Appendix F divider) both gained a one-line
+    pointer to the full 56-item observation catalogue (OBS-001–057) sitting behind the ten
+    findings promoted onto slides.
+
+- **Direct PPTX editing by this session STOPPED as of `v2_16`, on explicit instruction**
+  ("don't edit yourself, talk to claude web"). The one item this session identified but
+  declined to attempt blind — completing slide 24's pipeline diagram by hand-drawing three
+  more arrow callouts (hazard → Scoreboard, coalescer → between LSU/Data-cache, LMEM →
+  Shared Memory) onto an imported figure, in the exact style of the five existing callouts
+  — was handed to the user as a written brief to relay to Claude web, since that side can
+  actually see the image and verify pixel placement; this session cannot. **That hand-off
+  is still open** — nothing in this repo reflects whether Claude web has completed it, and
+  the next PPTX version (if any) should be checked against it rather than assumed done.
+- **`v2_16` is the latest version this session touched.** Any version after it (drawn
+  arrows on slide 24, or further Claude-web edits) exists only on the user's side and is
+  not yet reflected here.
+
+---
+
 ## 1. What the project is, in one paragraph
 
 A complete UVM verification environment for **Vortex**, an open-source RISC-V **GPGPU**.

@@ -3163,3 +3163,308 @@ assertion errors), and that failure is the correct, expected result, not a testb
 Not yet wired into `run_suite.sh` as a permanent registered negative test (scope decision,
 not a limitation) — the capability exists and is proven; formalizing it as a named
 regression test is a small follow-up if wanted.
+
+## OBS-058 — OBS-012 (JALR LSB, R1) independently confirmed by external fuzzing (FuzzGPU / USENIX Security 2026)
+
+- **Class:** EXTERNAL VALIDATION of an already-catalogued finding, plus one nuance the
+  external report's table does not capture · **Disposition:** no change to OBS-012's own
+  disposition (still worked-around, needs-RTL-fix upstream); this entry records the
+  cross-reference · **Found:** 2026-09-07, reading the bug table from *"Fuzzing Open-Source
+  GPU Hardware with SIMT Program Generation"* (Gao et al., Institute of Information
+  Engineering CAS / UCAS, **USENIX Security 2026**), whose `fuzzgpu` tool
+  (`github.com/cassuto/fuzzgpu`) targets Vortex and Ventus RTL directly.
+- **What:** the paper's bug table lists, under target **Vortex-Simx**: **"(S2) `jalr`
+  ignores LSB clearing" — PR #339, CWE-682.** This is the same mechanism as our own
+  **OBS-012 / finding R1**: `VX_alu_int.sv:222` computes `cbr_dest = from_fullPC(add_result[0])`
+  with no `& ~1`, violating the RISC-V unpriv spec's requirement that JALR clear the target
+  LSB. Independently re-derived by a different fuzzing methodology (coverage-guided SIMT
+  program generation vs. our riscv-dv-driven lockstep) against the same open-source DUT —
+  this is corroboration, not new information, but corroboration from an unrelated flow is
+  exactly the kind of check a single team's own tooling cannot provide itself.
+- **The nuance the external table doesn't carry, and which we should state precisely if
+  citing this paper:** the paper files this against **"Vortex-Simx"** (their differential
+  oracle), consistent with a fuzzer that observes the mismatch at the golden-model boundary.
+  Our own analysis locates the root cause in the **RTL** (`VX_alu_int.sv:222`) and records
+  that **our SimX deliberately mirrors the no-clear behaviour** (`execute.cpp`, comment at
+  the JALR case: *"intentionally NO `& ~1` here... SimX must mirror that for the lockstep PC
+  compare to match"*) — a documented, deliberate co-design choice, not an independent SimX
+  defect. Whether PR #339's fix in the paper's terms is filed against the RTL, their fork of
+  SimX, or both is not yet confirmed from the paper text (PDF fetch blocked, 403 — read from
+  the proceedings TOC + author list only). **Do not claim a source of truth on the PR's
+  target without reading the actual PR.**
+- **A second bug spot-checked and NOT reproduced from a first read:** **(S1) "`sra` is
+  implemented as a logical right shift", PR #320.** Checked `sim/simx/execute.cpp`'s
+  `AluType::SRA` case at the pinned commit (`b16e0090d`): the non-`.w` path is
+  `rd_data[t].i = rs1_data[t].i >> shamt`, where `.i` is `reg_data_t`'s **signed** field
+  (`WordI`, `typedef int32_t/int64_t`, `types.h`) — a right-shift on a signed type is
+  arithmetic, matching the RTL's own `$signed(shr_in1) >>> ...`
+  (`VX_alu_int.sv:97-98`). **No logical-shift bug found at this line as currently pinned.**
+  Three possibilities, not distinguished yet: (a) already fixed upstream before our pin,
+  (b) a different SRA code path than the one checked (e.g. an older commit, or a
+  Ventus/OpenGPGPU-specific instance — the paper's table lists SRA-adjacent bugs under
+  *OpenGPGPU*, not Vortex, for some entries), (c) the paper's PR #320 targets a different
+  repository fork entirely. **Not asserting either "present" or "absent" — flagged as
+  unresolved pending the actual PR/paper text.**
+- **Action if pursued:** obtain the PDF via an authenticated path (403 on direct fetch) or
+  the PR diffs themselves (`#339`, `#320`) before citing bug-for-bug correspondence in the
+  defence deck. The confirmed half (S2/R1) is safe to cite now; the unconfirmed half (S1) is
+  not.
+
+## OBS-059 — S1 divergence-axis generator never reaches `cp_split_depth`'s max bin (d[3]) across 50 random seeds — a stimulus-shape gap, not an RTL defect
+
+- **Class:** observability/stimulus limitation (generator design) · **Disposition:** open,
+  needs-generator-fix (future work item, not urgent) · **Found:** 2026-09-07, S1 full
+  acceptance run (50 seeds, `Vortex/sim/uvmsim/scripts/simtgen/gen_divergence.py`), merged
+  UCDB at `vortex_uvm_env/cov/simtgen_probe_20260907/merged.ucdb`.
+- **What:** `vcover report -details -cvg` on the 50-seed merge shows
+  `warp_divergence_cg.cp_split_depth`: `d[0]=3718 hits, d[1]=151, d[2]=23, d[3]=0` (ZERO) —
+  and correspondingly `cross_dvg_depth`'s `<*,d[3]>` bin is ZERO too. All 50 generated
+  programs PASS (byte-exact vs SimX, 0 errors each), so this is a coverage gap, not a
+  functional failure.
+- **Root cause (read from `vx_sched_probe.sv:80-86`, the probe's own citation):** the
+  reconvergence-stack depth-3 bin is only reachable via **LINEAR THREAD-PEELING** —
+  `NT -> (NT-1)+1 -> (NT-2)+1 -> ... -> 1+1` — i.e. each nested split must peel off exactly
+  one thread and keep the rest together, three levels in a row (at THREADS=4,
+  `DV_DEPTH_MAX = NUM_THREADS-1 = 3`). `gen_divergence.py`'s `_condition_expr()`
+  (gen_divergence.py:97-112) draws an independent random bitmask condition
+  `(tid & mask) cmp val` at every tree node, which produces an essentially uniform-random
+  partition of whatever thread subset is active at that node — not the specific
+  1-vs-(N-1) peeling shape the hardware needs to keep nesting all the way to depth 3.
+  Statistically, hitting three consecutive 1-vs-rest splits by chance across independently
+  drawn mask/cmp/val choices is rare enough that it did not occur in 50 seeds.
+- **Not an RTL bug:** `DV_STACK_SIZE`/`DV_DEPTH_MAX` and the peeling mechanism are exactly
+  as documented and cross-checked against upstream Vortex v2.2 by the probe's own author
+  (see the "earlier clog2(NT) bound was WRONG" correction note at vx_sched_probe.sv:81-86).
+  This is purely a generator-stimulus-shape gap.
+- **Fix direction (not implemented — flagged for a future S1 iteration):** bias
+  `_build_tree()`'s condition generator so that, with some probability, a divergent split's
+  mask is chosen to isolate exactly one thread id from the current active set (e.g.
+  `tid == <specific id>`) rather than an arbitrary bitmask/cmp/val triple — that directly
+  targets the peeling shape needed for `d[3]` without abandoning the random-tree structure
+  for the other bins (d[0]-d[2], which are all well covered: 3718/151/23 hits).
+
+## OBS-059 ADDENDUM — FIXED 2026-09-07, `cp_split_depth.d[3]` now non-zero (27 hits), and the fix
+   needed TWO iterations because the first attempt was silently defeated by compiler folding
+
+- **Step 1, RTL grounding (read, not assumed):** `vx_sched_probe.sv`'s divergence-depth sample
+  (`u_divergence.sample`, `vx_sched_probe.sv:304-313`) records `warp_ctl_if.dvstack_ptr` — which
+  is `VX_split_join.sv:85 assign stack_ptr = ipdom_wr_ptr[stack_wid]`, the IPDOM stack's write
+  pointer — at the moment of EVERY split event, BEFORE that event's own push (if any). A split
+  only pushes when `split.is_dvg` (`VX_split_join.sv:46-52`); the `then` arm's PC continues
+  immediately unpopped while the `else` arm's tmask+PC are pushed and resumed later
+  (`VX_ipdom_stack.sv`, `DEPTH=DV_STACK_SIZE=NUM_THREADS-1`, `VX_gpu_pkg.sv:53`, with a
+  `RUNTIME_ASSERT` against pushing while full, `VX_ipdom_stack.sv:50`). So the stack can hold at
+  most `NUM_THREADS-1` concurrent real divergent splits (3 at THREADS=4), and reaching all 3
+  levels needs each level to shrink the active set by exactly one thread (a balanced split
+  exhausts the 4 available threads before the 3rd level) — confirming the original OBS-059
+  "linear thread-peeling" diagnosis.
+- **Generator change v1 (defeated silently — logged here as a real finding, not hidden):** added
+  `knobs.py`'s `peel_bias_prob`/`peel_levels`/`peel_terminal_split` and `gen_divergence.py`'s
+  `_build_peel_tree()` (peels thread ids 0,1,2,... one at a time via explicit
+  `condition="(tid != k)"` on `_Node`, plus a terminal split appended after the last peel purely
+  to sample `cp_split_depth` while the stack is already at depth `peel_levels`). Regenerated and
+  reran 15 seeds — **`d[3]` was STILL zero.** Root-caused by reading the actual compiled `.dump`
+  (`Vortex/tests/kernel/simtgen_div_s1/simtgen_div_s1.dump`): with a plain `int r` accumulator,
+  LLVM recognized the chain of mutually-exclusive small-constant equality tests (`tid != 0`,
+  `tid != 1`, `tid != 2`) as a classic range-test pattern and **collapsed the entire 3-level peel
+  into ONE real `vx_split_n`/`vx_join` pair plus a literal lookup table** — because every leaf was
+  pure arithmetic (`r += literal`, no other side effect), nothing stopped the optimizer from
+  algebraically re-deriving the whole tree. Confirmed empirically (only 2 `vx_split_n` total in
+  the compiled kernel body, not the intended 4), not inferred.
+- **Also caught mid-investigation, a real workflow bug (not a generator bug):**
+  `Vortex/sim/uvmsim/Makefile:114-135`'s `kernel-config` target only compares the requested
+  `CLUSTERS/CORES/WARPS/THREADS` string against `.kernel_config.stamp` — it does NOT hash
+  `main.cpp`, so regenerating a kernel's source for a seed that was already built for the same
+  config (true here: seeds 1-15 were previously built pre-fix) silently REUSES the stale `.elf`
+  and never recompiles. The first 15-seed rerun after the v1 generator change was entirely
+  contaminated by this — confirmed via `.elf`/`.dump` timestamps predating the `main.cpp`
+  regeneration, and by `grep`-ing the sim log for the absent `[kernel-config] ... rebuilding`
+  line. Fixed for this investigation by `rm -f "$out_dir/.kernel_config.stamp"` before every
+  `make sim` call; not a change to the Makefile itself (flagged here so a future session doesn't
+  waste a run on stale ELFs the same way).
+- **Generator change v2 (the actual fix):** `gen_divergence.py`'s shared `_MAIN_TEMPLATE` body
+  accumulator changed from `int r` to `volatile int r` (one line). `volatile` forces every
+  `r += literal` through memory in program order, which the compiler cannot speculate or fold
+  across control-flow paths, so the nested conditions survive as real per-level SIMT splits.
+  Re-verified via the compiled `.dump`: the peel-mode kernel now shows the intended **4** distinct
+  `vx_split_n`/`vx_join` pairs, correctly nested (confirmed by reading the actual instruction
+  sequence, not assumed from source text).
+- **Determinism re-proven post-fix:** same seed generated twice, byte-identical, for seeds
+  1,2,3,9,42.
+- **Batch: 15 seeds (1-15) regenerated, rebuilt (forced, stamps cleared) and rerun** at
+  1CL/1C/4W/4T, TIMEOUT=50000 — **15/15 `TEST PASSED`, 0 errors each.** Merged into a fresh,
+  isolated bank at `vortex_uvm_env/cov/simtgen_probefix_20260907/merged.ucdb` (the pre-fix
+  baseline at `vortex_uvm_env/cov/simtgen_probe_20260907/` was left untouched for comparison);
+  the merge's hits-invariant gate passed (`OK: hits-invariant holds`).
+- **Result (`vcover report -details -cvg`, `warp_divergence_cg.cp_split_depth`):**
+
+  | | d[0] | d[1] | d[2] | d[3] |
+  |---|---|---|---|---|
+  | before (OBS-059, 50 seeds, old generator) | 3718 | 151 | 23 | **0** |
+  | after (15 seeds, peel-mode + volatile fix) | 1106 | 58 | 44 | **27** |
+
+  `cp_split_depth` now reports **100.00%** (4/4 bins covered). `cross_dvg_depth` is 87.50% (7/8):
+  `<uniform,d[3]>` = 27 (Covered) but `<divergent,d[3]>` = 0 (ZERO) — this is **structurally
+  unreachable, not a residual stimulus gap**: a genuinely divergent split sampled at depth 3 would
+  need to PUSH a 4th entry onto a stack sized `DV_STACK_SIZE=NUM_THREADS-1=3`, which the RTL's own
+  `RUNTIME_ASSERT` forbids (would fatal on "writing to a full stack"); only a non-pushing
+  (uniform) split can ever be sampled there at THREADS=4, exactly matching the observed split of
+  hits between the two bins.
+- **Non-regression sanity (vecadd_lite, known-good baseline):** re-run post-fix at the same
+  config/timeout — `TEST PASSED`, Total Cycles **9915**, Instructions **1881**, Errors **0**,
+  identical to the documented pre-fix baseline. Confirms the generator change is scoped to the
+  divergence-axis kernel template and does not perturb the rest of the environment.
+
+## OBS-060 — G-9's `lmem_bank_cg.cp_bank_conflict.conflict` bin is STRUCTURALLY UNREACHABLE as currently defined, not a stimulus gap
+
+- **Class:** coverage-model definition defect (probe-side), corrects an open item that had
+  been carried as "stimulus gap" · **Disposition:** open, needs probe-definition fix (not an
+  RTL bug — the RTL is doing exactly what a single-ported bank must do) · **Found:**
+  2026-09-07, S2 memory-pattern axis (`gen_memory.py`), deliberately-colliding-bank stimulus
+  (6 seeds, `Vortex/sim/uvmsim/scripts/simtgen/run_seeds_memory.sh`), merged UCDB at
+  `vortex_uvm_env/cov/simtgen_mem_probe_20260907/merged.ucdb`.
+- **Prior status (CLAUDE.md, 2026-09-06, commit 91af731):** "G-9 partial -- LMEM bank-conflict
+  probe closed, conflict bin stimulus gap open" — i.e. believed to be a matter of writing a
+  kernel whose access pattern actually collides on a bank. **That assumption is now
+  falsified.**
+- **What was done:** `gen_memory.py`'s bank-hostile pattern gives every lane `tid` (0..nt-1)
+  of one warp a LOCAL-MEM word address `base + tid*nt` — DIFFERENT addresses (no data race,
+  per constraint 1), but by `VX_local_mem.sv:65-71`'s own bank-select decode
+  (`addr[0 +: BANK_SEL_BITS]`), `(base + tid*nt) mod nt == base mod nt` for every `tid`, so
+  all `nt` lanes target the SAME bank on the SAME cycle — genuine, verified same-cycle,
+  same-bank contention among 4 simultaneously-issued requests. (An earlier version of this
+  generator additionally had a cross-WARP address-aliasing bug — `base = wid*nt` overlapped
+  adjacent warps' slot windows — caught by 6/6 real scoreboard MEM MISMATCHes; fixed to
+  `base = wid*nt*nt` before this result, and all 6 programs then PASS byte-exact vs SimX. The
+  corruption was our own generator's address math, not an RTL defect — see gen_memory.py's
+  inline comment at the `base` computation.)
+- **Result:** `lmem_bank_cg.cp_bank_conflict` (bound on `VX_local_mem`, `tb/vx_lmem_probe.sv`):
+  `idle=70498, no_conflict=192, conflict=0` — ZERO, even under deliberate, verified same-cycle
+  same-bank 4-way contention across 6 programs / ~192 accepted LMEM requests.
+- **Root cause (RTL-proven, not inferred):** the probe's own header already states the
+  mechanism precisely — *"The RTL's own crossbar (a single OUT_REG-buffered slot per bank)
+  can only accept one winner per bank per cycle"* — but its coverpoint then defines `conflict`
+  as **`>=2 of this cycle's ACCEPTED (req_valid && req_ready) per-lane requests mapping to the
+  same bank`** (`vx_lmem_probe.sv`, `lane_accept[i] = req_valid && req_ready`, per-bank count,
+  `any_conflict` when a bank's accepted count exceeds 1). Given the crossbar's own structure —
+  `VX_local_mem.sv:113-134` instantiates `VX_stream_xbar #(.NUM_INPUTS(NUM_REQS),
+  .NUM_OUTPUTS(NUM_BANKS), ...)`, and `VX_stream_xbar.sv:33-38` declares exactly ONE
+  `valid_out`/`data_out` per OUTPUT port (not one per input-output pair) — each bank (output)
+  can carry at most one winning input's data per cycle by the module's own port width. So
+  `ready_in[i]` can be simultaneously true for at most ONE input mapped to any given
+  `sel_in`(bank) value per cycle: **"2+ accepted same bank same cycle" is a logical
+  impossibility given this arbiter, not a rare event stimulus failed to hit.** The bin's own
+  definition conflates "contention occurred" (2+ lanes' `req_valid` target one bank) with
+  "2+ were simultaneously accepted" (structurally excluded by the xbar).
+- **What WOULD be the correct, reachable signal:** counting `req_valid` (not `req_valid &&
+  req_ready`) collisions per bank per cycle — i.e. how many lanes WANTED the same bank this
+  cycle, regardless of who won — which the `no_conflict=192` vs `idle=70498` split doesn't
+  currently separate from a true multi-requester cycle either (the probe never looks at
+  REJECTED lanes' bank target at all, only accepted ones). Not fixed here — flagged for
+  whoever picks up the G-9 coverpoint next: change `lane_accept` to `mem_bus_if[i].req_valid`
+  for the CONFLICT classification (keep `req_valid && req_ready` only for the accept-count
+  used elsewhere, if anything still needs it), and re-verify against this same stimulus.
+
+## OBS-060 ADDENDUM — FIXED 2026-09-07, `conflict` bin now non-zero, re-verified against the same stimulus
+
+- **Fix applied:** `Vortex/sim/uvmsim/tb/vx_lmem_probe.sv` — the per-lane vector feeding the
+  bank-count classifier was renamed `lane_accept`→`lane_offer` and its assignment changed from
+  `mem_bus_if[i].req_valid && mem_bus_if[i].req_ready` (accepted) to `mem_bus_if[i].req_valid`
+  alone (offered) at `g_lane_offer` (was `g_lane_accept`), `vx_lmem_probe.sv:60-68`; the loop body
+  at `:77` (`if (lane_offer[i])`) and the header/bin comments at `:23-34,52-54` were updated to
+  match, all citing OBS-060 inline. No RTL file touched; no bind-site change needed —
+  `mem_bus_if[i].req_valid` was already available at the existing bind (`vortex_tb_top_binds.svh:57-63`
+  passes the full `mem_bus_if` array through unchanged).
+- **Re-verified against the EXACT same stimulus** that produced the original zero result: the same
+  6 bank-hostile `simtgen_mem_s<seed>` programs (seeds 100/101/104/109/112/116,
+  `Vortex/tests/kernel/simtgen_mem_s{100,101,104,109,112,116}`), re-run post-fix at
+  1CL/1C/4W/4T, TIMEOUT=50000, all 6 `TEST PASSED` (0 UVM/RTL errors, byte-exact vs SimX).
+  Merged into a fresh, isolated bank at
+  `vortex_uvm_env/cov/simtgen_mem_probefix_20260907/merged.ucdb` (the pre-fix baseline at
+  `vortex_uvm_env/cov/simtgen_mem_probe_20260907/` was left untouched for comparison); the merge's
+  hits-invariant gate passed (`OK: hits-invariant holds`).
+- **Result (`vcover report -details -cvg`, `lmem_bank_cg.cp_bank_conflict`):**
+
+  | | idle | no_conflict | conflict |
+  |---|---|---|---|
+  | before (req_valid && req_ready) | 70498 | 192 | **0** |
+  | after (req_valid alone) | 70460 | 61 | **169** |
+
+  `cp_bank_conflict` now reports **100.00%** (3/3 bins covered) at this instance. 169 offered-conflict
+  cycles is consistent with the deliberate 4-way same-bank same-cycle contention the OBS-060
+  stimulus constructs; the drop from 192→61 `no_conflict` (with the difference moving to
+  `conflict`) is exactly the reclassification doing its job — cycles that were being called
+  "no_conflict" because only one of several *contending* lanes had been *accepted* are now
+  correctly called `conflict`.
+- **Non-regression sanity (vecadd_lite, known-good baseline):** re-run post-fix at the same
+  config/timeout — `TEST PASSED`, Total Cycles **9915**, Instructions **1881**, Errors **0**,
+  identical to the documented pre-fix baseline (9915 cycles, 0 errors). Confirms the probe change
+  is observability-only, per the project's black-box methodology (probes never gate a verdict).
+- **Disposition: CLOSED.** The probe now measures the real, reachable property (offered
+  arbitration pressure), matches the RTL's own structural behavior instead of contradicting it,
+  and the fix is proven non-vacuous against the same stimulus that exposed the defect.
+
+## OBS-061 (CONFIRMED, DYNAMIC PROOF) — the primary "RV32IMF" config actually elaborates with FLEN=64 and MISA D-bit=1, not FLEN=32
+
+- **Class:** DOCUMENTATION/CLAIM DEFECT, project-wide — every prior doc describing the primary
+  config's FLEN was wrong · **Disposition:** CONFIRMED by direct elaboration, magnitude and
+  correctness consequences NOT yet scoped — treat as OPEN until scoped · **Found:** 2026-09-07,
+  chasing down a contradiction between `VERIFICATION_PLAN_v2.md` ("D is structurally absent,
+  gated by `` `ifdef XLEN_64 ``") and `INDUSTRIAL_TRANSFORMATION_PLAN.md`'s G3
+  ("`EXT_D_ENABLE` **is** in the flist, hardware is built... dilutes every coverage number").
+- **What, statically:** `Vortex/sim/uvmsim/flists/vortex_rtl.flist:22` has
+  `+define+EXT_D_ENABLE=1` — a testbench-side command-line define — **listed before**
+  `VX_config.vh` at line 27. `VX_config.vh:69` does `` `ifdef EXT_D_ENABLE `define FLEN_64 ``
+  unconditionally (not gated on XLEN at that point — XLEN only gates whether
+  `VX_config.vh`'s OWN internal block at lines 42-46 additionally tries to (re)define
+  `EXT_D_ENABLE`, which is irrelevant once it's already externally defined). No
+  `EXT_D_DISABLE` or other override exists anywhere in `Makefile`, `common.mk`,
+  `compile.sh`, or any flist.
+- **What, dynamically — PROVEN, not inferred:** built an isolated elaboration in a scratch
+  Questa work library (never touching the project's real `work/`, to avoid colliding with a
+  concurrently-running sim), replicating the flist's exact define order:
+  ```
+  vlog -work <scratch> +incdir+.../Vortex/hw/rtl +define+XLEN_32 +define+EXT_D_ENABLE=1 flen_probe.sv
+  vsim -c <scratch> flen_probe -do "run -all; quit -f"
+  ```
+  where `flen_probe.sv` is a one-module throwaway that `` `include ``s `VX_config.vh` and
+  `$display`s the resolved macros. **Actual output:**
+  ```
+  FLEN_PROBE: FLEN=64 EXT_D_ENABLED=1 XLEN=32
+  ```
+  Confirms: at the project's primary config (XLEN_32), `FLEN` resolves to **64**, not 32, and
+  `EXT_D_ENABLED` (which feeds MISA bit 3 per `VX_config.vh:946`) resolves to **1**. **MISA, as
+  read back by any program on this DUT, claims double-precision floating point support that
+  the toolchain (`-march=rv32imaf`, F only, no D) and SimX (built `-DXLEN_32`, no D
+  modeling) never exercise or verify.**
+- **Which prior claim was right:** `INDUSTRIAL_TRANSFORMATION_PLAN.md`'s G3 ("hardware IS
+  built... dilutes every coverage number") was correct. `VERIFICATION_PLAN_v2.md`'s "D is
+  structurally absent, gated by XLEN_64" was wrong — already corrected in that document
+  2026-09-07 based on the static evidence; this entry is the dynamic confirmation that
+  correction was right, not merely plausible.
+- **NOT yet scoped (real follow-up work, do not assume an answer):**
+  1. Whether this FLEN=64 elaboration widens any *architecturally-visible* datapath beyond the
+     FPU register file (e.g. does the LSU or commit path carry 64-bit float values anywhere
+     reachable at RV32, or is the extra width confined to FPU-internal/unused logic?) —
+     `VX_decode.sv` and `VX_fpu_fpnew.sv` are the two files that consume `` `FLEN `` per a
+     project-wide grep; neither has been read with this question in mind yet.
+  2. Whether unstimulated D-only logic is already excluded from the frozen L2/L3 code-coverage
+     banks (94.72%/94.55%) by an existing structural waiver — checked
+     `gen_coverage_exclude.sh` for any `EXT_D`/`FLEN`/double-precision citation: **none found**.
+     This is an open risk to those exact numbers, not yet quantified.
+  3. Whether SimX's independent `-DXLEN_32` build has any FLEN-equivalent concept that could
+     desync from the RTL's FLEN=64 in a way that matters for lockstep (F-only operations should
+     be unaffected if NaN-boxed correctly in a wider register file — this is the standard
+     RISC-V pattern for F-without-D on a D-capable register file — but "should be unaffected"
+     is a claim to verify, not assume, given this project's own OBS-029 lesson about claims
+     that turn out to have never been tested).
+  4. Whether this is a genuine RTL/build defect worth reporting upstream, or an intentional
+     forward-looking testbench choice (build D-capable hardware once, gate actual D
+     verification behind a future XLEN=64 config) that was simply never documented as such.
+     `INDUSTRIAL_TRANSFORMATION_PLAN.md`'s G3 language ("Either stimulate it or drop the
+     extension from the build") suggests the latter was suspected but never resolved.
+- **Action:** scope items 1-4 above before any slide states an FLEN or MISA claim for the
+  primary config. Until scoped, the safe claim is: "MISA reports D=1 at the primary
+  configuration; this is unintentional-by-documentation and its functional consequences are
+  under investigation" — not "FLEN=32" (contradicted) and not "this is a bug" (not yet
+  established as one).
