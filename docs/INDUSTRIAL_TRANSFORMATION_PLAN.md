@@ -11,7 +11,71 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**▶▶▶ RESUME HERE — 2026-09-07 (LATEST). This block supersedes every block below it as the cold-start
+**▶▶▶ RESUME HERE — 2026-09-09 (LATEST). This block supersedes every block below it as the cold-start
+entry point; the blocks below remain accurate history for their own dates.** Full step-by-step
+detail for everything in this block: **`docs/COVERAGE_RUN_CHECKLIST_20260909.md`** (new this
+session — the followable plan/matrix doc; read it before re-deriving anything below).
+
+**What landed today (2026-09-09), in order:**
+1. **Reuse-first coverage plan.** Audited the user's own coverage-audit brief against the real repo
+   (covergroup count 20→23, probe count 9→10, two wrong file paths, "80 active riscvISACOV
+   covergroups" confirmed TRUE by direct measurement) and rewrote the run plan to **reuse existing
+   UCDBs before re-running anything** — three pre-existing riscvISACOV banks were found and the best
+   (`isacov_gaphunt`, 101 covergroups = 80 riscvISACOV + 20 project) was adopted at zero sim cost
+   instead of a fresh `ISACOV=1` compile.
+2. **riscvISACOV L1 vs project L2 clarified as database-merge-yes / metric-collapse-no.** A single
+   UCDB may validly hold both covergroup families (one `vcover merge`); they must never be blended
+   into one collapsed percentage. The low headline **26.15%** riscvISACOV number is a
+   register-allocation artifact, not weak ISA exercise: `*_reg_assign` bins (which architectural
+   register was used) measure **17.06%** (4,060/23,804, compiler/ABI-limited, expected), while
+   behavioral bins (opcode/operand/immediate coverage) measure **82.71%** (2,688/3,250). Report the
+   two numbers separately going forward — never the blended one.
+3. **1CL re-banked clean at the current (23-covergroup) build:** `vortex_uvm_env/cov/
+   bank_1CL_1C_4W_4T_L2_20260909/` — 23 covergroups (98.60% weighted), bins 504/524 = 96.18%,
+   Total (filtered) = **94.55%**. Folds in `simtgen`'s three prior isolated closures
+   (`cp_split_depth`, `cp_bank_conflict`, `cp_coalesce_kind`, all 100%) into a real banked result for
+   the first time. The small dip from the last-quoted 94.72% is legitimate (4 new covergroups
+   entered the blended Total, one not yet 100%) — hits-invariant held, confirmed via
+   `merge_coverage.sh`'s own gate; not the cross-build dilution failure mode from earlier sessions.
+4. **All four newest project covergroups audited for config/topology-awareness** (`vx_hazard_probe`,
+   `vx_lmem_probe`, `vx_coalescer_probe`, `vx_commit_probe`) — PASS by construction, all bin bounds
+   derive from elaborated RTL parameters via the `bind`, so 2CL needs no fix before running.
+5. **T-exc closed N/A, zero sim cost.** Read the trap/exception RTL before writing any stimulus (per
+   rule 8): every trap CSR write is a literal no-op, every read returns hardcoded 0, misaligned
+   access is a simulation-only `RUNTIME_ASSERT` (not a resumable hardware trap), no
+   `mcause`/trap-vector/interrupt logic exists anywhere in `hw/rtl/core/`, and no `exception_cg`
+   covergroup exists in the testbench at all. Logged as **OBS-062**; `CLAUDE.md`'s T-exc checklist
+   box closed with the citations. This is a real, RTL-cited architectural boundary (Vortex has no
+   supervisor-trap-capable hart), stated plainly rather than papered over with stimulus that could
+   only fail Gate-0's error gate.
+6. **T-cache kernel written for review, NOT yet compiled or run.** `Vortex/tests/kernel/cache_evict/`
+   (new, untracked) — a config-aware, printf-free, deterministic single-writer/multi-reader polling
+   protocol built purely from `vx_fence()` (no atomics needed) that checks the one thing "cache
+   coherence" reduces to on this RTL: after `fence`, does a core holding a stale L1 line correctly
+   see a value another core just wrote, or does it keep serving the stale copy. Scoped against the
+   real cache RTL, not a generic MESI assumption — Vortex has no snoop/coherence datapath at all
+   (confirmed by project-wide grep). Two real bugs were caught and fixed by code review alone before
+   any sim time was spent: a cross-core race (readers' Phase-B writes weren't guaranteed to have
+   landed before core 0 checked them) and an invalid hex literal. Staged to run via
+   `/tmp/.../scratchpad/verify_cache_evict.sh` (1CL then 2CL smoke test) the moment the Questa work
+   library frees.
+7. **2CL `run_suite.sh` launched and, as of this block, still running** (`CLUSTERS=2 CORES=2 WARPS=4
+   THREADS=4 L2=0 L3=0`) — holds the sole Questa work library for its ~3.5–5h duration, which is why
+   `cache_evict` has not been compiled yet. On exit: harvest+merge+GATE-B+bank exactly as done for
+   1CL, then compile/verify `cache_evict`, then Phase H (a small L2/L3-enabled cache-focused kernel
+   subset, banked separately — never blended with the L2=0/L3=0 banks per standing rule), then SIGN,
+   then one consolidated failure/error list across every run this session (zero real UVM errors
+   found in every log checked so far), then stop and switch to PPT work — no further verification
+   work after that, per explicit instruction.
+
+**▶ NEXT, in order:** (1) 2CL harvest/merge/bank once the suite exits; (2) compile+verify
+`cache_evict`, fold into both banks, close T-cache in `CLAUDE.md` with the same evidence style as
+T-exc; (3) Phase H (L2/L3 reduced-suite bank); (4) SIGN (merged report, last); (5) consolidated
+failure list; (6) freeze — PPT only from there.
+
+---
+
+**▶▶▶ RESUME HERE — 2026-09-07. This block supersedes every block below it as the cold-start
 entry point; the blocks below remain accurate history for their own dates.** For the full, currently
 accurate status use `Vortex/sim/uvmsim/docs/Vortex_UVM_Technical_Dossier.md` (updated same day) and
 `docs/VERIFICATION_PLAN_v2.md` — both are more current than the rest of this file, whose newest
