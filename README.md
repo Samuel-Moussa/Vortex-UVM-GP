@@ -13,8 +13,9 @@
 [![Golden Model](https://img.shields.io/badge/Golden%20Model-SimX%20·%20DPI--C-8957e5?style=flat-square)](https://github.com/vortexgpgpu/vortex)
 [![Config](https://img.shields.io/badge/Config-Clusters·Cores·Warps·Threads-2da44e?style=flat-square)](#-configurability)
 [![SIMT Generator](https://img.shields.io/badge/simtgen-SIMT--aware%20random%20stimulus-8957e5?style=flat-square)](#-simtgen--closing-the-simt-stimulus-gap)
-[![Coverage](https://img.shields.io/badge/Covergroup%20Bins-98.1%25-2da44e?style=flat-square)](#-results)
-[![Total](https://img.shields.io/badge/Total%20Coverage-94.7%25-2da44e?style=flat-square)](#-results)
+[![Coverage](https://img.shields.io/badge/Covergroup%20Bins-96.2%25-2da44e?style=flat-square)](#-results)
+[![Total](https://img.shields.io/badge/Total%20Coverage-94.6%25-2da44e?style=flat-square)](#-results)
+[![ISA Coverage](https://img.shields.io/badge/riscv--isacov%20(80%20cg)-behavioral%2082.7%25-8957e5?style=flat-square)](#-results)
 [![RTL/TB findings](https://img.shields.io/badge/Findings%20Logged-60%2B-c9510c?style=flat-square)](#-findings)
 
 [Why this exists](#-why-this-exists--the-gap) ·
@@ -120,7 +121,7 @@ make sim TEST=kernel_launch_test PROGRAM_NAME=simtgen_demo TIMEOUT=100000
 bash scripts/run_suite.sh
 
 # Report merged coverage without re-running anything.
-vcover report -summary cov/bank_1CL_1C_4W_4T_relayfix_20260818/merged.ucdb
+vcover report -summary cov/bank_1CL_1C_4W_4T_L2_20260909/merged.ucdb
 
 make help    # all targets and flags
 ```
@@ -239,12 +240,20 @@ Five banks; each is one consistent compile, verified by re-reading the banked co
 
 | Configuration | Runs | Total | Covergroup bins | Conditions | Toggle |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1CL / 1C / 4W / 4T** (primary, reset-fixed) | **51 / 51** | **94.72%** | 370/377 = 98.1% | 90.4% | 83.3% |
+| **1CL / 1C / 4W / 4T** (primary, 23 covergroups, `simtgen` closures folded in) | **53+ / 53+** | **94.55%** | 504/524 = 96.2% | 90.4% | 83.3% |
 | 2CL / 2C / 4W / 4T | 50 / 50 | 94.55% | 989/1032 = 95.8% | 88.8% | 80.5% |
 | 2CL + **L2 + L3** enabled | 51 / 51 | 93.18% | 1042/1092 = 95.4% | 79.3% | 83.5% |
 | 1CL + **seed farm** (141 UCDBs) | — | 94.72% | 98.1% | 90.4% | 83.4% |
 
-**0 failures at every configuration.** Statements 98.1% · branches 94.5% · assertions 96.9% · SVA directives 100%.
+**0 failures at every banked configuration.** Statements 98.1% · branches 94.5% · assertions 96.9% · SVA directives 100%. The primary bank moved from 19→23 project covergroups on 2026-09-09 (folding in `simtgen`'s three closures below) — the small percentage dip vs. the prior 98.1%/94.72% figures is legitimate dilution from adding four new, not-yet-100% covergroups into the blend, not a lost bin (verified via a blocking hits-invariant gate on the merge).
+
+> **`riscv-isacov`-style ISA coverage is reported separately, never blended into the totals above.** A single UCDB can validly *contain* both this project's SIMT covergroups and the third-party ISA covergroup layer (one `vcover merge`), but collapsing them into one percentage is not valid — the denominators measure different things. 80 active `riscv-isacov` covergroups are exercised (39 RV32I + 8 RV32M + 26 RV32F + 6 Zicsr + 1 Zifencei; zero are SIMT-related, so there is nothing warp/mask/divergence-shaped to waive here):
+>
+> | ISA covergroup class | Bins | Coverage | Why |
+> | :--- | :---: | :---: | :--- |
+> | Behavioral (opcode reached, operand signs/values, immediates) | 2,688/3,250 | **82.71%** | genuine ISA exercise |
+> | `*_reg_assign` (which architectural register was used as rd/rs1/rs2) | 4,060/23,804 | 17.06% | compiler/ABI-limited — a fixed toolchain emits a bounded register subset per instruction form, not a stimulus gap |
+> | Blended (both classes together) | 6,748/27,054 | 26.15% | **do not quote this number alone** — it reads as weak ISA exercise when the behavioral axis is actually well-covered |
 
 > **Coverage-exclusion integrity is enforced, not asserted.** Every waiver is
 > generated per-configuration from elaborated RTL parameters with a `file:line`
@@ -297,6 +306,7 @@ disposition in [`docs/RTL_OBSERVATIONS.md`](docs/RTL_OBSERVATIONS.md)
 | **R3** | Misaligned access: no trap, silently retargeted/torn; sim-only assertion is the only guard | expected per SW contract |
 | **OBS-060** | `lmem_bank_cg.cp_bank_conflict` reported a false 0% "gap" — the coverage **probe** was gated on `req_valid && req_ready`, structurally unreachable given the memory crossbar's one-winner-per-bank-per-cycle port structure (a testbench defect, not an RTL one) | **fixed** — reclassified on `req_valid` alone; 169 real conflicts now observed |
 | **OBS-061** | The primary "RV32IMF" config elaborates with **FLEN=64 and RISC-V D-extension MISA bit set** — confirmed dynamically via an isolated elaboration probe, not assumed from source alone. Scoping (architectural reachability, coverage-bank dilution, SimX F-only soundness) is an **open** follow-up, not yet resolved | **open, logged** |
+| **OBS-062** | Vortex has **no hardware exception/interrupt/trap mechanism** — every trap-control CSR write is a literal no-op, every read returns hardcoded 0, misaligned access is a simulation-only assertion (not a resumable hardware trap), and no `mcause`/trap-vector/interrupt-pending logic exists anywhere in `hw/rtl/core/`. Found by reading the trap RTL before writing directed exception stimulus | **closed N/A — architecturally unimplemented, not a bug** |
 
 > **How R10 was found is the point.** Upstream's counter assertions fired during
 > bring-up and were guarded off so the bench could run. That guard hid a genuine
@@ -445,8 +455,7 @@ reset-domain-crossing analysis · lint · low-power · formal property verificat
 - **Coverage banks are per configuration and must never be blended** — instance
   counts and signal widths differ, so a cross-config merge is meaningless.
 - `simtgen`'s coverage closures (divergence depth, bank conflict, coalescing)
-  are verified in **isolated merges**, not yet folded into the frozen defence
-  banks reported above — a full-suite re-run is the tracked next step.
+  are now folded into the primary 1CL bank (2026-09-09, all three at 100%).
 - The 2CL and L2/L3 banks were taken **before** the R10 fix and are not
   comparable to the primary bank on branch coverage.
 - **OBS-061 (FLEN=64/D-extension elaborated at the primary config) is an open
