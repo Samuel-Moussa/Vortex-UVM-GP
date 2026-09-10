@@ -1,0 +1,552 @@
+% JSA (Journal of Systems Architecture, Elsevier) — extended manuscript.
+% Derived from the conference version (isqed27_vortex_uvm.tex) with:
+%   - full related-work survey            (Section 2)
+%   - semi-formalized alignment rules     (Section 5)
+%   - the exclusion methodology elevated  (Section 8)
+%   - results scaffolding for pending machine evidence (Section 10,
+%     tables marked \tbd — filled from JSA_MACHINE_WORK_PACKAGE.md items)
+%   - threats to validity                 (Section 11)
+% Evidence rules: docs/paper/PRESUBMISSION_DISCLOSURES.md governs every
+% number. No number may enter this file without provenance there.
+\documentclass[review,12pt]{elsarticle}
+
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{threeparttable}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage{tikz}
+\usetikzlibrary{positioning,arrows.meta,calc}
+
+\newcommand{\code}[1]{\texttt{\detokenize{#1}}}
+\newcommand{\tbd}[1]{\textcolor{red}{[TBD: #1]}}
+\newcommand{\ismark}[1]{\textcolor{gray}{\footnotesize (isolated merge; fold-in pending)}}
+
+\lstset{basicstyle=\ttfamily\scriptsize,breaklines=true,frame=single,
+  backgroundcolor=\color{gray!8},showstringspaces=false}
+
+\begin{document}
+\begin{frontmatter}
+
+	\title{SIMT-Aware Lockstep Verification and Functional-Coverage Closure
+		Methodology for an Open-Source RISC-V GPGPU: A Complete UVM 1.2
+		Environment}
+
+	\author[emia]{Samuel Moussa}
+	\author[emia]{Steven Ibrahim}
+	\author[emia]{Ahmad Sudky}
+	\author[emia]{Ahmad Fawzy}
+	\author[emia]{Abanoub Nabil}
+	\author[emia]{Alhassan Sayed}
+	\author[ind]{Hossam Hassan}
+	\author[sil]{Hyung-Min Yoon}
+	\ead{samuel.moussa@mu.edu.eg}
+	\cortext[cor1]{Corresponding author.}
+
+	\affiliation[emia]{organization={Department of Electronics and
+				Communications Engineering, Faculty of Engineering},
+		city={Minia}, country={Egypt}}
+	\affiliation[ind]{organization={Independent Researcher},
+		country={South Korea}}
+	\affiliation[sil]{organization={Siliconarts, Inc.},
+		country={South Korea}}
+
+	\begin{abstract}
+		% ~250 words; TBD markers pending the machine-work package
+		Open-source RISC-V GPGPUs ship without reference-model verification,
+		functional-coverage models, or sign-off discipline, while concurrent
+		fuzzing work demonstrates that real defects populate exactly this
+		design class. This paper presents a complete UVM~1.2 verification
+		environment and closure methodology for the Vortex RISC-V GPGPU, and
+		the findings it produced on both sides of the comparison. The
+		environment wraps a bus-master SIMT device with role-inverted agents,
+		integrates the project's functional simulator as a per-configuration
+		golden model over DPI-C, and renders verdicts through two checkers
+		that are themselves qualified by permanent fault-injection guards: a
+		bidirectional end-state scoreboard and a per-instruction, per-lane
+		lockstep comparator governed by five alignment rules that we
+		semi-formalize as precondition--soundness properties. A two-pass
+		load-value feed makes fenceless multi-core programs
+		instruction-granularity verifiable---verified modulo the fed race
+		resolutions, with the assumption stated and, in the flagship case,
+		discharged by a trace-level race witness. A three-layer coverage model
+		adds what is, to our knowledge, the first published SIMT
+		functional-coverage layer for RTL GPU verification (IPDOM divergence
+		depth, scratchpad bank conflicts, coalescing classes), closed under
+		machine-generated, RTL-cited exclusions enforced by a blocking
+		waiver-integrity gate. The methodology surfaced externally corroborated
+		RTL defects (a JALR LSB ISA deviation, a reset-relay X window behind a
+		silenced assertion) and reference-model defects found by the lockstep
+		itself. We report verification costs, per-generator marginal coverage,
+		and the completed closure campaign \tbd{W1/W2/W3 numbers from the
+			machine-work package}.
+	\end{abstract}
+
+	\begin{keyword}
+		UVM \sep RISC-V \sep GPGPU \sep SIMT \sep functional verification \sep
+		lockstep co-simulation \sep functional coverage \sep open-source hardware
+	\end{keyword}
+
+\end{frontmatter}
+
+% ---------------------------------------------------------------------------
+% Highlights (entered in the submission system; kept here for the record):
+% 1. First complete UVM 1.2 environment and closure methodology for an
+%    open-source RISC-V GPGPU.
+% 2. Five SIMT lockstep alignment rules, semi-formalized as
+%    precondition-soundness properties.
+% 3. Two-pass load-value feed verifies racy programs at instruction
+%    granularity (residual 0 over 5,432 retirements).
+% 4. First published SIMT functional-coverage layer for RTL GPU
+%    verification, closed under a blocking waiver-integrity gate.
+% 5. Real defects found on both sides of the comparison, including an
+%    externally corroborated ISA deviation.
+% ---------------------------------------------------------------------------
+
+\section{Introduction}
+\label{sec:intro}
+% Extends the conference introduction; gap, threat model (FuzzGPU),
+% contribution list (now six: adds the exclusion methodology and the
+% cost/marginal evidence), paper roadmap.
+Open-source silicon has an industrial verification problem with a
+sharpening edge. The RISC-V ecosystem maintains mature verification
+assets for scalar cores---step-and-compare environments,
+constrained-random generators, ISA coverage
+libraries~\cite{corevverif,riscvdv,rvvi,imperasdv,difftest,opentitan}---but
+its most complex open processor class, the GPGPU, has had none of
+this. Vortex~\cite{vortex-micro,vortex-carrv}, the leading open
+RISC-V GPGPU, ships a directed-kernel regression with no RTL-level
+reference checking and no functional-coverage model. Concurrently,
+FuzzGPU~\cite{fuzzgpu} demonstrated that a fuzzer can find real
+defects in exactly this class of design (20 previously unknown bugs,
+10 CVEs, across Vortex and Ventus), converting the gap from an
+academic inconvenience into a security exposure.
+
+This paper closes the other half of that problem: not bug discovery,
+but \emph{coverage-quantified sign-off}. Its contributions:
+
+\begin{enumerate}
+	\item a complete, configuration-parametric UVM~1.2~\cite{uvm}
+	      environment for a bus-master SIMT GPGPU
+	      (Section~\ref{sec:environment});
+	\item per-instruction, per-lane lockstep for SIMT via five alignment
+	      rules, \emph{semi-formalized} as precondition--soundness properties
+	      (Section~\ref{sec:lockstep});
+	\item a two-pass load-value feed that makes fenceless multi-core
+	      programs instruction-granularity verifiable, with its soundness
+	      assumption stated and, where possible, discharged by trace-level race
+	      witnesses (Section~\ref{sec:feed});
+	\item a three-layer coverage model including the first published SIMT
+	      functional-coverage layer for RTL GPU verification
+	      (Section~\ref{sec:coverage});
+	\item an exclusion methodology---machine-generated, RTL-cited
+	      waivers under a blocking hits-invariant merge gate---elevated here to
+	      a named, reusable contribution (Section~\ref{sec:exclusions});
+	\item an evidence-classified findings register covering both the RTL
+	      and the reference model, with dispositions and external corroboration
+	      (Sections~\ref{sec:rtlfindings}--\ref{sec:reffindings}), and the
+	      verification-cost and per-generator marginal-coverage evidence that
+	      adoption requires (Section~\ref{sec:results}).
+\end{enumerate}
+
+All honesty constraints of the conference version carry over
+verbatim~(Section~\ref{sec:threats}); every number in this paper
+traces to a banked artifact or is marked as pending.
+
+\section{Background and related work}
+\label{sec:related}
+
+\subsection{The DUT and its reference models}
+Vortex organizes as clusters $\to$ sockets $\to$ cores $\to$ warps
+$\to$ threads with per-core caches, optional shared L2/L3, an
+immediate-post-dominator (IPDOM) reconvergence stack, and hardware
+barriers; the verified build is RV32IMAF at a pinned revision on
+QuestaSim. Vortex has no trap architecture---a property with
+verification consequences
+(Section~\ref{sec:rtlfindings}). SimX, its functional simulator, is
+structurally an RVVI-shaped golden model~\cite{rvvi}; Spike~\cite{spike}
+cannot execute the SIMT instructions and serves only as a scalar,
+independent base-ISA cross-check (11{,}076-retirement three-way audit:
+zero mismatches, injection-proven non-vacuity). \emph{The SIMT axis
+	has no independent reference}---a structural ceiling we return to in
+the threats section.
+
+\subsection{Reference-model verification of processors}
+Step-and-compare is the standard of care for RISC-V CPUs.
+core-v-verif~\cite{corevverif} established the open-source pattern
+with ImperasDV~\cite{imperasdv} over RVVI~\cite{rvvi};
+riscv-dv~\cite{riscvdv} supplies constrained-random programs with a
+trace-compare flow; DiffTest~\cite{difftest} industrialized
+per-instruction architectural comparison over DPI-C for XiangShan;
+OpenTitan~\cite{opentitan} demonstrates sign-off-grade UVM on open
+silicon at SoC scale. All target scalar or SIMD-vector cores. This
+work extends the family along three axes: a bus-master DUT with
+role-inverted agents, SIMT retirements (per-lane masked compare,
+split records, divergence), and weakly-ordered multi-core programs
+(the two-pass feed). Per-warp differential testing on this very DUT
+was concurrently demonstrated by FuzzGPU; our lockstep differs in the
+formalized alignment rules, the UVM packaging, and its role as one
+qualified checker inside a sign-off flow rather than a fuzzer's
+oracle.
+
+\subsection{GPU kernel verification and testing}
+Software-level kernel verification is mature:
+GPUVerify~\cite{gpuverify} proves race- and divergence-freedom of
+OpenCL/CUDA kernels; GKLEE~\cite{gklee} performs concolic kernel
+testing, explicitly targeting divergent warps, non-coalesced
+accesses, and shared-memory bank conflicts---the same three phenomena
+our coverage layer quantifies at the RTL level;
+WEFT~\cite{weft} verifies producer--consumer synchronization in GPU
+programs. Learned program generation has precedent in compiler
+fuzzing~\cite{deepsmith}. These operate on kernel source, not RTL;
+our contribution begins where their remit ends.
+
+\subsection{RTL GPU testing and memory consistency}
+FuzzGPU~\cite{fuzzgpu} (USENIX Security~2026) is the first RTL GPU
+fuzzer: SIMT-aware generation, trace-driven differential testing
+against ISA simulators on Verilator models of Vortex and Ventus,
+20 bugs and 10 CVEs. Its evaluation is structural-coverage-only, its
+campaigns time-boxed, and it carries no functional-coverage model,
+no checker qualification, and no sign-off discipline---by design.
+Our methodology is the complementary half, and the flows
+cross-validate: the JALR LSB deviation we report (R1) was
+independently found by their S2 (filed against the project's
+instruction-set simulator; their RTL findings X1--X3, at a different
+pin, are disjoint from ours). Formal memory-consistency verification
+at RTL is addressed for CPU models by RTLCheck~\cite{rtlcheck} and
+for GPU memory models in ASPLOS~\cite{ptxmem}; NVBitFI~\cite{nvbitfi}
+brought systematic fault injection to GPUs for reliability studies.
+Concurrently, the Ventus project developed GVM, a UVM-like framework
+for its own design.
+
+\subsection{Checker qualification}
+Mutation-based qualification---proving checkers can fail---is
+established practice~\cite{vacuity-date10}; we apply the discipline
+end-to-end to a SIMT lockstep flow, which is what allows our pass
+rates and coverage to be read at face value.
+
+\section{The verification environment}
+\label{sec:environment}
+% Ported and expanded from the conference version Section 3: the
+% role-inverted agent architecture, DPI-C golden-model integration
+% with crash classification, the passive observability layer (commit,
+% LSU, RVVI monitor, microarchitectural probes), the two checkers,
+% plusarg configurability with elaboration-time self-checks, and the
+% AXI SVA layer with throttle/flood/error-injection modes. Text to be
+% expanded from the audited conference prose; no number changes.
+[Ported text: role-inverted agents; DPI-C SimX; probes; end-state and
+	lockstep checkers; assertion-aware verdicts; configurability;
+	protocol assertions. Expanded treatment of the probe layer's
+	sampling semantics and of the launch-space sequences.]
+
+\section{Verdicts and non-vacuity}
+\label{sec:verdicts}
+% Ported and expanded: four-verdict taxonomy with UNVERIFIABLE as
+% first-class; the four permanent injection guards; the vacuous-gate
+% lesson; assertion-gate negative test.
+[Ported text.]
+
+\section{Per-instruction lockstep for SIMT: five rules, semi-formalized}
+\label{sec:lockstep}
+
+\subsection{The alignment problem}
+Let $D$ be the DUT's record stream per (core, warp): records
+$d = (\mathit{uuid}, \mathit{mask}, \mathit{PC}, \mathit{rd},
+	\mathit{val}[\cdot])$, and $G$ the reference's instruction stream
+$g = (\mathit{ord}, \mathit{mask}, \mathit{PC}, \mathit{rd},
+	\mathit{val}[\cdot])$ in program order. Comparing $D$ and $G$
+naively produces false mismatches from five structural divergences.
+Each rule below is stated as \emph{precondition $\Rightarrow$
+	soundness property}: if the precondition holds for the DUT, the
+transformation cannot mask a genuine defect (it may only remove
+false positives), and the residual comparator is exact outside the
+declared exception classes.
+
+\subsection{Rule 1 — retire order (sort by issue counter)}
+\emph{Precondition:} the per-(core, warp) issue counter is strictly
+monotone in program order and does not wrap within a run.
+\emph{Property:} sorting $D$ by \code{uuid} per (core, warp) yields
+program order; hence record $d_i$ aligns with instruction $g_i$ by
+position. A retirement whose $(PC, rd)$ differ from $g_i$ remains
+visible. (Observed DUT behavior satisfies the precondition: an
+earlier-issued instruction was observed retiring after two later
+ones; the arbiter is \code{VX_commit.sv:56-71}.)
+
+\subsection{Rule 2 — cross-key (program-order keying)}
+\emph{Precondition:} each stream independently enumerates the same
+per-(core, warp) instruction sequence. \emph{Property:} aligning by
+per-(core, warp) ordinal position is well-defined without any shared
+identifier; the DUT \code{uuid}'s high bits supply (core, warp)
+attribution with no RTL change. Model-side identifiers (SimX leaves
+\code{uuid} at zero) are never used as keys.
+
+\subsection{Rule 3 — split retirements (mask-union aggregation)}
+\emph{Precondition:} every record of one architectural instruction
+shares its \code{uuid}, and the union of the records' thread masks
+equals the instruction's active-lane set $L$ (records may overlap;
+observed \code{0xd} then \code{0xe}). \emph{Property:} aggregating
+records by \code{uuid} with mask union, then comparing per active
+lane, is equivalent to comparing the instruction itself: every lane
+in $L$ is compared exactly once semantically, and no lane outside
+$L$ contributes.
+
+\subsection{Rule 4 — load data (own tap, region-filtered)}
+\emph{Precondition:} (i) a tap where true post-extension load values
+are observable (the commit arbiter's data field is stale for loads);
+(ii) a decidable predicate $V(a, v)$ that is true only when the two
+models' memory states agree at address $a$ (initialized region, no
+preceding divergent write, reference value not initialization
+poison). \emph{Property:} comparing only lanes with $V$ is a sound
+\emph{under}-approximation: it never masks a defect (non-$V$ loads
+are deferred to the byte-exact end-state compare) at the cost of
+comparing fewer sites. (Empirically: 429 false mismatches on a
+known-good kernel without the filter; 74 compared / 113 filtered /
+0 false with it.)
+
+\subsection{Rule 5 — volatile CSRs}
+\emph{Precondition:} a statically known CSR class whose values are
+timing-defined rather than architecturally defined
+(\code{mcycle}/\code{minstret}/\code{mhpmcounter*}).
+\emph{Property:} excluding their \emph{data} (still comparing PC and
+destination) removes only comparisons with no architectural ground
+truth; soundness is preserved, completeness is reduced by exactly
+that class.
+
+\subsection{Declared exception classes and the composite claim}
+Beyond Rules 4--5, the comparator declares one bounded, logged
+tolerance: the DUT's \code{fsqrt.s} deviates by $\le 1$ ULP from
+correctly-rounded IEEE~754~\cite{ieee754}, tolerated only for
+\code{fsqrt} (same-sign, finite, $\le 1$ ULP via
+\code{fp32_within_ulp}), tallied in \code{n_fp_ulp_tol}, with a
+two-pass reconvergence feed re-checking all downstream operations
+bit-exactly. The composite soundness claim: \emph{if the preconditions
+	of Rules 1--3 hold and both models faithfully execute the same
+	program, then any retirement whose (PC, destination, per-lane value)
+	differs from the reference on an active lane, outside the declared
+	exception classes, is reported as a mismatch.} The claim is
+conditional---the preconditions are DUT obligations an adopter must
+re-derive, listed as such in Section~\ref{sec:threats}.
+
+\subsection{Validation}
+Lane-exact validation at five configurations (six programs) spanning
+a $2\times2\times3\times2$ axis space, including nested-divergence
+towers exercising Rule~3 through divergence and reconvergence;
+tallies and their provenance as in the conference version.
+
+\section{Verifying racy programs: the two-pass load-value feed}
+\label{sec:feed}
+% Ported and expanded from the conference Section 6, including the
+% soundness-assumption paragraph (M3 fix), the ELF-init race witness,
+% the interrupt boundary (116->7, keying-independent), and the
+% control-flow-steering no-fixed-point case (residual 15, thirteen
+% load-class).
+[Ported text with the assumption box and boundary discussion.]
+
+\section{Stimulus}
+\label{sec:stimulus}
+% Directed kernels (~30), riscv-dv pipeline with two unimplementable
+% profiles excluded and jump-stream sanitization, simtgen with its
+% four axes (barrier and vote_shfl to be completed by machine-work
+% item W4 -- text updated when W4 lands), the seed-farm negative
+% result, protocol stress modes.
+[Ported text; simtgen axis status sentence updated after W4.]
+
+\section{A three-layer coverage model}
+\label{sec:coverage}
+% Ported: L1 ISA (riscvISACOV; lane-as-hart equivalence experiment),
+% L2 SIMT (the contribution), L3 protocol; per-layer closure numbers;
+% the seven residual bins decomposition; OBS-060 lesson.
+[Ported text.]
+
+\section{Exclusion methodology: machine-generated, gate-checked waivers}
+\label{sec:exclusions}
+% NEW section elevating the methodology (conference subsection
+% expanded): the three closure rules, the per-configuration waiver
+% generator emitting RTL-cited exclusions, the blocking
+% hits-invariant merge gate (and the two waiver defects it caught),
+% config-aware waivers (single-core barrier path; RV64-only LD/SD and
+% F2F), reachable-but-unhit stays red, ceilings root-caused (icache
+% write-port, 22,730 bins / 26.4% of the toggle gap), the
+% coverage-definition-validation lesson (OBS-060), and why the gate
+% is a reusable artifact beyond this DUT.
+[New text.]
+
+\section{Findings}
+\label{sec:rtlfindings}
+% R1-R10 table and narratives ported from the conference version
+% (R10 reset relay with the timing figure; R1 JALR with S2 precision;
+% fsqrt; watchdog; AXI error path). Reference-model findings
+% subsection (misaligned fetch found by the lockstep; abort surface;
+% fcsr semantics).
+\subsection{RTL defects and hazards}[Ported text.]
+\subsection{Reference-model defects}\label{sec:reffindings}[Ported text.]
+
+\section{Results}
+\label{sec:results}
+% SCAFFOLD: tables below are filled from the machine-work package.
+% Do not fabricate; every cell cites its bank.
+
+\subsection{Completed closure campaign (fold-in)}
+\tbd{W1: new bank name/date, per-category table, totals vs.\ the
+	relay-fix 94.72\% baseline, simtgen closures folded (split-depth 4/4,
+	bank 3/3, coalesce 3/3, vote\_shfl \tbd{W4 outcome})}
+
+\subsection{Verification cost}
+\begin{table}[h]
+	\centering
+	\caption{Wall-clock cost of the checking stack (median of three
+		runs). \tbd{W2 measurements}}
+	\begin{tabular}{lcccc}
+		\toprule
+		Program           & Plain  & Lockstep & Lockstep+feed & Peak RSS \\
+		\midrule
+		vecadd            & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
+		divergence kernel & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
+		fpu\_test         & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
+		memory kernel     & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\subsection{Marginal coverage per generator kind}
+\begin{table}[h]
+	\centering
+	\caption{Bins closed per program kind on the frozen model and the
+		fold-in bank \tbd{W3-A: directed column + W1 columns}.}
+	\begin{tabular}{lcc}
+		\toprule
+		Generator                    & Programs & New bins closed                                    \\
+		\midrule
+		Directed kernels             & \tbd{}   & \tbd{}                                             \\
+		riscv-dv (seed farm)         & 90       & 0 (all categories bit-identical; toggle $+0.06\%$) \\
+		simtgen (divergence/memory)  & 6        & 3 targets \ismark{}                                \\
+		simtgen (barrier/vote\_shfl) & \tbd{W4} & \tbd{W4}                                           \\
+		\bottomrule
+	\end{tabular}
+\end{table}
+
+\subsection{Bug-discovery dynamics}
+\tbd{W7: cumulative-findings curve over project milestones}
+
+\section{Threats to validity}
+\label{sec:threats}
+\subsection{Internal validity}
+The two-pass feed's soundness rests on the assumption that a
+divergent in-region load is a genuine race resolution; we state it,
+discharge it with trace-level witnesses where possible, and classify
+rather than force-green elsewhere. Differential testing is
+structurally blind to stimulus faults (shared-binary blindness);
+one input class is closed by independent assertions, the class is
+reported open. Comparator tolerances are enumerated (load filter,
+volatile CSRs, fsqrt 1-ULP) and logged, never silent.
+\subsection{External validity}
+All results are one DUT at one pin with locally modified files
+(disclosed), one simulator, one build; the alignment rules' DUT
+preconditions are stated so adopters can re-derive them; transfer
+beyond is belief, not demonstration. Open-source UVM simulation is
+maturing (upstream UVM~2017 elaborates in Verilator with constrained
+randomization), but SystemVerilog functional coverage remains
+unsupported there, so the coverage-driven half requires a commercial
+simulator today.
+\subsection{Conclusion validity}
+Coverage figures are per-configuration and never blended; frozen
+banks are never overwritten; the D-extension elaboration is scoped by
+inspection (no functional-bin dilution; code-coverage impact
+conservative); per-mnemonic claims avoid aliased encodings; bank
+provenance and design state accompany every table.
+
+\section{Toward silicon sign-off}
+ % Ported and expanded from the conference tape-out discussion:
+ % front-end remainder vs. back-end prerequisites.
+ [Ported text.]
+
+\section{Conclusion}
+ [Ported and updated once Section~\ref{sec:results} is filled.]
+
+\section*{Acknowledgment}
+The authors thank the Vortex group at Georgia Tech and the
+maintainers of the open verification assets (core-v-verif, riscv-dv,
+RVVI, riscvISACOV, Spike) leveraged by the environment.
+
+\begin{thebibliography}{26}
+	% Verified citation set (same as the audited conference set; to be
+	% expanded during the journal pass with the survey items already
+	% identified in the related-work research).
+	\bibitem{vortex-micro} B.~Tine, K.~P. Yalamarthy, F.~Elsabbagh,
+	H.~Kim, Vortex: Extending the RISC-V ISA for GPGPU and 3D-graphics,
+	in: Proc. 54th IEEE/ACM Int. Symp. Microarchitecture (MICRO-54),
+	2021, pp. 754--766.
+	\bibitem{vortex-carrv} F.~Elsabbagh et al., Vortex: OpenCL
+	compatible RISC-V GPGPU, in: Workshop on Computer Architecture
+	Research with RISC-V (CARRV), 2019.
+	\bibitem{fuzzgpu} Z.~Gao, J.~Wang, Q.~Zhou, L.~Shan, J.~Hu,
+	X.~Jia, Z.~Lv, Fuzzing open-source GPU hardware with SIMT program
+	generation, in: Proc. 35th USENIX Security Symposium, 2026,
+	pp. 2465--2484.
+	\bibitem{difftest} Y.~Xu et al., Towards developing high-performance
+	RISC-V processors using agile methodology, in: Proc. 55th
+	IEEE/ACM Int. Symp. Microarchitecture (MICRO-55), 2022.
+	\bibitem{corevverif} OpenHW Group, core-v-verif,
+	\url{https://github.com/openhwgroup/core-v-verif}.
+	\bibitem{rvvi} OpenHW Group / Imperas, RVVI: RISC-V Verification
+	Interface, \url{https://github.com/riscv-verification/RVVI}.
+	\bibitem{riscvdv} CHIPS Alliance, riscv-dv,
+	\url{https://github.com/chipsalliance/riscv-dv}.
+	\bibitem{spike} RISC-V International, Spike, the RISC-V ISA
+	simulator, \url{https://github.com/riscv-software-src/riscv-isa-sim}.
+	\bibitem{imperasdv} Imperas Software, ImperasDV,
+	\url{https://imperas.com/imperasdv}.
+	\bibitem{opentitan} lowRISC, OpenTitan,
+	\url{https://github.com/lowRISC/opentitan}.
+	\bibitem{uvm} IEEE Standard for Universal Verification Methodology
+	Language Reference Manual, IEEE Std 1800.2-2020, 2020.
+	\bibitem{sv} IEEE Standard for SystemVerilog, IEEE Std 1800-2017,
+	2017.
+	\bibitem{riscv-spec} A.~Waterman, K.~Asanovi\'c (Eds.), The RISC-V
+	Instruction Set Manual, Volume I: Unprivileged Architecture, 2019.
+	\bibitem{ieee754} IEEE Standard for Floating-Point Arithmetic,
+	IEEE Std 754-2019, 2019.
+	\bibitem{gpuverify} A.~Betts, N.~Chong, A.~F. Donaldson,
+	S.~Qadeer, P.~Thomson, The design and implementation of a
+	verification technique for GPU kernels, ACM Trans. Program. Lang.
+	Syst. 37~(3) (2015) 10:1--10:49.
+	\bibitem{gklee} G.~Li, P.~Gopalakrishnan, I.~Ghosh, S.~P. Rajan,
+	G.~Gopalakrishnan, GKLEE: Concolic verification and test generation
+	for GPUs, in: Proc. ACM SIGPLAN Symp. Principles and Practice of
+	Parallel Programming (PPoPP), 2012, pp. 215--224.
+	\bibitem{weft} T.~L. Sharma, M.~Bauer, A.~Aiken, Verification of
+	producer-consumer synchronization in GPU programs, in: Proc. ACM
+	SIGPLAN Conf. Programming Language Design and Implementation (PLDI),
+	2015, pp. 88--98.
+	\bibitem{deepsmith} C.~Cummins, P.~Petoumenos, H.~Leather,
+	S.~Fursin, Compiler fuzzing through deep learning, in: Proc. ACM
+	SIGSOFT Int. Symp. Software Testing and Analysis (ISSTA), 2018,
+	pp. 95--105.
+	\bibitem{vacuity-date10} L.~Di Guglielmo, F.~Fummi, G.~Pravadelli,
+	Vacuity analysis for property qualification by mutation of checkers,
+	in: Proc. Design, Automation \& Test in Europe (DATE), 2010,
+	pp. 262--267.
+	\bibitem{nvbitfi} T.-T.~Tsai, S.~K.~S. Hari, M.~Sullivan, O.~Villa,
+	M.~B. Glick, S.~W. Keckler, NVBitFI: Dynamic fault injection
+	methodology for GPU applications, in: Proc. IEEE/IFIP Int. Conf.
+	Dependable Systems and Networks (DSN), 2021, pp. 64--76.
+	\bibitem{rtlcheck} Y.~A. Manerkar, D.~Lustig, M.~Martonosi,
+	M.~Pellauer, RTLCheck: A property checking approach for custom
+	memory consistency models, in: Proc. 50th IEEE/ACM Int. Symp.
+	Microarchitecture (MICRO-50), 2017, pp. 713--725.
+	\bibitem{ptxmem} D.~Lustig, S.~Sahasrabuddhe, M.~Giroux, A formal
+	analysis of the NVIDIA PTX memory model, in: Proc. Int. Conf.
+	Architectural Support for Programming Languages and Operating
+	Systems (ASPLOS), 2019, pp. 253--266.
+	\bibitem{questa} Siemens EDA, QuestaSim,
+	\url{https://eda.sw.siemens.com/en-US/ic/questa/simulation/}.
+	\bibitem{verilator} Verilator open-source project,
+	\url{https://www.verilator.org}.
+	\bibitem{verilator-uvm} Verilator project, UVM base libraries with
+	edits for Verilator, \url{https://github.com/verilator/uvm}.
+	\bibitem{verilator-crt} PlanV, Enabling UVM support in Verilator
+	(blog series), \url{https://planv.tech/blog/}.
+\end{thebibliography}
+
+\end{document}
