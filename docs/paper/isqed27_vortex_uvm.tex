@@ -582,11 +582,17 @@ derived from the DUT's own configuration space (warp/thread counts,
 coalescer window, local-memory bank count, IPDOM stack depth),
 informed by the generation-axis taxonomy published by
 FuzzGPU~\cite{fuzzgpu} but implemented against our own checking stack;
-no third-party code is used. The divergence axis emits structured
-branch trees with controlled split depths; the memory axis emits
-stride/scatter/bank-hostile patterns. Two further axes (barrier
-topology, VOTE/SHFL) are \emph{declared but not implemented} and
-reported as open. A ten-seed sweep across nine riscv-dv profiles (90
+no third-party code is used. \code{simtgen} implements four axes:
+divergence (structured branch trees with controlled split depths),
+memory (stride/scatter/bank-hostile patterns), barrier topology
+(single-warp barriers, deadlock-safe by construction), and VOTE/SHFL
+(all eight intrinsics per program). The barrier and VOTE/SHFL axes
+closed no new coverage---their targets (\code{cp_vote_shfl_op} 8/8,
+\code{cross_sfu_threads}) were already fully covered by dedicated
+directed kernels; their contribution is generator completeness and
+seed-diversity robustness evidence, the same category of result as the
+riscv-dv seed farm below. A ten-seed sweep across nine riscv-dv
+profiles (90
 additional distinct programs, content-hash verified, all passing)
 produced \emph{no measurable functional-coverage gain} (every category
 bit-identical except toggle $+0.06\%$)---a robustness result reported
@@ -637,10 +643,11 @@ Table~\ref{tab:coverage} summarizes the banked configurations.
 		blended). All rows are the 2026-08-16 \emph{pre-relay-fix} banks;
 		the reset-fixed 1CL bank (51 runs, 2026-08-18) totals the same
 		94.7\% with branch 94.53\% and toggle 83.34\%---indicative only,
-		two variables changed (\S\ref{sec:provenance}). The 2CL and L2/L3
-		banks predate the fix and were deliberately not re-run on the
-		fixed design; cross-configuration branch comparisons are invalid
-		and not made.}
+		two variables changed (\S\ref{sec:provenance}). A relay-fixed 2CL
+		bank taken after this table was frozen (110 runs, 0 failures,
+		93.4\% covergroup bins / 94.3\% total, on the grown
+		post-remediation coverage model) restores cross-configuration
+		comparability; the pre-fix columns are retained for provenance.}
 	\label{tab:coverage}
 	\centering
 	\small
@@ -677,29 +684,32 @@ Table~\ref{tab:coverage} summarizes the banked configurations.
 Before simtgen, three SIMT targets were open: depth-4 IPDOM divergence
 (\code{cp_split_depth} 3/4---depth~3 unhit across 50 seeds), the
 bank-conflict bin (\code{lmem_bank_cg} 0/3, never sampled in
-70{,}498+ cycles), and two coalescing classes. Deliberate simtgen
-programs closed all three (Fig.~\ref{fig:simtclosure}): depth 4/4, real
-bank conflicts surfaced, and coalescing 3/3. Two notes travel with this result: (a)~the closures
-were verified in \emph{isolated merges}; a full-suite re-run folding
-them into the frozen banks is documented as pending, so the totals of
-Table~\ref{tab:coverage} do not yet include them; (b)~the
-bank-conflict ``gap'' was in fact a \emph{coverage-model defect}: the
+70{,}498+ cycles), and one apparent coalescing gap. Deliberate simtgen
+programs closed the first two (Fig.~\ref{fig:simtclosure}): depth 4/4
+and real bank conflicts surfaced; both closures are folded into a
+suite bank (2026-09-09). Three attribution notes travel with this
+result, each established by experiment: (a)~the bank-conflict
+``gap'' was in fact a \emph{coverage-model defect}: the
 coverpoint was defined over \emph{accepted} requests, but the
 local-memory crossbar admits exactly one winner per bank per
 cycle---``two accepted requests on one bank'' was structurally
 impossible, and deliberate bank-hostile stimulus proved it (zero
-conflicts). Reclassifying onto \emph{offered} requests made the bin
-reachable and honest (169 conflict hits across six programs). A
+conflicts); reclassifying onto \emph{offered} requests made the bin
+reachable and honest (169 conflict hits), so the closure credit is
+shared between the probe fix and the generator;
+(b)~the coalescing classes, which an earlier isolated-merge report
+attributed to simtgen, were re-examined and found already covered by
+the existing coalescer probe and kernels---an attribution correction
+we report rather than quietly keep; (c)~the barrier and VOTE/SHFL
+generator axes closed nothing because their targets were already fully
+covered by directed kernels (above). A
 coverage definition must itself be validated against the RTL's
 structure; the stimulus gap and the taxonomy defect were disentangled
-by experiment. The frozen bank's seven unhit covergroup bins decompose
-as six SIMT-layer bins---the divergence, bank-conflict, and coalescing
-targets above, closed only in the isolated merges---plus structural
-unreachable-by-stimulus classes left red by rule rather than waived;
-full fold-in awaits a re-run campaign. The marginal picture per
-generator kind on the frozen model: ninety additional riscv-dv
-programs closed zero bins (the seed-farm result), while six deliberate
-simtgen programs closed all three open SIMT targets---stimulus
+by experiment. The marginal picture per
+generator kind: ninety additional riscv-dv
+programs closed zero bins (the seed-farm result), while 57 simtgen
+programs (divergence and memory axes) closed the divergence and
+bank-conflict targets---stimulus
 \emph{kind}, not volume, moves this coverage model.
 
 \begin{figure}[t]
@@ -722,36 +732,32 @@ simtgen programs closed all three open SIMT targets---stimulus
 		\fill[black!75]  (3.7,0) rectangle (4.3,2.4);
 		\node[above] at (3.3,0.02) {\tiny 0/3};
 		\node[above] at (4.0,2.4)  {\tiny 3/3};
-		% cp_coalesce_kind: 1/3 -> 3/3
-		\fill[gray!50] (5.5,0) rectangle (6.1,0.8);
-		\fill[black!75]  (6.2,0) rectangle (6.8,2.4);
-		\node[above] at (5.8,0.8) {\tiny 1/3};
-		\node[above] at (6.5,2.4) {\tiny 3/3};
-		% x labels
+		% x labels (two groups; the coalescing group was removed after the
+		% attribution re-examination: cp_coalesce_kind was already covered
+		% by the existing coalescer probe/kernels before simtgen)
 		\node[align=center] at (1.15,-0.5) {\tiny \code{cp_split_depth}\\
 			\tiny (IPDOM divergence)};
 		\node[align=center] at (3.65,-0.5) {\tiny \code{cp_bank_conflict}\\
 			\tiny (scratchpad banks)};
-		\node[align=center] at (6.15,-0.5) {\tiny \code{cp_coalesce_kind}\\
-			\tiny (memory coalescing)};
 		% legend
 		\node[draw, fill=gray!50, inner sep=1.5pt, font=\tiny, anchor=west]
 		at (3.0,2.8) {before};
 		\node[draw, fill=black!75, inner sep=1.5pt, font=\tiny, anchor=west,
 			text=white] at (3.9,2.8) {after simtgen};
 	\end{tikzpicture}
-	\caption{Effect of axis-directed generation on the three open SIMT
-		coverage targets (bins hit, as a percentage of the coverpoint's bin
-		count). Before simtgen (light bars): depth-4 IPDOM divergence was
-		unreachable by any of 50 random-program seeds (3/4 bins); bank
+	\caption{Effect of axis-directed generation on the two SIMT targets
+		it genuinely closed (bins hit, as a percentage of the coverpoint's
+		bin count). Before simtgen (light bars): depth-4 IPDOM divergence
+		was unreachable by any of 50 random-program seeds (3/4 bins); bank
 		conflicts never occurred in 70{,}498+ sampled cycles (0/3---itself
 		root-caused to a coverpoint-definition defect, since the crossbar
-		admits one winner per bank per cycle); one coalescing class was unhit
-		(1/3). Deliberate divergence-tower and bank-hostile kernels (dark
-		bars) closed all three to 100\%. Measured in isolated merges; a
-		full-suite re-run folding these into the frozen topology banks is
-		documented as pending, so the headline totals of
-		Table~\ref{tab:coverage} do not yet include them.}
+		admits one winner per bank per cycle). Deliberate divergence-tower
+		and bank-hostile kernels (dark bars) closed both to 100\%, now
+		folded into a suite bank (2026-09-09). A third target previously
+		reported here (coalescing classes) was re-examined and found
+		already covered by the existing coalescer probe and kernels
+		before simtgen existed---an attribution correction to our earlier
+		isolated-merge reporting.}
 	\label{fig:simtclosure}
 \end{figure}
 
