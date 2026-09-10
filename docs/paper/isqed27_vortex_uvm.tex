@@ -197,7 +197,12 @@ gate-checked. The flows cross-validate: the JALR LSB deviation we
 report as R1 was independently found by FuzzGPU (S2, upstream
 PR~\#339, CWE-682)---in the instruction-set-simulator component of the
 same project; their RTL findings (X1--X3) are disjoint from ours,
-consistent with the different pins and oracles involved. Mutation-based checker qualification is established
+consistent with the
+different pins and oracles involved. Exercising their reported Vortex
+findings at our pin: X1 reproduces (firing the RTL's own
+invalid-writeback-register assertion), and X2---whose upstream fix
+landed entirely in the reference model's decoder---reproduces as a
+divergence where the hardware is right and the golden model is wrong. Mutation-based checker qualification is established
 for CPUs and SoCs~\cite{vacuity-date10}, and systematic fault injection
 has been brought to GPUs for reliability studies~\cite{nvbitfi}; we
 apply the qualification discipline end-to-end to a SIMT lockstep flow.
@@ -921,7 +926,9 @@ was corrected; the RTL quirk is documented, not mirrored.
 	      elaborates the D extension and MISA reports D=1 (\code{FLEN=64},
 	      confirmed by elaboration probe) although the toolchain builds RV32IMAF
 	      and the reference models F only---unintentional-by-documentation as an
-	      RTL fact. Its coverage impact is bounded by code inspection: the
+	      RTL fact. Its coverage impact is bounded by code inspection and
+	      confirmed by an EXT\_D-off recompile bin diff: zero scored bins
+	      change (delta confined to two weight-0 coverpoints). The
 	      coverage model's only D-specific bin (float--double conversion) is
 	      config-aware-excluded at RV32 (\code{ignore\_bins}), the ISA layer
 	      compiles no D plan, and no stimulus can emit a D operation---so no

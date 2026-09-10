@@ -417,36 +417,73 @@ Section~\ref{sec:exclusions}.
 \begin{table}[h]
 	\centering
 	\caption{Wall-clock and peak-RSS cost of the checking stack
-		(median-of-two reps; QuestaSim 2021.2, 1CL/1C/4W/4T;
-		\code{vecadd_lite} is a ${\sim}$9.9k-cycle baseline kernel,
-		\code{wide_stress} the 256\,KB high-toggle kernel).}
+		(median-of-two reps; QuestaSim 2021.2, 1CL/1C/4W/4T). Four programs
+		spanning the kernel-size spectrum: \code{vecadd_lite} (${\sim}$9.9k
+		cycles), \code{diverge_lite} (divergence kernel), \code{fpu_test}
+		(FPU), \code{wide_stress} (256\,KB high-toggle).}
 	\begin{tabular}{lccl}
 		\toprule
-		Program      & Mode          & Wall clock & Peak RSS \\
+		Program       & Mode          & Wall clock & Peak RSS            \\
 		\midrule
-		vecadd\_lite & plain         & 15.3\,s    & 296\,MB  \\
-		vecadd\_lite & lockstep      & 15.0\,s    & 299\,MB  \\
-		vecadd\_lite & lockstep+feed & 14.8\,s    & 299\,MB  \\
-		wide\_stress & plain         & 851\,s     & 549\,MB  \\
-		wide\_stress & lockstep      & 871\,s     & 708\,MB  \\
-		wide\_stress & lockstep+feed & 856\,s     & 708\,MB  \\
+		vecadd\_lite  & plain         & 15.3\,s    & 296\,MB             \\
+		vecadd\_lite  & lockstep      & 15.0\,s    & 299\,MB             \\
+		vecadd\_lite  & lockstep+feed & 14.8\,s    & 299\,MB             \\
+		diverge\_lite & plain         & 17.8\,s    & 297\,MB             \\
+		diverge\_lite & lockstep      & 18.2\,s    & 301\,MB             \\
+		diverge\_lite & lockstep+feed & 18.1\,s    & 301\,MB             \\
+		fpu\_test     & plain         & 21.0\,s    & 296\,MB             \\
+		fpu\_test     & lockstep      & 20.7\,s    & 301\,MB$^{\dagger}$ \\
+		fpu\_test     & lockstep+feed & 21.0\,s    & 301\,MB             \\
+		wide\_stress  & plain         & 851\,s     & 549\,MB             \\
+		wide\_stress  & lockstep      & 871\,s     & 708\,MB             \\
+		wide\_stress  & lockstep+feed & 856\,s     & 708\,MB             \\
 		\bottomrule
 	\end{tabular}
 \end{table}
-Lockstep's wall-clock overhead is within run-to-run noise at both
-program sizes ($\pm$1.5\,s on a ${\sim}$15\,s baseline;
-$\pm$20\,s---inside the inter-rep spread already present in plain
-mode---on a ${\sim}$860\,s baseline). Peak memory shows a real, clean
-step at the larger working set: the second (SimX) model instance and
-its bookkeeping add ${\sim}$29\% RSS at \code{wide\_stress} and
-${\sim}$1\% at \code{vecadd\_lite}; the load-value feed adds no
-further measurable memory. Absolute wall clock scales with program
-size (${\sim}$57$\times$ between the two kernels) far more than with
-checking mode. One measurement artifact is disclosed rather than
-hidden: an initial \code{wide_stress} run used an undersized timeout
-budget and produced false \textsc{timeout} verdicts on all six rows;
-it was discarded, the budget raised to the suite's own established
-value, and all reported rows completed with rc=0.
+Lockstep's wall-clock overhead is within run-to-run noise at every
+program size ($\pm$1.5\,s on ${\sim}$15--21\,s baselines;
+$\pm$20\,s---inside the inter-rep spread of plain mode---on the
+${\sim}$860\,s kernel). Peak memory shows one real step: the second
+(SimX) model instance adds ${\sim}$29\% RSS at the large working set
+and ${\sim}$1.5\% at the small ones; the load-value feed adds no
+further measurable memory. The one \textsc{fail} in the grid is
+itself informative: \code{fpu\_test} under plain lockstep (feed
+disarmed) reproduces the known fsqrt 1-ULP deviation cascading into
+downstream mismatches---exactly the behavior
+Section~\ref{sec:lockstep}'s exception-class design predicts---while
+the same program under lockstep+feed passes with residual zero: the
+reconvergence feed, not the tolerance alone, absorbs the cascade.
+A measurement artifact is disclosed rather than hidden: an initial
+\code{wide_stress} run used an undersized timeout budget, produced
+false \textsc{timeout} verdicts on all six rows, and was discarded
+(budget artifact, OBS-042 precedent); all reported rows completed
+with rc=0.
+
+\subsection{FuzzGPU PoC reproduction at our pin (W3-B)}
+FuzzGPU's three Vortex RTL findings (filed at a different commit) were
+each exercised at our pin under this environment:
+\begin{itemize}
+	\item \textbf{X1 (FPU compare-to-x0 unconditional writeback, PR
+		      \#356): reproduced.} The PoC fires the RTL's own
+	      \code{invalid writeback register} runtime assertion at the PoC's
+	      exact \code{feq.s x0} PC; the defect is present and unfixed at our
+	      pin.
+	\item \textbf{X2 (reserved M-extension \code{funct7} decode, PR
+		      \#358): reproduced---and re-scoped.} The upstream fix lives entirely
+	      in the reference model's decoder; our RTL was always exact-match and
+	      never had the defect. A hand-encoded reserved opcode produces a
+	      genuine DUT-vs-SimX divergence in which the \emph{hardware is right
+		      and the golden model is wrong} (DUT decodes ADD; SimX decodes MUL)---
+	      the paper's central thesis (the reference model must be verified
+	      alongside the DUT) confirmed by an externally-sourced test case, and
+	      a caution against citing X2 as an RTL bug.
+	\item \textbf{X3: static-only} (engineering cost of dynamic
+	      reproduction outweighed the value; documented, not attempted
+	      silently).
+\end{itemize}
+These runs are deliberately not suite members: X2's expected outcome
+is a real mismatch, so it is kept as a directed qualification case
+instead.
 
 \subsection{Marginal coverage per generator kind (W3-A)}
 \begin{table}[h]
@@ -527,9 +564,11 @@ simulator today.
 \subsection{Conclusion validity}
 Coverage figures are per-configuration and never blended; frozen
 banks are never overwritten; the D-extension elaboration is scoped by
-inspection (no functional-bin dilution; code-coverage impact
-conservative); per-mnemonic claims avoid aliased encodings; bank
-provenance and design state accompany every table.
+inspection \emph{and} confirmed by an EXT\_D-off recompile with a
+coverpoint-by-coverpoint bin diff (zero scored bins change; the
+entire delta is confined to two weight-0 coverpoints already excluded
+from every reported percentage); per-mnemonic claims avoid aliased
+encodings; bank provenance and design state accompany every table.
 
 \section{Toward silicon sign-off}
  % Ported and expanded from the conference tape-out discussion:
