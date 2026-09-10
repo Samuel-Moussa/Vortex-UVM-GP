@@ -356,23 +356,40 @@ remaining 3 are weight-0 by design and cannot be "closed" at all.
       uncovered; matches the diminishing-returns precedent already accepted for the closely
       related `cp_route_slot` slots 4-15. Not pursued further this pass — future work.
 
-## 7. PHASE F — 2CL (2CL / 2C / 4W / 4T)
+## 7. PHASE F — 2CL (2CL / 2C / 4W / 4T) — CLOSED 2026-09-10
 
 Same pipeline, second config. **Never merge 1CL and 2CL** (H4) — separate bank, separate report.
 
-- [ ] **F1** Re-run the suite with `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4`. This forces a
-      full RTL + SimX rebuild (`prepare.sh` rebuilds SimX per config) — the work library
-      must be free (H5).
-- [ ] **F2** Budget guard: 2CL is slower per program. `barrier_sync_test` needs ≥164,602
-      cycles and riscv-dv ≥205,982 — both already raised in `run_suite.sh`; confirm before
-      launching so a shortfall doesn't masquerade as a divergence.
-- [ ] **F3** Expect a **lower raw bin %** than 1CL and do not treat it as a regression:
-      per-core probe instances multiply the denominator (1CL 377 bins vs 2CL 1032).
-- [ ] **F4** Export `COV_NCL=2 COV_NC=2` for the merge so config-keyed exclusions are
-      generated for 2CL — without this the merge silently applies **1CL** waivers.
-- [ ] **F5** Bank as `bank_2CL_2C_4W_4T_L2_20260909/`, verify from the copy.
-- [ ] **F6** ISACOV at 2CL: the two 09-04 banks (`bank_2CL_2C_4W_4T_ISACOV_{with,without}`)
-      already exist — apply the §C-0 reuse test before spending a re-run.
+**Satisfied by `bank_2CL_2C_4W_4T_relayfix_20260910/`** (produced 2026-09-10, mentor-facing
+as W6 — see `docs/paper/JSA_MACHINE_WORK_PACKAGE_RESULTS.md`) — confirmed against every
+one of F1-F6's own requirements, not just accepted because "0 FAILED":
+
+- [x] **F1** Full 2CL rebuild + 110-run suite (53-kernel suite + `simtgen` folded in),
+      **0 FAILED**, 0 UVM_ERROR/UVM_FATAL — confirmed in the W6 write-up.
+- [x] **F2** Budget guard confirmed from `run_suite.sh` itself, not inferred from the pass
+      rate: `barrier_sync_test` uses `TIMEOUT=500000` (≥ the required 164,602) and riscv-dv
+      uses `RV_TIMEOUT=6700000` (≥ the required 205,982) — both comfortably above the
+      minimum floor. The 110-run suite used the standard `run_suite.sh` invocation (53
+      kernels matches its own count), so these are the values that actually ran.
+- [x] **F3** Lower raw bin % vs 1CL as expected (93.39% vs 96.18% raw bins) — per-core
+      probe instance multiplication (1620 bins vs 524), not a regression.
+- [x] **F4** `COV_NCL=2 COV_NC=2` export — **positively demonstrated, not just claimed**:
+      the first merge attempt defaulted to 1CL exclusions, the hits-invariant gate caught
+      it (`ERROR: exclusions changed COVERED bin counts`), and the merge was redone
+      correctly with the right config vars. Real evidence the mechanism works, not
+      assumed.
+- [x] **F5** Banked (as `bank_2CL_2C_4W_4T_relayfix_20260910/`, not the plan's literal
+      `bank_2CL_2C_4W_4T_L2_20260909` name — a naming-convention drift, not a functional
+      gap; both configs' evidence is fully cross-referenced in the mentor results doc),
+      verified by re-reading the banked copy.
+- [x] **F6** ISACOV reuse test — done 2026-09-10: `third_party/riscvISACOV/source/*.sv`
+      has zero files newer than the 2026-09-04 ISACOV bank creation date (confirmed via
+      `find -newer`), and the vendored repo's own last commit (`d448da0`, 2025-12-11) long
+      predates this project's work — the covergroup *definitions* are unchanged, so
+      `bank_2CL_2C_4W_4T_ISACOV_{with,without}_20260904` remain valid to reuse for the L1
+      layer at 2CL, same reuse argument already accepted for 1CL's C-0a (ISA-space
+      coverage is about definitions being unchanged, not the RTL under test being
+      byte-identical — the two are orthogonal questions).
 
 **Known 2CL residuals (documented, do not re-derive):** `cp_route_slot` slots 4–15 +
 `cross_port_slot` (measured per-port concurrency is 3), `cp_write_tag` high buckets,
