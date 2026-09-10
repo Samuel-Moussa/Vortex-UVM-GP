@@ -76,10 +76,23 @@ issue. Do not revert to "under investigation".
   10 seeds × 9 profiles = 90 additional distinct programs (content-hash
   verified), 90/90 PASS, every coverage category bit-identical except
   toggle +0.06%.
-- simtgen closures (cp_split_depth 3/4→4/4; cp_bank_conflict and
-  cp_coalesce_kind →3/3) were verified in **isolated merges**
-  (`cov/simtgen_*_20260907`), NOT folded into the frozen banks. State
-  this explicitly wherever the closures are quoted.
+- simtgen closures — FINAL STATE (2026-09-10, per the W1 decision):
+  divergence and memory axes are **folded into a suite bank**
+  (`bank_1CL_1C_4W_4T_L2_20260909`: `cp_split_depth` 4/4,
+  `cp_bank_conflict`/`cp_coalesce_kind` 3/3 in-bank); barrier and
+  vote_shfl axes are isolated-merge only
+  (`vortex_uvm_env/cov/simtgen_barrier_vote_shfl_20260910/`) and closed
+  **zero** bins — their targets (`cp_vote_shfl_op` 8/8,
+  `cross_sfu_threads` 33/33) were already covered by directed kernels
+  (`vote_shfl`, `bar_masks`, `sfu_masks`). **Attribution correction**:
+  the coalescing classes were already covered by the coalescer
+  probe/kernels before simtgen — an earlier isolated-merge report
+  credited simtgen; the papers now carry the corrected attribution.
+  A relay-fixed 2CL bank exists
+  (`bank_2CL_2C_4W_4T_relayfix_20260910`: 110 runs, 0 failures,
+  93.39% cg bins / 94.29% total, post-remediation model) — cross-config
+  comparability is restored on the relay-fixed design; do not blend it
+  with the frozen 2026-08-16 table numbers without stating both.
 - The banked UCDB files are **not present in this repository checkout**
   (tool-machine-local artifacts); the evidence chain is the committed
   documentation (bank names, dates, vcover report transcripts, OBS
