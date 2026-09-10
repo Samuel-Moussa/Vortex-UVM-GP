@@ -1107,20 +1107,22 @@ solely for this.
 banks are new directories; no newly-unhit bin was waived to inflate a total; the
 1CL-vs-2CL comparison above states both configs explicitly rather than blending them.
 
-### W2 — verification-cost table (DONE)
+### W2 — verification-cost table (DONE, extended to 4 programs 2026-09-10)
 
-**Provenance:** QuestaSim 2021.2_1 · outer repo `af6bd9227e0e97df929f45c78eafc75a78f1c9b5`'s
-submodule pointer / submodule HEAD `af6bd9227` at measurement time (post docs-reorg commit) ·
-config 1CL/1C/4W/4T · measured via `/usr/bin/time -v` wrapping `make sim-only`, wall clock and
+**Provenance:** QuestaSim 2021.2_1 · outer repo commit at measurement time (first pass)
+`af6bd9227e0e97df929f45c78eafc75a78f1c9b5`'s submodule pointer, extension pass (`fpu_test`,
+`diverge_lite`) at submodule HEAD `4d7eabe1b` (post `cache_evict` commit) · config
+1CL/1C/4W/4T · measured via `/usr/bin/time -v` wrapping `make sim-only`, wall clock and
 peak RSS (`Maximum resident set size`) read from its output; 2 reps per (program, mode) cell.
 
-**Scope, disclosed honestly:** the runbook's own suggestion was 3–4 programs; this pass measured
-**2** — `vecadd_lite` (small, ~9.9k-cycle baseline kernel) and `wide_stress` (large, high-toggle
-256 KB kernel, TIMEOUT budget raised to `run_suite.sh`'s own established `40000000` after an
-initial undersized-timeout run at `TIMEOUT=500000` produced false `TIMEOUT` failures on all 6
-rows — a budget artifact, not a DUT/TB defect, per the project's own OBS-042 precedent; that
-invalid run was discarded, not reported below). Reduced from the runbook's suggested scope for
-time; both programs' full 3-mode × 2-rep matrices completed cleanly (rc=0 on all 12 rows).
+**Scope: now matches the runbook's own suggested list exactly** — "vecadd, a divergence
+kernel, fpu_test, one large memory kernel." **4 programs**: `vecadd_lite` (small baseline),
+`diverge_lite` (divergence kernel), `fpu_test` (FPU), `wide_stress` (large, high-toggle
+256KB memory kernel). The initial pass measured only `vecadd_lite`/`wide_stress`, disclosed
+as a scope reduction; the other two were added in a second pass rather than left open.
+`wide_stress`'s TIMEOUT was raised to `run_suite.sh`'s own established `40000000` after an
+initial undersized-timeout run at `TIMEOUT=500000` produced false `TIMEOUT` failures — a
+budget artifact (OBS-042 precedent), not a DUT/TB defect; that invalid run was discarded.
 
 **Three lockstep modes** (env vars read directly by `simulate.sh`, not passed via Makefile CFG
 vars): `plain` = no env vars; `lockstep` = `LOCKSTEP=1`; `lockstep_feed` = `LOCKSTEP=1
@@ -1131,25 +1133,49 @@ LOCKSTEP_LOADFEED=1`.
 | vecadd_lite | plain | 15.3 s | 296,378 KB |
 | vecadd_lite | lockstep | 15.0 s | 299,204 KB |
 | vecadd_lite | lockstep_feed | 14.8 s | 299,124 KB |
+| diverge_lite | plain | 17.8 s | 297,170 KB |
+| diverge_lite | lockstep | 18.2 s | 300,826 KB |
+| diverge_lite | lockstep_feed | 18.1 s | 301,392 KB |
+| fpu_test | plain | 21.0 s | 296,226 KB |
+| fpu_test | lockstep | 20.7 s | 300,754 KB ⚠️ see note |
+| fpu_test | lockstep_feed | 21.0 s | 300,592 KB |
 | wide_stress | plain | 851.4 s (14m 11s) | 549,144 KB |
 | wide_stress | lockstep | 871.1 s (14m 31s) | 707,994 KB |
 | wide_stress | lockstep_feed | 856.0 s (14m 16s) | 707,718 KB |
 
-**Reading the numbers:**
-- Lockstep's wall-clock overhead is small and within run-to-run noise at both program sizes
-  (vecadd_lite ±1.5 s across modes on a ~15 s baseline; wide_stress ±20 s across modes on a
-  ~860 s baseline, i.e. within the 6.5 s inter-rep spread already seen in `plain` alone).
-- Peak RSS shows a clear, consistent step at `wide_stress` between `plain` (549 MB) and either
-  lockstep mode (708 MB, +29%) — the second (SimX) model instance and its lockstep bookkeeping
-  add real memory, not noticeable at `vecadd_lite`'s much smaller working set (296→299 MB, +1%).
-  `LOCKSTEP_LOADFEED` adds no further measurable RSS over plain `LOCKSTEP` at either program size.
-- Absolute wall-clock scales with program size far more than with lockstep mode: `wide_stress` is
-  ~57x `vecadd_lite`'s wall clock at every mode, consistent with it being the intentionally
-  high-toggle / high-instruction-volume kernel (`docs/COVERAGE_GAPPUSH_20260815.md`), not a
-  lockstep-specific cost.
+**⚠️ `fpu_test` × `lockstep` (both reps) reported `TEST FAILED`, not a timing anomaly —
+this is the pre-existing, already-documented OBS-014 residual, re-confirmed, not a new
+defect.** `LOCKSTEP` without `LOCKSTEP_LOADFEED` armed shows a genuine 1-ULP DUT-vs-SimX
+disagreement on `fsqrt.s`:
+```
+[LOCKSTEP] LOAD-DATA mismatch ... addr=80006d30: DUT=3fef7750 vs SimX=ffffffff3fef7751
+[LOCKSTEP] DATA mismatch ... PC=800001a8: DUT=433b1536 vs SimX=ffffffff433b1537
+```
+Both values differ by exactly 1 in the low mantissa bit — matches OBS-014 exactly ("1-ULP
+sqrt mismatches ... the documented residual, not a regression. Baseline comparisons must
+arm the feed"). Timing was still captured (the run completes, just with a FAILED verdict),
+included above for completeness — do not read the `lockstep`-mode row as a passing baseline
+for `fpu_test`; use `lockstep_feed` for that program's true lockstep-mode comparison point.
 
-**Raw per-rep data**, `/tmp/w2_results.csv` (vecadd_lite) + `/tmp/w2_results2.csv` (wide_stress,
-correct-budget run):
+**Reading the numbers:**
+- Lockstep's wall-clock overhead is small and within run-to-run noise at every program size
+  (small kernels ±0.5-1s across modes on a ~15-21s baseline; `wide_stress` ±20s across modes
+  on a ~860s baseline).
+- Peak RSS shows the same clear step at every small kernel now, not just `vecadd_lite`:
+  ~296-297 MB (plain) → ~300-301 MB (either lockstep mode), a consistent ~+1.3% from the
+  second (SimX) model instance's bookkeeping. `wide_stress` shows a much larger step
+  (549→708 MB, +29%) — the fixed lockstep overhead is a much larger fraction of a small
+  kernel's *relative* memory footprint than its absolute one; the small-kernel absolute
+  deltas (~4 MB) are actually close to `wide_stress`'s absolute delta (~159 MB) only in
+  the sense that both are dominated by the same fixed second-model-instance cost, not by
+  program size.
+- Absolute wall-clock scales with program size far more than with lockstep mode:
+  `wide_stress` is ~40-57x the small kernels' wall clock at every mode, consistent with it
+  being the intentionally high-toggle / high-instruction-volume kernel
+  (`docs/COVERAGE_GAPPUSH_20260815.md`), not a lockstep-specific cost.
+
+**Raw per-rep data**, `/tmp/w2_results.csv` (vecadd_lite) + `/tmp/w2_results2.csv`
+(wide_stress, correct-budget run) + `/tmp/w2_results3.csv` (fpu_test, diverge_lite):
 
 ```
 program,mode,rep,wall_s,max_rss_kb,rc
@@ -1165,4 +1191,16 @@ wide_stress,lockstep,1,14:24.08,707992,0
 wide_stress,lockstep,2,14:38.21,707996,0
 wide_stress,lockstep_feed,1,14:21.84,707808,0
 wide_stress,lockstep_feed,2,14:10.16,707628,0
+fpu_test,plain,1,0:20.84,296380,0
+fpu_test,plain,2,0:21.19,296072,0
+fpu_test,lockstep,1,0:20.75,300820,2
+fpu_test,lockstep,2,0:20.73,300688,2
+fpu_test,lockstep_feed,1,0:21.43,300480,0
+fpu_test,lockstep_feed,2,0:20.61,300704,0
+diverge_lite,plain,1,0:17.68,297080,0
+diverge_lite,plain,2,0:17.88,297260,0
+diverge_lite,lockstep,1,0:18.37,300760,0
+diverge_lite,lockstep,2,0:17.97,300892,0
+diverge_lite,lockstep_feed,1,0:17.87,301280,0
+diverge_lite,lockstep_feed,2,0:18.41,301504,0
 ```
