@@ -3516,3 +3516,148 @@ exception bins.
 N/A/architecturally-unimplementable, no new kernel.** This is a finding to state plainly
 in the thesis (a real, RTL-cited boundary of what this device implements), not a gap to
 paper over with stimulus that cannot succeed.
+
+---
+
+## OBS-063 — REPRODUCED at our pin: FPU compare-to-x0 unconditional writeback trips the
+scoreboard's own internal RTL assertion (FuzzGPU X1, upstream PR #356) ⟨2026-09-10⟩
+
+**Class:** RTL BUG (present, unfixed at our pin) · **Disposition: OPEN — reproduced,
+not fixed by decision (see "why not fixed" below)** · **Found via:** W3-B
+(`docs/paper/JSA_MACHINE_WORK_PACKAGE.md`), repro attempt against FuzzGPU
+(USENIX Security '26) finding X1, filed upstream at `vortexgpgpu/vortex` PR #356
+("Fix FPU x0 writeback scoreboard"), fetched via the GitHub API/`.diff` endpoint on
+2026-09-10 — not assumed from the paper's summary.
+
+**What the upstream fix says.** `hw/rtl/fpu/VX_fpu_unit.sv` (pre-fix) unconditionally
+asserts `per_block_result_if[block_idx].data.wb = 1'b1` for every FPU op result,
+including FP-compare ops (`feq.s`/`flt.s`/`fle.s`) whose *destination* is an ordinary
+integer register — and RISC-V allows `rd = x0` there (a legal, if useless, encoding).
+`VX_scoreboard.sv` never reserves `x0` (there is nothing to track — writes to `x0` are
+architecturally discarded), so a writeback the FPU unconditionally claims for `x0`
+trips the scoreboard's own `invalid writeback register` sanity check. The fix makes
+`wb` conditional: `wb = (fpu_rsp_rd != make_reg_num(REG_TYPE_I, 0))`.
+
+**PoC used (upstream's own conform-test sequence, reproduced verbatim, not
+reinterpreted):**
+```asm
+fsgnj.s f24, f0, f0
+fsgnj.s f1, f0, f0
+feq.s   x0, f24, f1
+```
+run under a full thread mask (`vx_tmc`), in
+[`Vortex/tests/kernel/fuzzgpu_repro/main.cpp`](../Vortex/tests/kernel/fuzzgpu_repro/main.cpp)
+(`test_feq_x0_scoreboard`/`do_feq_x0_scoreboard`).
+
+**Result — REPRODUCED.** At our pin (`af6bd9227` submodule HEAD, Vortex `7a52ee5` + 18
+local RTL mods, OBS-040), `hw/rtl/fpu/VX_fpu_unit.sv` still has the unconditional
+`wb = 1'b1` (unfixed — verified by direct grep before writing this kernel, not assumed).
+Running `fuzzgpu_repro` under `kernel_launch_test` (1CL/1C/4W/4T, QuestaSim 2021.2_1)
+fired the exact assertion the PR describes:
+```
+** Error:             53215000: *** cluster0-socket0-core0-issue0-scoreboard invalid
+writeback register: wid=0, PC=0x800001a8, tmask=1111, rd=0 (#417)
+   Time: 53215 ns  Scope: vortex_tb_top.dut.vortex.g_clusters[0].cluster.g_sockets[0]
+   .socket.g_cores[0].core.issue.g_slices[0].issue_slice.scoreboard.g_scoreboard[0]
+   File: Vortex/hw/rtl/core/VX_scoreboard.sv  Line: 241
+```
+`PC=0x800001a8` is exactly the `feq.s zero, fs8, ft1` instruction in the compiled
+kernel's own disassembly (`feq.s x0, f24, f1` — `fs8`=f24, `ft1`=f1) — not a coincidence
+or a different assertion firing nearby.
+
+**⚠ One real severity difference from the PR's description, disclosed rather than
+smoothed over.** The PR text says this "reports ... `$finish`". At our pin the assertion
+is `` `RUNTIME_ASSERT `` → `` `ASSERT `` →
+[`hw/rtl/VX_platform.vh:42-43`](../Vortex/hw/rtl/VX_platform.vh#L42):
+`assert(cond) else $error msg` — a SystemVerilog immediate assertion with an `$error`
+consequent, not `$fatal`/`$finish`. Our simulation **continued** past the firing (1189
+instructions ultimately retired, well past PC `0x800001a8`) instead of halting.
+**This assertion message does not increment our `UVM_ERROR` count** (T4's honest error
+gate) — it is on a separate SystemVerilog-native logging channel the UVM report server
+does not see. A run that trips only this assertion, with no other scoreboard mismatch,
+would show **0 UVM_ERROR and a "TEST PASSED" verdict** despite a real RTL defect having
+fired. This run's 4 UVM_ERRORs came entirely from the co-located OBS-064 (X2) memory
+mismatch, not from this assertion — so the gap was not exercised this run, but it is
+real and open.
+
+**Why not fixed here (decision, not oversight).** Per this project's own ground rules
+(`docs/paper/JSA_MACHINE_WORK_PACKAGE.md` §0): never modify a frozen bank, and RTL
+changes on the lab machine are out of scope for this campaign — new numbers go to the
+corresponding author, not new RTL patches. The fix itself (one-line, upstream-proven) is
+trivial to port if the corresponding author wants it; recorded here as the honest
+finding, not applied.
+
+**Disposition: OPEN.** (a) real RTL bug, reproduced with a fresh Questa run at our pin,
+not inferred from the paper; (b) exposes a genuine gap in T4's UVM_ERROR-only error gate —
+a `` `RUNTIME_ASSERT ``-class RTL assertion can fire silently as far as the pass/fail
+verdict is concerned; (c) not fixed by decision, disclosed for the corresponding author.
+
+---
+
+## OBS-064 — REPRODUCED at our pin: SimX golden-model decode bug (not RTL) on a reserved
+M-extension `funct7` encoding causes a real DUT-vs-SimX divergence (FuzzGPU X2, upstream
+PR #358) ⟨2026-09-10⟩
+
+**Class:** GOLDEN-MODEL BUG (SimX only — NOT an RTL defect, corrects the paper's own
+"3 Vortex RTL bugs" framing) · **Disposition: OPEN — reproduced, not fixed by decision** ·
+**Found via:** W3-B, repro attempt against FuzzGPU finding "S2"/X2, upstream
+`vortexgpgpu/vortex` PR #358 ("Fix M-extension funct7 decoding"), fetched and diffed via
+the GitHub API on 2026-09-10.
+
+**What the upstream fix says, and where it actually lives.** The diff touches exactly one
+file: `sim/simx/decode.cpp` — **not** any `hw/rtl/*.sv` file. Pre-fix:
+```cpp
+if ((op == Opcode::R || op == Opcode::R_W) && (funct7 & 0x1)) {
+  switch (funct3) { case 0: instr->set_op_type(MdvType::MUL); break; ... }
+```
+i.e. SimX treats *any* R-type instruction with an odd `funct7` as RV32M, when the real
+encoding requires the exact 7-bit field `funct7 == 7'b0000001`. **This is a bug in
+Vortex's own reference/golden simulator, not in the RTL.** Confirmed by reading the RTL
+decode path at our pin — [`Vortex/hw/rtl/core/VX_decode.sv:178-194`](../Vortex/hw/rtl/core/VX_decode.sv#L178)
+uses `case (funct7) INST_R_F7_MUL: ... default: ...` (an exact-match `case`, no `&0x1`
+anywhere in the file), and `INST_R_F7_MUL = 7'b0000001` is defined at
+[`VX_gpu_pkg.sv:167`](../Vortex/hw/rtl/VX_gpu_pkg.sv#L167). The RTL has always required
+the exact encoding; only the *ISS reference model* was loose. Whatever FuzzGPU's
+differential harness flagged as a "Vortex RTL bug" here, on our reading of the diff, was
+actually their own execute-in-the-loop reference simulator diverging from correct RTL
+behavior — worth correcting in any citation of "3 Vortex RTL bugs" from that paper.
+
+**PoC used** — a reserved R-type encoding no real ISA extension defines: `opcode=0x33`
+(R-type), `funct3=0`, `funct7=7'b0000011` (odd, but ≠ `0000001`), `rd=a0, rs1=a1, rs2=a2`,
+hand-encoded via `.insn r 0x33, 0, 0x03, a0, a1, a2` (clang inline asm) in
+[`Vortex/tests/kernel/fuzzgpu_repro/main.cpp`](../Vortex/tests/kernel/fuzzgpu_repro/main.cpp)
+(`test_reserved_funct7`), with operands `rs1=3, rs2=5` chosen so ADD (8) and MUL (15) are
+distinguishable. Verified in the compiled ELF's disassembly: raw word `0x06c58533`
+decodes to exactly `opcode=0x33 funct3=0 funct7=0000011 rd=x10(a0) rs1=x11(a1) rs2=x12(a2)`.
+
+**Result — REPRODUCED, exactly as predicted from the code reading, not by trial and
+error.** Under `kernel_launch_test` (1CL/1C/4W/4T, QuestaSim 2021.2_1, same run as
+OBS-063):
+```
+UVM_ERROR .../vortex_scoreboard.svh(777) @ 71105000: [SCOREBOARD] MEM MISMATCH
+  addr=0x80007358  DUT=0x0000000000000008  SimX=0x000000000000000f
+```
+**DUT = 8 = 3+5 (ADD)** — the hardware, using its always-exact decode, correctly fell
+through to the ALU default case. **SimX = 15 = 3*5 (MUL)** — the unfixed golden model
+misdecoded the same reserved bit pattern as RV32M. **The hardware is right; the golden
+model is wrong** — the inverse of what a scoreboard mismatch normally means in this
+project, and the reason this kernel is deliberately **not** added to `run_suite.sh`: it
+is not meant to pass, and folding it into the regression suite would report a real DUT
+correctness finding as a suite failure.
+
+**Why this matters beyond one reserved opcode.** This is a live demonstration that our
+own lockstep/end-state scoreboard — built and validated throughout this project as a
+DUT-vs-SimX checker — is equally capable of surfacing a *golden-model* defect, not only
+DUT defects (OBS-029's discipline: "a green run … is compatible with the kernel having
+verified nothing" cuts both ways — a RED run can also indict the wrong side). No
+production kernel in the suite is known to emit this reserved encoding (compilers do
+not generate it), so this is a latent risk, not an active false-failure source in the
+existing 47-program bank.
+
+**Why not fixed here.** Same as OBS-063: RTL/SimX source changes are out of scope for
+this campaign per the runbook's own ground rules; recorded as a disclosed finding for
+the corresponding author, who owns `sim/simx/decode.cpp` upstream-parity decisions.
+
+**Disposition: OPEN.** Reproduced with a fresh Questa run at our pin; corrects "3 Vortex
+RTL bugs" to "2 RTL + 1 golden-model" for this specific PR when citing FuzzGPU's count;
+not fixed by decision.

@@ -917,7 +917,7 @@ below rather than done opportunistically.
 | W1 full re-definition (suite bank literally titled `_simtgen_<date>`) | **effectively superseded** — the 2026-09-09 rebank already folds `simtgen`'s divergence/memory closures into the suite bank (`cp_split_depth` 4/4, `cp_bank_conflict`/`cp_coalesce_kind` 3/3, in-bank not isolated-merge); `cp_vote_shfl_op` was ALREADY 8/8 pre-W4 via the `vote_shfl` directed kernel, not pending on it | — |
 | W2 (verification-cost timing table) | **done** — see below; scope reduced to 2 programs (vecadd_lite, wide_stress) vs runbook's suggested 3-4, disclosed | 0.5 day |
 | W3-A (marginal-coverage-per-program-kind table) | not started — mostly re-reading existing reports | 2–3 h |
-| W3-B (FuzzGPU PoC repro at our pin) | not started | 1–2 days |
+| W3-B (FuzzGPU PoC repro at our pin) | **done** — see below; X1/X2 reproduced with real Questa runs, X3 static-only (engineering cost) | 1–2 days budgeted, actual ~2h |
 | W7 (bug-discovery curve, no Questa needed) | **done** — `docs/paper/figures/bug_discovery_curve.{csv,png,md}` | 0.5 day |
 
 ### W0 — md5 duplicate guard wired into `run_suite.sh` (DONE)
@@ -975,6 +975,46 @@ same axis — each one is written *because* a specific gap was identified, not s
 already drew for riscv-dv alone; this table adds `simtgen`'s real, non-zero, comparatively
 small marginal yield to the same axis, and confirms the qualitative claim ("the SIMT
 stimulus gap needed a SIMT-aware generator, not more scalar seeds") the papers already make.
+
+### W3-B — FuzzGPU PoC repro attempts at our pin (DONE)
+
+**Provenance:** QuestaSim 2021.2_1 · Vortex submodule HEAD `af6bd9227e0e97df929f45c78eafc75a78f1c9b5`
+(Vortex `7a52ee5` + 18 local RTL mods, OBS-040) · config 1CL/1C/4W/4T · PoCs fetched
+from `vortexgpgpu/vortex` PRs #356/#358/#359 via the GitHub API/`.diff` endpoint on
+2026-09-10 (not reconstructed from memory or the paper's summary).
+
+New kernel: `Vortex/tests/kernel/fuzzgpu_repro/main.cpp` — bundles the X1 and X2 PoCs
+into one directed test (single compile+run for both, cost discipline), run once,
+**deliberately not added to `run_suite.sh`** since X2's expected outcome is a real
+DUT-vs-SimX mismatch, not a pass.
+
+| Item | PR | Result | Full evidence |
+| :--- | :--- | :--- | :--- |
+| **X1** — FPU compare-to-x0 unconditional writeback | #356 | **Reproduced.** Fires the RTL's own `invalid writeback register` `` `RUNTIME_ASSERT `` at the PoC's exact `feq.s x0,...` PC (`0x800001a8`). Bug present, unfixed at our pin. | `docs/RTL_OBSERVATIONS.md` OBS-063 |
+| **X2** — reserved M-extension `funct7` decode | #358 | **Reproduced, and re-scoped.** The upstream fix is entirely in `sim/simx/decode.cpp` — our RTL (`VX_decode.sv`) was always exact-match and never had this bug. A hand-encoded reserved opcode produces a genuine DUT-vs-SimX divergence: **DUT=8 (correct ADD), SimX=15 (wrong MUL)** — the hardware is right, the golden model is wrong. | OBS-064 |
+| **X3** — WMMA fp16/bf16 output format | #359 | **Not attempted (static-only).** Bug confirmed present by code inspection (pre-fix `VX_tcu_fedp_bhf.sv` signature, `fmt_d` still unused); building a working fp16/bf16-output WMMA kernel through this TB is real engineering (new format-conversion datapath exercise, ULP-tolerant compare), judged out of scope for this pass rather than a cheap PoC port. | none — no run performed |
+
+**One correction this repro attempt surfaces, worth carrying into the journal draft's
+citation of FuzzGPU's bug count:** of the "3 Vortex RTL bugs" commonly cited, X2/PR #358
+is — on inspection of the actual upstream diff, not assumption — a bug in Vortex's own
+golden/reference simulator (`sim/simx`), not the RTL. If citing a breakdown, say
+"2 RTL + 1 golden-model," not "3 RTL," when our own repro is the source of that claim.
+
+**A secondary methodological finding from X1 (OBS-063), disclosed for T4's own
+integrity):** the RTL's `` `RUNTIME_ASSERT `` macro resolves to `assert(cond) else
+$error msg` at our pin (`Vortex/hw/rtl/VX_platform.vh:42-43`) — a non-fatal
+SystemVerilog immediate assertion. It does **not** increment the `UVM_ERROR` count T4's
+honest error gate checks, and does not halt the run. A run that trips only this class of
+assertion, with no other scoreboard-visible mismatch, would report 0 UVM_ERROR and
+"TEST PASSED" despite a real RTL defect having fired mid-run. This did not happen in the
+W3-B run (X2's memory mismatch supplied real UVM_ERRORs independently), so no historical
+bank result is called into question by this — but it is a real, open gap in what T4's
+gate actually observes, worth a Future Work line.
+
+**What NOT to do, honored this pass:** neither X1 nor X2's underlying RTL/SimX source
+was modified — per the runbook's own ground rules, source changes are out of scope for
+this campaign and go to the corresponding author as a disclosed finding, not a patch
+from the lab machine.
 
 ### W4 — simtgen barrier + vote_shfl axis generators (DONE)
 

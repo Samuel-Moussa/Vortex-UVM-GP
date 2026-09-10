@@ -166,6 +166,22 @@ Honest claims for our papers:
 - Their bugs were filed at commit `2189194`, ours at pin `7a52ee5`;
   do not compare bug counts head-to-head without stating both pins.
 
+**W3-B repro attempts (2026-09-10, JSA_MACHINE_WORK_PACKAGE.md).** Fetched the three
+X1–X3 PoCs from upstream PRs #356/#358/#359 via the GitHub API and attempted each at
+our pin (`af6bd9227` submodule HEAD) with a real Questa run, not by inspection alone
+where a run was feasible:
+
+| Item | Upstream PR | Result at our pin | Evidence |
+| :--- | :--- | :--- | :--- |
+| X1 (FPU x0 writeback scoreboard) | #356 | **reproduced** — hits the RTL's own `invalid writeback register` assertion (`VX_scoreboard.sv:241`) at the exact PC of the PoC's `feq.s x0,...`; unfixed at our pin | `docs/RTL_OBSERVATIONS.md` OBS-063 |
+| X2 (M-extension funct7 decoding) | #358 | **reproduced, but re-scoped** — the diff is entirely in `sim/simx/decode.cpp`, not RTL; our RTL (`VX_decode.sv`) always exact-matched `funct7`. Confirmed a real DUT-vs-SimX divergence on a reserved encoding: DUT=8 (correct ADD), SimX=15 (wrong MUL) | OBS-064 |
+| X3 (WMMA fp16/bf16 RTL output) | #359 | **not attempted (static only)** — bug confirmed present by code inspection (`VX_tcu_fedp_bhf.sv` still has the pre-fix `` `UNUSED_VAR ({fmt_d, c_val})`` and lacks the format-widening datapath the fix adds), but building a working fp16/bf16-output WMMA kernel through this TB's TCU path is real engineering (new intrinsic usage, HardFloat conversion chain, ULP-tolerant compare), judged out of scope for this pass — not a cheap PoC port like X1/X2 | static grep only, no OBS entry (no run performed) |
+
+Net correction to this section's own bug-count framing: of the 3 items commonly cited
+as "3 Vortex RTL bugs" from FuzzGPU, one (X2/PR #358) is, on inspection of the actual
+diff, a golden-model (SimX) bug rather than an RTL bug. State "2 RTL + 1 golden-model"
+if citing this specific breakdown, not "3 RTL bugs," when our own repro is the source.
+
 ## 8. Re-run runbook (P0-2) — simtgen fold-in procedure
 
 Cannot be executed on this machine (no QuestaSim). Procedure of record
