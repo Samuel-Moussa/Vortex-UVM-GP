@@ -12,7 +12,7 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 | 1 | **W0** — md5 duplicate guard | ✅ done | see below |
 | 2 | **W4** — simtgen barrier + vote_shfl axes | ✅ done | see below |
 | 3 | **W1** — fold-in re-run | ✅ decided (disclose as-is) | see below |
-| 4 | **W2** — verification-cost table | 🔄 in progress | not yet linkable |
+| 4 | **W2** — verification-cost table | ✅ done | see below |
 | 5 | **W3** — generator comparison | ⚠️ W3-A done, W3-B not started | see below |
 | 6 | **W5** — EXT_D-off confirmatory elaboration | ✅ done | see below |
 | 7 | **W6** — cross-configuration re-bank | ✅ done | see below |
@@ -42,8 +42,9 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 
 ## W2 — verification-cost table
 
-In progress (timed Questa runs, 2 programs × 3 lockstep modes × 2 reps). Will be added here
-once the campaign completes and the write-up is committed.
+- Write-up (2 programs × 3 lockstep modes × 2 reps; scope reduced from the runbook's suggested
+  3-4 programs, disclosed): [`PAPER_BASE_EVALUATION.md` §W2](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ea8ca1d/docs/PAPER_BASE_EVALUATION.md#L1070-L1128)
+- Commit: [`2595ba7`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/2595ba7)
 
 ## W3 — generator comparison evidence
 
