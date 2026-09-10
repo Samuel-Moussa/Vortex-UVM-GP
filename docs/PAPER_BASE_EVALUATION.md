@@ -918,7 +918,7 @@ below rather than done opportunistically.
 | W2 (verification-cost timing table) | not started | 0.5 day |
 | W3-A (marginal-coverage-per-program-kind table) | not started — mostly re-reading existing reports | 2–3 h |
 | W3-B (FuzzGPU PoC repro at our pin) | not started | 1–2 days |
-| W7 (bug-discovery curve, no Questa needed) | not started — can run without the lab machine | 0.5 day |
+| W7 (bug-discovery curve, no Questa needed) | **done** — `docs/paper/figures/bug_discovery_curve.{csv,png,md}` | 0.5 day |
 
 ### W0 — md5 duplicate guard wired into `run_suite.sh` (DONE)
 
