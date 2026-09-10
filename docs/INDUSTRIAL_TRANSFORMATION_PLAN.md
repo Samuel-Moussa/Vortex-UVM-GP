@@ -11,7 +11,46 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**▶▶▶ RESUME HERE — 2026-09-09 (LATEST). This block supersedes every block below it as the cold-start
+**▶▶▶▶ RESUME HERE — 2026-09-10 (LATEST). This block supersedes every block below it as the
+cold-start entry point.** Two separate threads landed this session: (A) the mentor's JSA
+machine-work package (W0-W7, all done — see `docs/paper/JSA_MACHINE_WORK_PACKAGE_RESULTS.md`,
+now self-contained with inlined numbers + raw Questa evidence in `docs/paper/evidence/`, not
+just links); (B) resumed the 2026-09-09 coverage-plan checklist (`COVERAGE_RUN_CHECKLIST_
+20260909.md`) where it left off. This block covers (B) only.
+
+**What landed today on the coverage plan, in order:**
+1. **G1/G2 (1CL `cp_write_tag` gap) — done, negative result.** Re-ran `axi_stress` in
+   isolation (TIMEOUT 200k was undersized, not a hang — corrected to 1.5M). Its own
+   `vcover report -details` shows it only reaches `tag[0]`/`tag[1]`, not the target
+   `tag[4..7]` — worse than the old-model claim of reaching raw tag values up to 21 (that
+   claim was for a since-withdrawn coverpoint, not this one). **Not waived** — per the
+   project's own exclusion bar, "hard to hit" isn't grounds for exclusion and no RTL-cited
+   structural bound was proven. Root-cause hypothesis recorded (same ~3-outstanding-request
+   ceiling already measured, unwaived, for the closely related `cp_route_slot`), left
+   honestly uncovered as REACHABLE-needs-a-higher-concurrency-kernel. Detail + raw evidence:
+   `docs/coverage/COVERAGE_RUN_CHECKLIST_20260909.md` §6e/G1-G3.
+2. **T-cache — CLOSED.** `Vortex/tests/kernel/cache_evict/` (new, committed `4d7eabe1b`) —
+   scoped against the real RTL (Vortex has no MESI/snoop datapath; the one checkable
+   question is whether `fence` forces a stale L1 line out). 1CL/1C smoke PASSED (trivial,
+   0 readers, as expected). **2CL/2C/4W/4T (4 real cores) PASSED: `data_compared=194`, 0
+   mismatches** — every reader core correctly saw `NEW_PATTERN` after `fence`, despite
+   having `OLD_PATTERN` cached from Phase A. Non-vacuous by construction (core 0's own
+   slot excluded from the compare). `CLAUDE.md`'s T-cache checklist box closed with this
+   evidence (CLAUDE.md is gitignored/local — the closure lives there, not in a commit).
+
+**▶ NEXT, in order (per `COVERAGE_RUN_CHECKLIST_20260909.md` §8 "open items"):**
+(1) confirm `bank_2CL_2C_4W_4T_relayfix_20260910/` (produced as the mentor's W6) actually
+satisfies Phase F's own requirements (budget guards, `COV_NCL=2 COV_NC=2` export, hits-
+invariant gate) before accepting it as Phase F's answer outright; (2) Phase H — L2/L3
+shared-hierarchy bank, NOT yet redone on the relay-fixed design (only stale pre-OBS-045
+bank exists, `bank_2CL_2C_4W_4T_L2L3_20260818`); (3) D-matrix — reconcile the stale
+checklist text against what's actually banked now; (4) SIGN — final merged sign-off
+report, last.
+
+**Everything below this block is EARLIER (2026-09-09 and before) and still accurate for
+its own content — read it for background, not as the current resume point.**
+
+**▶▶▶ RESUME HERE — 2026-09-09. This block supersedes every block below it as the cold-start
 entry point; the blocks below remain accurate history for their own dates.** Full step-by-step
 detail for everything in this block: **`docs/coverage/COVERAGE_RUN_CHECKLIST_20260909.md`** (new this
 session — the followable plan/matrix doc; read it before re-deriving anything below).
