@@ -1039,6 +1039,30 @@ replacement:
 > `bar_masks`, `sfu_masks`); their contribution is generator completeness and seed-diversity
 > robustness evidence, the same category of result as the riscv-dv seed farm (§X)."
 
+### W1 — decision: disclose as-is, no full re-run (2026-09-10)
+
+Given W4's finding (`cp_vote_shfl_op` and `cross_sfu_threads` already 100% via directed
+kernels, `simtgen`'s barrier/vote_shfl axes close zero new bins), a full multi-hour suite
+re-run purely to fold 6 more kernels into the bank for a documentation-literalism reason
+was **explicitly decided against** — matches W1's own text ("otherwise run with 2 axes and
+disclose — still valuable, but say which axes"), extended to all 4 axes now that 2 more
+exist but are isolated-merge-verified rather than in-bank.
+
+**Final, precise bank-provenance state to carry into the journal draft:**
+
+| `simtgen` axis | Status | Evidence |
+| :--- | :--- | :--- |
+| divergence | **in the suite bank** (`bank_1CL_1C_4W_4T_L2_20260909`) | `cp_split_depth` 4/4 |
+| memory | **in the suite bank** (same bank) | `cp_bank_conflict`/`cp_coalesce_kind` 3/3 |
+| barrier | isolated-merge only | `vortex_uvm_env/cov/simtgen_barrier_vote_shfl_20260910/` |
+| vote_shfl | isolated-merge only | same isolated bank |
+
+No coverage claim depends on folding barrier/vote_shfl into the suite bank — their targets
+were already covered independently of `simtgen` before either axis existed. If a future
+session's suite re-run happens for an unrelated reason (e.g. a real RTL/TB change forcing
+a re-bank), fold these axis programs in at that point rather than launching a campaign
+solely for this.
+
 **What NOT to do, honored this pass:** no frozen bank was modified or overwritten; both new
 banks are new directories; no newly-unhit bin was waived to inflate a total; the
 1CL-vs-2CL comparison above states both configs explicitly rather than blending them.
