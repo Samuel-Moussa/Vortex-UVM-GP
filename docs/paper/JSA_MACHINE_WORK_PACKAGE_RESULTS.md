@@ -264,12 +264,26 @@ This is the bulletproof empirical confirmation of the paper's OBS-061 static cla
 gated by a testbench-injected define with no in-tree disable path, and removing it from the
 compile genuinely reverts FLEN to 32.
 
-**Not yet done (flagged, not silently skipped):** a full RTL+TB recompile with the define
-removed, one program run, and a covergroup-bin-count diff — real ~20–30 min compile cost
-each direction, queued behind higher-priority items.
+**Full recompile + bin-count diff — done.** The define was removed from the flist (the
+only place it appears), a full RTL+TB recompile run, confirmed via the real `vlog`
+invocation line that the define was genuinely absent from the compile (not just edited in
+an unread file). The run **PASSED**, 0 errors.
 
-- Full write-up: [`PAPER_BASE_EVALUATION.md` §W5](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/9ed91ce/docs/PAPER_BASE_EVALUATION.md#L886-L910)
+**Covergroup bin count: 536 total (D-disabled) vs. 524 (D-enabled baseline)** — same 23
+covergroups / 126 coverpoints in both. Investigated the +12 delta rather than asserting the
+runbook's naive "unchanged" expectation: a per-coverpoint diff shows it is **entirely
+confined to two coverpoints that are already weight-0 and excluded from every reported
+percentage** (`cp_occ`, `mem_usage_cp` — both documented red herrings, not new to this
+finding). **Every scored coverpoint has the identical bin count in both builds**, including
+`instr_class_cg_fpu`'s `cp_fpu_op` (12/12 in both) — the one coverpoint that could
+plausibly depend on FLEN. **Conclusion: disabling D changes zero scored/reachable bins** —
+every headline percentage this campaign has quoted is unaffected by whether D is silently
+enabled. The environment was restored to the default D-enabled build immediately after
+(`git diff` confirmed byte-identical to the pre-edit state).
+
+- Full write-up: [`PAPER_BASE_EVALUATION.md` §W5](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/49a9132/docs/PAPER_BASE_EVALUATION.md#L886-L941)
 - Real mechanism: [`vortex_rtl.flist:22`](https://github.com/Samuel-Moussa/vortex-uvm-gp-rtl/blob/1c72d523c/sim/uvmsim/flists/vortex_rtl.flist#L22)
+- Raw tool output (real `vlog` compile log, `SUMMARY.txt`, simulation log, both `vcover` summaries): [`W5_extd_off_recompile/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/49a9132/docs/paper/evidence/W5_extd_off_recompile)
 
 ---
 
