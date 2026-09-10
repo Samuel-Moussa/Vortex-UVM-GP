@@ -912,13 +912,43 @@ below rather than done opportunistically.
 
 | Item | Status | Effort (runbook) |
 | :--- | :--- | :--- |
-| W0 (md5 duplicate guard in `run_suite.sh`) | not started | 1–2 h |
+| W0 (md5 duplicate guard in `run_suite.sh`) | **done** — see below | 1–2 h |
 | W4 (simtgen `barrier` + `vote_shfl` axes) | not started — real code+debug work | 3–5 days |
 | W1 full re-definition (suite bank literally titled `_simtgen_<date>`) | **effectively superseded** — the 2026-09-09 rebank already folds `simtgen`'s divergence/memory closures into the suite bank (`cp_split_depth` 4/4, `cp_bank_conflict`/`cp_coalesce_kind` 3/3, in-bank not isolated-merge); `cp_vote_shfl_op` still 0/8 pending W4 | — |
 | W2 (verification-cost timing table) | not started | 0.5 day |
 | W3-A (marginal-coverage-per-program-kind table) | not started — mostly re-reading existing reports | 2–3 h |
 | W3-B (FuzzGPU PoC repro at our pin) | not started | 1–2 days |
 | W7 (bug-discovery curve, no Questa needed) | not started — can run without the lab machine | 0.5 day |
+
+### W0 — md5 duplicate guard wired into `run_suite.sh` (DONE)
+
+Added to `Vortex/sim/uvmsim/scripts/run_suite.sh`'s `runrv()`: tracks every riscv-dv
+program's md5 (already computed by `prepare.sh` into `riscv_dv_seed.txt`) in an
+associative array scoped to one suite invocation, and `exit 1`s the whole suite the
+moment two different profile names produce a byte-identical program — the exact FW-1b
+failure class, now fatal within a run instead of only a persistent cross-session
+warning (which stays, unchanged, as the standalone-usage fallback).
+
+Validated with two real Questa runs rather than a full campaign (a full-suite run was
+not justified purely to exercise this one branch): the guard logic was exercised against
+the actual, historical FW-1b duplicate pair using their seed-1 cached `.S` files —
+
+```
+riscv_pmp_test                   -> md5 16be14c6ebe6
+riscv_non_compressed_instr_test  -> md5 16be14c6ebe6   !! GUARD FIRES (correct -- real duplicate)
+riscv_arithmetic_basic_test      -> md5 2fd9e66ea9dd   (distinct program, no false positive)
+```
+
+Both directions confirmed: the guard fires on the known-duplicate pair and does not
+false-positive on a genuinely distinct profile. One incidental process note: the first
+validation attempt used `sim-only` against a work library still elaborated for the just-
+finished 2CL campaign — the I2 elaboration assert correctly fatal'd
+(`plusarg=1 but RTL compiled with 2`); this was an operator error in the validation
+harness, not a DUT or guard defect, and is recorded here only because the ground rules
+ask that every unexpected failure be classified rather than silently retried.
+
+Provenance: QuestaSim 2021.2_1, repo commit `dd8fa91` + this `run_suite.sh` change
+(committed alongside this entry), `Vortex/` submodule pin `c283230426796`.
 
 **What NOT to do, honored this pass:** no frozen bank was modified or overwritten; both new
 banks are new directories; no newly-unhit bin was waived to inflate a total; the
