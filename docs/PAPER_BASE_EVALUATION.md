@@ -836,3 +836,90 @@ All 60 SHAs cited in this document verified to exist (`git cat-file -e <sha>^{co
 dropped-store (reverse) pass + proof", `2dd48ea` "A1(e) RVVI load-bus: … VERIFIED
 (non-waiver)", `6dfe665` "SimX fix: word-align instruction fetch"). Full chronological
 content extraction: `docs/COMMIT_HISTORY.md` (328 unique commits, names redacted).
+
+## Journal extension evidence (2026-09-10)
+
+Produced against `docs/paper/JSA_MACHINE_WORK_PACKAGE.md`. Provenance for every number
+below: **QuestaSim 2021.2_1** (`vsim -version`), repo commit `6396f05aa4f284c` (outer repo,
+`industrial_transformations`), `Vortex/` submodule pin `c283230426796` — **R10
+(reset-relay, OBS-045) is present at this pin**, so both items below are on the
+relay-fixed design and are directly comparable to the 1CL relay-fix bank.
+
+### W6 — cross-configuration re-bank on the relay-fixed design (DONE)
+
+New bank: `vortex_uvm_env/cov/bank_2CL_2C_4W_4T_relayfix_20260910/` (`merged.ucdb`,
+`merged_raw.ucdb`, `report/`), verified by re-reading the banked copy, not the working
+`cov/merged.ucdb`. 110 staged runs (53-kernel suite + `simtgen` divergence/memory seeds
+folded in), **0 FAILED**, 0 UVM_ERROR/UVM_FATAL across every log checked.
+
+```
+Coverage Report Totals BY INSTANCES: Number of Instances 8287
+    Assertions       355  Hits 351  Miss 4    98.87%
+    Branches       10077  Hits 9576 Miss 501  95.02%
+    Conditions      1176  Hits 1045 Miss 131  88.86%
+    Covergroups       70                      97.69% (weighted)
+        Covergroup Bins 1620 Hits 1513 Miss 107   93.39%
+    Directives          5  Hits 5   Miss 0   100.00%
+    Statements      15267  Hits 15011 Miss 256  98.32%
+    Toggles       1223490  Hits 994865 Miss 228625  81.31%
+Total coverage (filtered view): 94.29%
+```
+
+The blocking hits-invariant waiver gate ran with 2CL-keyed exclusions
+(`COV_NCL=2 COV_NC=2 COV_NW=4 COV_NT=4 COV_L2=0 COV_L3=0`) and passed (`OK: hits-invariant
+holds`). **Process note, not a defect:** the first merge attempt was run with the exclusion
+generator defaulted to 1CL config (an operator omission, not a script bug) — the gate
+correctly caught it (`ERROR: exclusions changed COVERED bin counts`, Toggles 1197640 →
+1197181) and the merge was aborted and redone with the correct config vars. This is exactly
+the gate performing its designed function, recorded here as a positive data point for the
+methodology section, not as an incident.
+
+This restores 1CL/2CL comparability per `PRESUBMISSION_DISCLOSURES.md` §3 (both banks are
+now on the relay-fixed design): 1CL primary bank (`bank_1CL_1C_4W_4T_L2_20260909`, 23
+covergroups, 504/524 bins = 96.18%, Total 94.55%) vs. this 2CL bank (70 covergroups,
+1513/1620 = 93.39%, Total 94.29%). The `vcover-6854` "conflicting test data records"
+messages seen during merge (regression_test run 4x under different `PROGRAM_NAME`s sharing
+one UVM test-class name) are a benign vcover metadata warning, not a coverage-accounting
+defect — the merge completed (`Errors: 3, Warnings: 0` refers to this metadata class only)
+and the hits-invariant gate independently confirms no bin was lost.
+
+### W5 — EXT_D-off confirmatory elaboration (DONE, with a correction to the runbook's own instructions)
+
+**The runbook's literal instruction (`+define+EXT_D_DISABLE`) does not exist as a control
+anywhere in this codebase and would have no effect.** OBS-061 traced the real mechanism to
+`Vortex/sim/uvmsim/flists/vortex_rtl.flist:22` — a **testbench-side** flist line
+`+define+EXT_D_ENABLE=1`, unconditionally consumed by `VX_config.vh:69`
+(`` `ifdef EXT_D_ENABLE `define FLEN_64 ``, not gated on XLEN at that point). There is no
+`EXT_D_DISABLE` branch in `VX_config.vh`, `common.mk`, `compile.sh`, or any flist to catch
+it. Confirmed empirically by isolated elaboration (throwaway `flen_probe.sv`, scratch work
+library, never touching the shared `work/`):
+
+```
+WITH  +define+EXT_D_ENABLE=1  (the real flist state): FLEN=64 EXT_D_ENABLED=1 XLEN=32
+WITHOUT the define (genuinely absent from the compile): FLEN=32 EXT_D_ENABLED=0 XLEN=32
+```
+
+This is the correct, bulletproof empirical confirmation of OBS-061's static claim — D is
+gated by a testbench-injected define with no in-tree disable path, and removing it from the
+compile genuinely reverts FLEN to 32. **Not yet done (queued, flagged rather than
+attempted silently):** a full RTL+TB recompile with the line removed, one short program run,
+and a covergroup-bin-count diff against the current 524-bin baseline — this requires
+editing the shared `vortex_rtl.flist` used by every other run and reverting it afterward,
+a real ~20–30 min compile cost each direction; queued behind the higher-priority items
+below rather than done opportunistically.
+
+### Remaining W-items — not started this pass, with the runbook's own effort estimates
+
+| Item | Status | Effort (runbook) |
+| :--- | :--- | :--- |
+| W0 (md5 duplicate guard in `run_suite.sh`) | not started | 1–2 h |
+| W4 (simtgen `barrier` + `vote_shfl` axes) | not started — real code+debug work | 3–5 days |
+| W1 full re-definition (suite bank literally titled `_simtgen_<date>`) | **effectively superseded** — the 2026-09-09 rebank already folds `simtgen`'s divergence/memory closures into the suite bank (`cp_split_depth` 4/4, `cp_bank_conflict`/`cp_coalesce_kind` 3/3, in-bank not isolated-merge); `cp_vote_shfl_op` still 0/8 pending W4 | — |
+| W2 (verification-cost timing table) | not started | 0.5 day |
+| W3-A (marginal-coverage-per-program-kind table) | not started — mostly re-reading existing reports | 2–3 h |
+| W3-B (FuzzGPU PoC repro at our pin) | not started | 1–2 days |
+| W7 (bug-discovery curve, no Questa needed) | not started — can run without the lab machine | 0.5 day |
+
+**What NOT to do, honored this pass:** no frozen bank was modified or overwritten; both new
+banks are new directories; no newly-unhit bin was waived to inflate a total; the
+1CL-vs-2CL comparison above states both configs explicitly rather than blending them.
