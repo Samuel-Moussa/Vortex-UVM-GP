@@ -315,25 +315,46 @@ All 7 uncovered bins in the 1CL bank, classified:
 Closing them takes raw covergroup bins from 370/377 (98.14%) to 374/377 (99.20%); the
 remaining 3 are weight-0 by design and cannot be "closed" at all.
 
-- [ ] **G1** **Reuse before writing.** `Vortex/tests/kernel/axi_stress/` already exists and
-      was purpose-built for exactly this: "the write tag (awid=mem_req_tag) ... only
-      1,3,..21 had been seen — 23,27,31 stayed unhit ... reaching the high tbuf slots and
-      high write tags needs MANY *simultaneously outstanding*, NON-COALESCING memory
-      transactions." It is config-aware (grid from `vx_num_cores/warps/threads`),
-      printf-free, deterministic, and already passes vs SimX.
-
-      It was benched as "0 new route bins" and left **out of `run_suite.sh`** — but that
-      verdict was against the **OLD** coverage model. OBS-030 then withdrew
-      `cp_id_route`/`cross_type_route` and replaced them with `cp_route_port` /
-      `cp_route_slot` / `cp_write_tag` / `cross_port_slot`. **`axi_stress` has never been
-      measured against `cp_write_tag`.** Run it first — it may close all 4 bins at zero
-      new-code cost. Only if it does not, write a new `wtag_spread` kernel (device-derived
-      grid per OBS-028, no self-check race per OBS-026, deterministic integer stores).
-- [ ] **G2** Verify against the target BEFORE banking: run it alone, confirm `tag[4..7]`
-      move. If they do not, the bound is real — then investigate the tag encoding and
-      classify as structural **with a citation**, or leave honestly uncovered. Do not waive
-      to close the number.
-- [ ] **G3** Only then fold it into the suite and re-bank.
+- [x] **G1** **Reuse before writing — done 2026-09-10.** `Vortex/tests/kernel/axi_stress/`
+      already exists and was purpose-built for exactly this. Re-ran it in isolation
+      (`kernel_launch_test`, 1CL/1C/4W/4T, TIMEOUT=1,500,000 — the original 200,000 was an
+      undersized budget, not a real hang; `TB_STATUS` showed `mem=` still climbing linearly
+      at cycle 199,000 with no stall, a mostly-serial `.bss`-init cost, not contention).
+      Real Questa run, raw evidence:
+      [`docs/paper/evidence/G1_axi_stress_cp_write_tag/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/main/docs/paper/evidence/G1_axi_stress_cp_write_tag).
+- [x] **G2** Verify against the target — done, **NEGATIVE RESULT.** `vcover report -details`
+      on the passing run's own UCDB (isolated, not suite-merged):
+      ```
+      Coverpoint cp_write_tag   25.00%   2/8 covered
+        bin tag[0]   9084 hits   Covered
+        bin tag[1]     37 hits   Covered
+        bin tag[2]      0 hits   ZERO
+        bin tag[3]      0 hits   ZERO
+        bin tag[4]      0 hits   ZERO   <- target
+        bin tag[5]      0 hits   ZERO   <- target
+        bin tag[6]      0 hits   ZERO   <- target
+        bin tag[7]      0 hits   ZERO   <- target
+      ```
+      `axi_stress` alone does **not** move tag[4..7] — it does not even reach tag[2]/tag[3]
+      in isolation (worse than the old-model claim of raw write IDs up to 21, which maps to
+      the old, since-withdrawn coverpoint, not this one). The bound is real for THIS
+      kernel's achieved concurrency, not proven structural for the RTL.
+      **Root-cause hypothesis, not yet proven:** `VX_axi_adapter.sv:262`
+      (`m_axi_awid = TAG_WIDTH_OUT'(xbar_tag_out)`) passes through the *same* underlying
+      memory-request tag the read path uses — i.e. `cp_write_tag`'s reachable range is
+      governed by the same tag-buffer/allocator mechanism already measured (§6e/G-precedent)
+      to top out at **~3 simultaneously outstanding** requests for `cp_route_slot`, not by
+      total request volume over time. This kernel issues K=4 independent writes per thread
+      × 16 threads = 64 total, but warp-serialized issue likely caps true concurrency well
+      below that, matching the observed low tag values.
+- [ ] **G3** NOT folded into the suite (nothing to fold — G2 was negative). Per the
+      project's own exclusion bar (§6d), this is **NOT waived** — "hard to hit" is not
+      grounds for exclusion, and the concurrency bound above is a hypothesis, not an RTL
+      citation. **Disposition: REACHABLE — needs a genuinely higher-concurrency kernel than
+      `axi_stress` achieves** (a new `wtag_spread`-class kernel, or proving the ~3-outstanding
+      bound with the same rigor as the accepted `cp_route_slot` precedent). Left honestly
+      uncovered; matches the diminishing-returns precedent already accepted for the closely
+      related `cp_route_slot` slots 4-15. Not pursued further this pass — future work.
 
 ## 7. PHASE F — 2CL (2CL / 2C / 4W / 4T)
 
