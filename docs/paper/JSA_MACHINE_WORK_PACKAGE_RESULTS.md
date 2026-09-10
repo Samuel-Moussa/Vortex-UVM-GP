@@ -121,9 +121,10 @@ their targets were already covered independently of `simtgen` before either axis
 
 ## W2 — verification-cost table
 
-**Scope, disclosed honestly:** the runbook suggested 3–4 programs; this pass measured
-**2** — `vecadd_lite` (small, ~9.9k cycles) and `wide_stress` (large, high-toggle 256KB
-kernel). Both programs' full 3-mode × 2-rep matrices completed cleanly (12/12 runs, rc=0).
+**Scope now matches the runbook's own suggested list exactly** — "vecadd, a divergence
+kernel, fpu_test, one large memory kernel." **4 programs**: `vecadd_lite`, `diverge_lite`,
+`fpu_test`, `wide_stress`. (First pass measured only `vecadd_lite`/`wide_stress`, disclosed
+as a reduction; `diverge_lite`/`fpu_test` added in a second pass.)
 
 **The table — ready to drop into the paper:**
 
@@ -132,17 +133,30 @@ kernel). Both programs' full 3-mode × 2-rep matrices completed cleanly (12/12 r
 | vecadd_lite | plain | 15.3 s | 296,378 KB |
 | vecadd_lite | lockstep | 15.0 s | 299,204 KB |
 | vecadd_lite | lockstep_feed | 14.8 s | 299,124 KB |
+| diverge_lite | plain | 17.8 s | 297,170 KB |
+| diverge_lite | lockstep | 18.2 s | 300,826 KB |
+| diverge_lite | lockstep_feed | 18.1 s | 301,392 KB |
+| fpu_test | plain | 21.0 s | 296,226 KB |
+| fpu_test | lockstep | 20.7 s | 300,754 KB ⚠️ see note |
+| fpu_test | lockstep_feed | 21.0 s | 300,592 KB |
 | wide_stress | plain | 851.4 s (14m 11s) | 549,144 KB |
 | wide_stress | lockstep | 871.1 s (14m 31s) | 707,994 KB |
 | wide_stress | lockstep_feed | 856.0 s (14m 16s) | 707,718 KB |
 
+**⚠️ `fpu_test` × `lockstep` reported `TEST FAILED` (both reps) — this is the pre-existing,
+already-documented OBS-014 residual (a genuine 1-ULP `fsqrt.s` DUT-vs-SimX disagreement),
+re-confirmed, not a new defect.** `LOCKSTEP` without `LOCKSTEP_LOADFEED` armed always shows
+this; timing was still captured and is included for completeness, but don't cite that row
+as a passing baseline — use `lockstep_feed` for `fpu_test`'s true comparison point.
+
 **Reading:**
-- Lockstep's wall-clock overhead is small, within run-to-run noise at both program sizes.
-- Peak RSS shows a clear step at `wide_stress` between `plain` (549 MB) and either lockstep
-  mode (708 MB, **+29%**) — the second (SimX) model instance adds real memory; not
-  noticeable at `vecadd_lite`'s smaller working set (**+1%**).
+- Lockstep's wall-clock overhead is small, within run-to-run noise at every program size.
+- Peak RSS shows a consistent ~+1.3% step at every small kernel (plain → either lockstep
+  mode) from the second (SimX) model instance's bookkeeping; `wide_stress` shows a much
+  larger relative step (549→708 MB, **+29%**) though the *absolute* small-kernel deltas
+  (~4 MB) are close to being dominated by the same fixed cost.
 - Wall clock scales with program size far more than with lockstep mode: `wide_stress` is
-  ~57x `vecadd_lite`'s wall clock at every mode.
+  ~40-57x the small kernels' wall clock at every mode.
 
 **Raw per-rep CSV:**
 
@@ -160,7 +174,22 @@ wide_stress,lockstep,1,14:24.08,707992,0
 wide_stress,lockstep,2,14:38.21,707996,0
 wide_stress,lockstep_feed,1,14:21.84,707808,0
 wide_stress,lockstep_feed,2,14:10.16,707628,0
+fpu_test,plain,1,0:20.84,296380,0
+fpu_test,plain,2,0:21.19,296072,0
+fpu_test,lockstep,1,0:20.75,300820,2
+fpu_test,lockstep,2,0:20.73,300688,2
+fpu_test,lockstep_feed,1,0:21.43,300480,0
+fpu_test,lockstep_feed,2,0:20.61,300704,0
+diverge_lite,plain,1,0:17.68,297080,0
+diverge_lite,plain,2,0:17.88,297260,0
+diverge_lite,lockstep,1,0:18.37,300760,0
+diverge_lite,lockstep,2,0:17.97,300892,0
+diverge_lite,lockstep_feed,1,0:17.87,301280,0
+diverge_lite,lockstep_feed,2,0:18.41,301504,0
 ```
+
+**Raw tool output** — all 24 real `/usr/bin/time -v` files + Questa simulation logs:
+[`W2_verification_cost/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/f2be010/docs/paper/evidence/W2_verification_cost)
 
 - Full write-up: [`PAPER_BASE_EVALUATION.md` §W2](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ea8ca1d/docs/PAPER_BASE_EVALUATION.md#L1070-L1128)
 - Raw tool output (all 12 real `/usr/bin/time -v` files + simulation logs): [`W2_verification_cost/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W2_verification_cost)
