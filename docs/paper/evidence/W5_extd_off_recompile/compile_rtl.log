@@ -1,0 +1,437 @@
+QuestaSim-64 vlog 2021.2_1 Compiler 2021.05 May 15 2021
+Start time: 19:45:03 on Sep 10,2026
+vlog -sv -cover bcst "+define+FPU_FPNEW" "+define+TCU_BHF" "+define+EXT_TCU_ENABLE=1" "+define+NUM_CLUSTERS=1" "+define+NUM_CORES=1" "+define+NUM_WARPS=4" "+define+NUM_THREADS=4" "+define+ICACHE_MSHR_SIZE=16" "+define+DCACHE_MSHR_SIZE=16" "+define+ICACHE_MREQ_SIZE=16" "+define+DCACHE_MREQ_SIZE=16" "+define+USE_AXI_WRAPPER" "+incdir+/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/common_cells/include" -f vortex_rtl.flist 
+-- Compiling package VX_gpu_pkg
+-- Compiling package VX_gpu_pkg
+** Warning: ** while parsing file included at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_pkg.sv(18)
+** at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/VX_gpu_pkg.sv(21): (vlog-2275) Existing package 'VX_gpu_pkg' at line 21 will be overwritten.
+-- Compiling package VX_tcu_pkg
+-- Importing package VX_gpu_pkg
+-- Compiling package VX_gpu_pkg
+** Warning: ** while parsing file included at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/fpu/VX_fpu_pkg.sv(19)
+** at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/VX_gpu_pkg.sv(21): (vlog-2275) Existing package 'VX_gpu_pkg' at line 21 will be overwritten.
+-- Compiling package VX_fpu_pkg
+-- Compiling package VX_trace_pkg
+-- Importing package VX_tcu_pkg
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/float_dpi.vh(17): (vlog-13233) Design unit "float_dpi_vh_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package float_dpi_vh_unit
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/dpi/util_dpi.vh(23): (vlog-13233) Design unit "util_dpi_vh_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package util_dpi_vh_unit
+-- Compiling interface VX_branch_ctl_if
+-- Compiling interface VX_commit_csr_if
+-- Compiling interface VX_commit_if
+-- Compiling interface VX_commit_sched_if
+-- Compiling interface VX_dcr_bus_if
+-- Compiling interface VX_decode_if
+-- Compiling interface VX_decode_sched_if
+-- Compiling interface VX_dispatch_if
+-- Compiling interface VX_execute_if
+-- Compiling interface VX_fetch_if
+-- Compiling interface VX_ibuffer_if
+-- Compiling interface VX_issue_sched_if
+-- Compiling interface VX_operands_if
+-- Compiling interface VX_result_if
+-- Compiling interface VX_sched_csr_if
+-- Compiling interface VX_schedule_if
+-- Compiling interface VX_scoreboard_if
+-- Compiling interface VX_warp_ctl_if
+-- Compiling interface VX_writeback_if
+-- Compiling interface VX_gbar_bus_if
+-- Compiling interface VX_lsu_mem_if
+-- Compiling interface VX_mem_bus_if
+-- Compiling interface VX_fpu_csr_if
+-- Importing package VX_fpu_pkg
+-- Compiling module VX_allocator
+-- Compiling module VX_async_ram_patch
+-- Compiling module VX_avs_adapter
+-- Compiling module VX_axi_adapter
+-- Compiling module VX_axi_write_ack
+-- Compiling module VX_bits_concat
+-- Compiling module VX_bits_insert
+-- Compiling module VX_bits_remove
+-- Compiling module VX_bypass_buffer
+-- Compiling module VX_cyclic_arbiter
+-- Compiling module VX_demux
+-- Compiling module VX_divider
+-- Compiling module VX_dp_ram
+-- Compiling module VX_edge_trigger
+-- Compiling module VX_elastic_adapter
+-- Compiling module VX_elastic_buffer
+-- Compiling module VX_fifo_queue
+-- Compiling module VX_find_first
+-- Compiling module VX_generic_arbiter
+-- Compiling module VX_index_buffer
+-- Compiling module VX_index_queue
+-- Compiling module VX_lzc
+-- Compiling module VX_matrix_arbiter
+-- Compiling module VX_mem_bank_adapter
+-- Compiling module VX_mem_coalescer
+-- Compiling module VX_mem_data_adapter
+-- Compiling module VX_mem_scheduler
+-- Compiling module VX_multiplier
+-- Compiling module VX_mux
+-- Compiling module VX_nz_iterator
+-- Compiling module VX_onehot_encoder
+-- Compiling module VX_onehot_mux
+-- Compiling module VX_onehot_shift
+-- Compiling module VX_pe_serializer
+-- Compiling module VX_pending_size
+-- Compiling module VX_pipe_buffer
+-- Compiling module VX_pipe_register
+-- Compiling module VX_placeholder
+-- Compiling module VX_popcount63
+-- Compiling module VX_popcount32
+-- Compiling module VX_sum33
+-- Compiling module VX_popcount
+-- Compiling module VX_priority_arbiter
+-- Compiling module VX_priority_encoder
+-- Compiling module VX_reduce_tree
+-- Compiling module VX_reset_relay
+-- Compiling module VX_rr_arbiter
+-- Compiling module VX_scan
+-- Compiling module VX_scope_switch
+-- Compiling module VX_scope_tap
+-- Compiling module VX_serial_div
+-- Compiling module VX_serial_mul
+-- Compiling module VX_shift_register
+-- Compiling module VX_skid_buffer
+-- Compiling module VX_sp_ram
+-- Compiling module VX_stream_arb
+-- Compiling module VX_stream_buffer
+-- Compiling module VX_stream_omega
+-- Compiling module VX_stream_pack
+-- Compiling module VX_stream_switch
+-- Compiling module VX_stream_unpack
+-- Compiling module VX_stream_xbar
+-- Compiling module VX_stream_xpoint
+-- Compiling module VX_ticket_lock
+-- Compiling module VX_toggle_buffer
+-- Compiling module VX_transpose
+-- Compiling module reverse
+-- Compiling module lowMaskHiLo
+-- Compiling module lowMaskLoHi
+-- Compiling module countLeadingZeros
+-- Compiling module compressBy2
+-- Compiling module compressBy4
+-- Compiling module recFNToRawFN
+-- Compiling module roundAnyRawFNToRecFN
+-- Compiling module roundRawFNToRecFN
+-- Compiling module roundRawFNtoRecFN_mixed
+-- Compiling module addRecFNToRaw
+-- Compiling module addRecFN
+-- Compiling module mulRecFNToFullRaw
+-- Compiling module mulRecFNToRaw
+-- Compiling module mulRecFN
+-- Compiling module mulAddRecFNToRaw_preMul
+-- Compiling module mulAddRecFNToRaw_postMul
+-- Compiling module mulAddRecFNToRaw
+-- Compiling module mulAddRecFN
+-- Compiling module divSqrtRecFNToRaw_small
+-- Compiling module divSqrtRecFN_small
+-- Compiling module compareRecFN
+-- Compiling module recFNToFN
+-- Compiling module fNToRecFN
+-- Compiling module iNToRawFN
+-- Compiling module iNToRecFN
+-- Compiling module recFNToIN
+-- Compiling module isSigNaNRecFN
+-- Compiling module recFNToRecFN
+-- Compiling module recFNToRecFN_unsafe
+-- Compiling package bsg_hardfloat_pkg
+-- Compiling module bsg_counting_leading_zeros
+-- Compiling module VX_tcu_bhf_bf16mul
+-- Compiling module VX_tcu_bhf_fadd
+-- Compiling module VX_tcu_bhf_fmul
+-- Compiling module VX_fpu_unit
+-- Compiling module VX_tcu_fedp_bhf
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_fedp_bhf.sv(124): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_fedp_bhf.sv(125): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_fedp_bhf.sv(126): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fp16_to_fp32
+-- Compiling module bf16_to_fp32
+-- Compiling module VX_tcu_fedp_dsp
+-- Compiling module VX_tcu_fedp_int
+-- Compiling module VX_tcu_fp
+-- Compiling module VX_tcu_int
+-- Compiling module VX_tcu_top
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_top.sv(26): (vlog-13314) Defaulting port 'execute_data' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_tcu_unit
+-- Compiling package VX_gpu_pkg
+** Warning: ** while parsing file included at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_uops.sv(16)
+** while parsing file included at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_pkg.sv(18)
+** at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/VX_gpu_pkg.sv(21): (vlog-2275) Existing package 'VX_gpu_pkg' at line 21 will be overwritten.
+-- Compiling package VX_tcu_pkg
+** Warning: ** while parsing file included at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_uops.sv(16)
+** at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_pkg.sv(24): (vlog-2275) Existing package 'VX_tcu_pkg' at line 24 will be overwritten.
+-- Compiling module VX_tcu_uops
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_uops.sv(27): (vlog-13314) Defaulting port 'ibuf_in' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_cache_flush
+-- Compiling module VX_cache_init
+-- Compiling module plru_decoder
+-- Compiling module plru_encoder
+-- Compiling module VX_cache_repl
+-- Compiling module VX_cache_tags
+-- Compiling module VX_cache_data
+-- Compiling module VX_cache_mshr
+-- Compiling module VX_cache_bank
+-- Compiling module VX_cache_bypass
+-- Compiling module VX_cache
+-- Compiling module VX_cache_cluster
+-- Compiling module VX_cache_wrap
+-- Compiling module VX_cache_top
+-- Compiling module VX_gbar_arb
+-- Compiling module VX_gbar_unit
+-- Compiling module VX_local_mem
+-- Compiling module VX_lmem_switch
+-- Compiling module VX_local_mem_top
+-- Compiling module VX_lsu_adapter
+-- Compiling module VX_lsu_mem_arb
+-- Compiling module VX_mem_arb
+-- Compiling module VX_mem_switch
+-- Compiling module VX_uuid_gen
+-- Compiling module VX_ipdom_stack
+-- Compiling module VX_uop_sequencer
+-- Compiling module VX_ibuffer
+-- Compiling module VX_fetch
+-- Compiling module VX_decode
+-- Compiling module VX_operands
+-- Compiling module VX_scoreboard
+-- Compiling module VX_schedule
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_schedule.sv(28): (vlog-13314) Defaulting port 'base_dcrs' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_issue_slice
+-- Compiling module VX_issue_top
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_issue_top.sv(30): (vlog-13314) Defaulting port 'decode_op_args' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_issue
+-- Compiling module VX_alu_int
+-- Compiling module VX_alu_muldiv
+-- Compiling module VX_alu_unit
+-- Compiling module VX_lsu_slice
+-- Compiling module VX_lsu_unit
+-- Compiling module VX_gather_unit
+-- Compiling module VX_mem_unit
+-- Compiling module VX_mem_unit_top
+-- Compiling module VX_sfu_unit
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_sfu_unit.sv(28): (vlog-13314) Defaulting port 'base_dcrs' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_opc_unit
+-- Compiling module VX_wctl_unit
+-- Compiling module VX_split_join
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_split_join.sv(24): (vlog-13314) Defaulting port 'split' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_split_join.sv(25): (vlog-13314) Defaulting port 'sjoin' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_dispatch_unit
+-- Compiling module VX_dispatch
+-- Compiling module VX_execute
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_execute.sv(30): (vlog-13314) Defaulting port 'base_dcrs' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_commit
+-- Compiling module VX_dcr_data
+-- Compiling module VX_csr_data
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_csr_data.sv(41): (vlog-13314) Defaulting port 'base_dcrs' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_csr_unit
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/core/VX_csr_unit.sv(24): (vlog-13314) Defaulting port 'base_dcrs' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module VX_pe_switch
+-- Compiling module VX_core
+-- Compiling module VX_core_top
+-- Compiling module VX_socket
+-- Compiling module VX_cluster
+-- Compiling module Vortex
+-- Compiling module Vortex_axi
+-- Compiling package cf_math_pkg
+-- Compiling package defs_div_sqrt_mvp
+-- Compiling package fpnew_pkg
+-- Compiling module lzc
+-- Importing package cf_math_pkg
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/common_cells/src/lzc.sv(66): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/common_cells/src/lzc.sv(66): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/common_cells/src/lzc.sv(67): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module rr_arb_tree
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/preprocess_mvp.sv(35): (vlog-13233) Design unit "preprocess_mvp_sv_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package preprocess_mvp_sv_unit
+-- Importing package defs_div_sqrt_mvp
+-- Compiling module preprocess_mvp
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/nrbd_nrsc_mvp.sv(34): (vlog-13233) Design unit "nrbd_nrsc_mvp_sv_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package nrbd_nrsc_mvp_sv_unit
+-- Compiling module nrbd_nrsc_mvp
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/norm_div_sqrt_mvp.sv(44): (vlog-13233) Design unit "norm_div_sqrt_mvp_sv_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package norm_div_sqrt_mvp_sv_unit
+-- Compiling module norm_div_sqrt_mvp
+-- Compiling module iteration_div_sqrt_mvp
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(41): (vlog-13233) Design unit "control_mvp_sv_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package control_mvp_sv_unit
+-- Compiling module control_mvp
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3041): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3045): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3049): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3053): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3057): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3061): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3065): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3069): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3079): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3083): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3087): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3091): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3095): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3099): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3103): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3107): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3111): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3115): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3119): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3123): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3127): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3131): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3135): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3139): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3143): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3147): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3157): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3161): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3165): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3169): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3180): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3184): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/control_mvp.sv(3188): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/div_sqrt_top_mvp.sv(35): (vlog-13233) Design unit "div_sqrt_top_mvp_sv_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package div_sqrt_top_mvp_sv_unit
+-- Compiling module div_sqrt_top_mvp
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpu_div_sqrt_mvp/hdl/div_sqrt_mvp_wrapper.sv(39): (vlog-13233) Design unit "div_sqrt_mvp_wrapper_sv_unit" already exists and will be overwritten. Design unit compiled with different set of options.
+-- Compiling package div_sqrt_mvp_wrapper_sv_unit
+-- Compiling module div_sqrt_mvp_wrapper
+-- Compiling module fpnew_classifier
+-- Importing package fpnew_pkg
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(22): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(54): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(55): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(56): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(57): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(58): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(59): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(60): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(61): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(62): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(64): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(65): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(66): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(67): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(68): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(69): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(70): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_classifier.sv(71): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fpnew_rounding
+-- Compiling module fpnew_fma
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma.sv(31): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module fpnew_fma_multi
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(32): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(33): (vlog-13314) Defaulting port 'is_boxed_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(323): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(324): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(325): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(332): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(333): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(336): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(337): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(340): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(343): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(347): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(351): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(355): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(356): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(800): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(803): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(806): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_fma_multi.sv(807): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fpnew_divsqrt_multi
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_divsqrt_multi.sv(33): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_divsqrt_multi.sv(34): (vlog-13314) Defaulting port 'is_boxed_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module fpnew_noncomp
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_noncomp.sv(31): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+-- Compiling module fpnew_cast_multi
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(241): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(242): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(529): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(544): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(545): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(580): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(581): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(584): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(585): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(607): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(611): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(645): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(650): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(651): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(688): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(689): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(693): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(696): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_cast_multi.sv(697): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fpnew_opgroup_fmt_slice
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_fmt_slice.sv(36): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_fmt_slice.sv(105): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_fmt_slice.sv(105): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_fmt_slice.sv(106): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fpnew_opgroup_multifmt_slice
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(40): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(41): (vlog-13314) Defaulting port 'is_boxed_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(197): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(197): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(199): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(201): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(209): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(213): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_multifmt_slice.sv(219): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fpnew_opgroup_block
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_block.sv(38): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_block.sv(39): (vlog-13314) Defaulting port 'is_boxed_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_block.sv(104): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_block.sv(104): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_opgroup_block.sv(104): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module fpnew_top
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_top.sv(34): (vlog-13314) Defaulting port 'operands_i' kind to 'var' rather than 'wire' due to default compile option setting of -svinputport=relaxed.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_top.sv(121): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_top.sv(121): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+** Warning: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/third_party/cvfpu/src/fpnew_top.sv(122): (vlog-2583) [SVCHK] - Extra checking for conflicts with always_comb and always_latch variables is done at vopt time.
+-- Compiling module VX_fpu_fpnew
+
+Top level modules:
+	VX_async_ram_patch
+	VX_avs_adapter
+	VX_bypass_buffer
+	VX_divider
+	VX_edge_trigger
+	VX_index_queue
+	VX_mem_bank_adapter
+	VX_onehot_mux
+	VX_onehot_shift
+	VX_pe_serializer
+	VX_popcount63
+	VX_popcount32
+	VX_sum33
+	VX_scope_switch
+	VX_scope_tap
+	VX_serial_mul
+	VX_skid_buffer
+	VX_stream_xpoint
+	VX_ticket_lock
+	roundRawFNtoRecFN_mixed
+	addRecFN
+	mulRecFN
+	mulAddRecFN
+	divSqrtRecFN_small
+	compareRecFN
+	iNToRecFN
+	recFNToIN
+	recFNToRecFN
+	VX_tcu_bhf_bf16mul
+	VX_tcu_fedp_dsp
+	VX_tcu_top
+	VX_cache_top
+	VX_gbar_arb
+	VX_gbar_unit
+	VX_local_mem_top
+	VX_issue_top
+	VX_mem_unit_top
+	VX_core_top
+	Vortex_axi
+	div_sqrt_mvp_wrapper
+End time: 19:45:04 on Sep 10,2026, Elapsed time: 0:00:01
+Errors: 0, Warnings: 143

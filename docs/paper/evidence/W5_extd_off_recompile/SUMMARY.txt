@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 19:45:24 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   1
+  Cores:      1
+  Warps:      4
+  Threads:    4
+  Timeout:    100000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/vecadd_lite/vecadd_lite.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/vecadd_lite/vecadd_lite.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_194503_kernel_launch_test/programs/vecadd_lite.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_194503_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 101935000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 101935000  cycles=9804  instrs=1881  IPC=0.192
+#   Total Cycles: 9908  Mem Ops: 1158  Instructions: 1881
+#   Cycles: 9909
+#   IPC:    0.1898 (calculated)
+#   Total Cycles: 9905
+#   Final IPC:    0.190
+#   Cycles: 9910
+#   IPC:    0.1898 (calculated)
+#   Cycles: 9911
+#   IPC:    0.1898 (calculated)
+#   Cycles: 9912
+#   IPC:    0.1898 (calculated)
+#   Cycles: 9913
+#   IPC:    0.1898 (calculated)
+#   Cycles: 9914
+#   IPC:    0.1897 (calculated)
+#   Total Cycles:        9905
+#   Total Instructions:  1881
+#   Average IPC:         0.190
+#   Peak IPC:            0.310
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       9915
+#   Instructions: 1881
+#   IPC:          0.190
+#   Total Cycles: 9915  Instructions: 1881
+================================================================================

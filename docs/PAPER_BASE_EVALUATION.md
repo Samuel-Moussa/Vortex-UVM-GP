@@ -901,12 +901,43 @@ WITHOUT the define (genuinely absent from the compile): FLEN=32 EXT_D_ENABLED=0 
 
 This is the correct, bulletproof empirical confirmation of OBS-061's static claim — D is
 gated by a testbench-injected define with no in-tree disable path, and removing it from the
-compile genuinely reverts FLEN to 32. **Not yet done (queued, flagged rather than
-attempted silently):** a full RTL+TB recompile with the line removed, one short program run,
-and a covergroup-bin-count diff against the current 524-bin baseline — this requires
-editing the shared `vortex_rtl.flist` used by every other run and reverting it afterward,
-a real ~20–30 min compile cost each direction; queued behind the higher-priority items
-below rather than done opportunistically.
+compile genuinely reverts FLEN to 32.
+
+**Full recompile + bin-count diff — done 2026-09-10.** `+define+EXT_D_ENABLE=1` was removed
+from `Vortex/sim/uvmsim/flists/vortex_rtl.flist:22` (the only place it appears), a full
+RTL+TB recompile run (`make sim TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite
+CLUSTERS=1 CORES=1 WARPS=4 THREADS=4`, QuestaSim 2021.2_1), and confirmed via the real
+`vlog` invocation line in `logs/compile_rtl.log` that the define was genuinely absent from
+the compile (not merely edited in a file nobody read):
+```
+vlog -sv -cover bcst "+define+FPU_FPNEW" "+define+TCU_BHF" "+define+EXT_TCU_ENABLE=1" ... -f vortex_rtl.flist
+```
+The run **PASSED** (0 UVM/RTL errors). Covergroup **bin count**: **536** total (23
+covergroups, 126 coverpoints/crosses — same covergroup/coverpoint *count* as the 524-bin
+D-enabled baseline). The runbook's own naive expectation ("377/524 expected unchanged") is
+**not quite right as stated** — investigated rather than asserted: a coverpoint-by-coverpoint
+diff (summed bin totals per named coverpoint across all instances, not just a raw total
+comparison) shows the **entire +12 delta is confined to two coverpoints that are already
+weight-0 and excluded from every reported percentage**: `cp_occ`
+(`vx_sched_probe.sv:131`, `option.weight = 0`, documented as existing "only to feed the
+cross") and `mem_usage_cp` (`vortex_if.sv:209`, zeroed on AXI runs per
+`vortex_if.sv:259-263`). Every *scored* coverpoint — including `instr_class_cg_fpu`'s
+`cp_fpu_op` (the one coverpoint that could plausibly depend on FLEN) — has the **identical**
+bin count in both builds (12/12 total bins, `ignore_bin rv32_no_f2f` present and empty in
+both). **Conclusion: disabling the D extension changes zero scored/reachable bins** — the
+headline percentages and denominators this campaign has been quoting throughout are
+unaffected by whether D is silently enabled. The two-weight-0-coverpoint discrepancy itself
+was not chased further (it doesn't move any reported number; likely an isolated-single-
+program-run-vs-merged-suite-bank reporting artifact rather than a real EXT_D dependency,
+but that specific mechanism is unconfirmed — disclosed as an open, low-value loose end
+rather than asserted).
+
+The environment was restored to the default D-enabled build immediately after (`git diff`
+on `vortex_rtl.flist` confirmed byte-identical to the pre-edit state before the restore
+recompile, and after) — no other run in this campaign used the D-disabled build.
+
+Raw evidence: `vortex_uvm_env/results/20260910/run_194503_kernel_launch_test/` (D-disabled
+run) vs. `vortex_uvm_env/cov/bank_1CL_1C_4W_4T_L2_20260909/` (D-enabled baseline).
 
 ### Remaining W-items — not started this pass, with the runbook's own effort estimates
 

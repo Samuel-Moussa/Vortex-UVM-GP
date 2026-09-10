@@ -1,0 +1,27 @@
+Reading pref.tcl
+
+# 2021.2_1
+
+# vcover report -summary vortex_uvm_env/results/20260910/run_194503_kernel_launch_test/reports/coverage.ucdb
+# QuestaSim-64 vcover 2021.2_1 Coverage Utility 2021.05 May 15 2021
+# Start time: 19:49:25 on Sep 10,2026
+# vcover report -summary vortex_uvm_env/results/20260910/run_194503_kernel_launch_test/reports/coverage.ucdb 
+# Coverage Report Totals BY INSTANCES: Number of Instances 2259
+# 
+#     Enabled Coverage              Bins      Hits    Misses    Weight  Coverage
+#     ----------------              ----      ----    ------    ------  --------
+#     Assertions                     356       242       114         1    67.97%
+#     Branches                     18913     12474      6439         1    65.95%
+#     Conditions                    1707       500      1207         1    29.29%
+#     Covergroups                     23        na        na         1    60.24%
+#         Coverpoints/Crosses        126        na        na         1        na
+#             Covergroup Bins        536       293       243         1    54.66%
+#     Directives                      16         5        11         1    31.25%
+#     Statements                   23460     20429      3031         1    87.08%
+#     Toggles                     777588    344296    433292         1    44.27%
+# Total coverage (filtered view): 55.15%
+# 
+# End time: 19:49:25 on Sep 10,2026, Elapsed time: 0:00:00
+# Errors: 0, Warnings: 0
+QuestaSim> # 
+# <EOF>
