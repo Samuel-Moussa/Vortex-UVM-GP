@@ -950,6 +950,32 @@ ask that every unexpected failure be classified rather than silently retried.
 Provenance: QuestaSim 2021.2_1, repo commit `dd8fa91` + this `run_suite.sh` change
 (committed alongside this entry), `Vortex/` submodule pin `c283230426796`.
 
+### W3-A — marginal coverage per program kind (DONE, analysis only — re-reading existing reports)
+
+**One correction to the runbook's own framing before the table:** W3 says "6 simtgen
+programs → 3 targets." The current, accurate count (checked against
+`Vortex/tests/kernel/simtgen_*`, and `docs/COVERAGE_RUN_CHECKLIST_20260909.md`) is
+**57 simtgen programs** (50 divergence-seed + 6 memory-seed + 1 smoke) — "6" was true of an
+early 2026-09-07 demo batch, superseded by the fuller sweep folded into the bank on
+2026-09-09. Use 57, not 6, in the journal draft.
+
+| Program kind | Count | Marginal covergroup-bin contribution | Source |
+| :--- | :---: | :--- | :--- |
+| riscv-dv (seed-farm sweep, seeds 2–11 × 9 profiles) | 90 | **0/7 bins** (370/377 unchanged); only toggle moved, +0.06% | OBS-046, measured 2026-08-19 |
+| `simtgen` (divergence + memory axes) | 57 | `cp_split_depth` 3/4→4/4 (**+1**); `cp_bank_conflict` 0/3→3/3 (**+3**, credit shared with the OBS-060 probe-defect fix — the probe was structurally blind before that fix, so not all 3 bins are attributable to `simtgen` stimulus alone); `cp_coalesce_kind` already 100% **before** `simtgen` via the existing coalescer probe/kernels — correcting an implicit claim in the runbook that `simtgen` closed it | this session + OBS-060/OBS-030 |
+| Directed native kernels (representative, from frozen-bank history) | — | `lmem_stress`: `VX_local_mem` toggle 57.52%→73.19% (first kernel to touch the scratchpad); `multicore_isa`: closed the entire per-core coverage gap across all 4 cores; `mshr_flood`: 67,207 dcache misses driven, target bin still NOT hit — itself the finding (OBS-031), not a closure | README / RTL_OBSERVATIONS.md, multiple entries |
+
+**Rough per-program efficiency** (bins moved ÷ programs, on the metrics actually measured
+above — not a rigorous isolated-merge decomposition, which W3-A's 2–3h budget does not
+cover): riscv-dv ≈ **0 bins/program**; `simtgen` ≈ **0.02–0.07 bins/program** depending on
+how the shared-credit `cp_bank_conflict` bins are attributed; directed kernels are
+hand-targeted at a specific bin each, so their "per-program" rate is not comparable on the
+same axis — each one is written *because* a specific gap was identified, not swept broadly.
+**Reading:** the ordering (directed > simtgen > riscv-dv) is the same conclusion OBS-046
+already drew for riscv-dv alone; this table adds `simtgen`'s real, non-zero, comparatively
+small marginal yield to the same axis, and confirms the qualitative claim ("the SIMT
+stimulus gap needed a SIMT-aware generator, not more scalar seeds") the papers already make.
+
 **What NOT to do, honored this pass:** no frozen bank was modified or overwritten; both new
 banks are new directories; no newly-unhit bin was waived to inflate a total; the
 1CL-vs-2CL comparison above states both configs explicitly rather than blending them.
