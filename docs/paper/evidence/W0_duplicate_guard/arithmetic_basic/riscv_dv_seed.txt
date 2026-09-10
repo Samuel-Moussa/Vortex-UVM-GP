@@ -1,0 +1,6 @@
+riscv_dv_test   = riscv_arithmetic_basic_test
+randomization   = seed=1
+program_md5     = 2fd9e66ea9ddebaa8ea36f8744f8bbde
+reproduce_with  = make sim TEST=random_instruction_stress_test PROGRAM=riscv_arithmetic_basic_test RV_SEED=1 RISCV_DV_REGEN=1
+program_source  = /home/samuel_ubuntu22/riscv-dv/out_vortex_riscv_arithmetic_basic_test_s1/asm_test/riscv_arithmetic_basic_test_0.S
+out_dir         = /home/samuel_ubuntu22/riscv-dv/out_vortex_riscv_arithmetic_basic_test_s1

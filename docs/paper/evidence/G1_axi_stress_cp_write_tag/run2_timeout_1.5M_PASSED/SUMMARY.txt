@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 18:37:06 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   1
+  Cores:      1
+  Warps:      4
+  Threads:    4
+  Timeout:    1500000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/axi_stress/axi_stress.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/axi_stress/axi_stress.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183508_kernel_launch_test/programs/axi_stress.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183508_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 3333735000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 3333735000  cycles=332984  instrs=35848  IPC=0.108
+#   Total Cycles: 333088  Mem Ops: 9501  Instructions: 35848
+#   Cycles: 333089
+#   IPC:    0.1076 (calculated)
+#   Total Cycles: 333085
+#   Final IPC:    0.108
+#   Cycles: 333090
+#   IPC:    0.1076 (calculated)
+#   Cycles: 333091
+#   IPC:    0.1076 (calculated)
+#   Cycles: 333092
+#   IPC:    0.1076 (calculated)
+#   Cycles: 333093
+#   IPC:    0.1076 (calculated)
+#   Cycles: 333094
+#   IPC:    0.1076 (calculated)
+#   Total Cycles:        333085
+#   Total Instructions:  35848
+#   Average IPC:         0.108
+#   Peak IPC:            0.310
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       333095
+#   Instructions: 35848
+#   IPC:          0.108
+#   Total Cycles: 333095  Instructions: 35848
+================================================================================

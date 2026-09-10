@@ -1,0 +1,23 @@
+	Command being timed: "make sim-only TEST=kernel_launch_test PROGRAM_NAME=vecadd_lite CLUSTERS=1 CORES=1 WARPS=4 THREADS=4 L2=0 L3=0 TIMEOUT=500000"
+	User time (seconds): 8.78
+	System time (seconds): 0.77
+	Percent of CPU this job got: 64%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:14.74
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 299252
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 173901
+	Voluntary context switches: 2601
+	Involuntary context switches: 61
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 15208
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -1,0 +1,31 @@
+================================================================================
+Test Run Configuration
+================================================================================
+Date:         Thu Sep 10 15:39:20 EEST 2026
+Test:         random_instruction_stress_test
+Program:      riscv_pmp_test
+Interface:    axi
+Clusters:     1
+Cores:        1
+Warps:        4
+Threads:      4
+Startup Addr: 0x80000000 (passed to vsim as 80000000)
+Timeout:      6700000 cycles
+Simulator:    questa
+
+
+Environment:
+  VORTEX_HOME:  /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex
+  PROJECT_ROOT: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim
+  RISCV:        /home/samuel_ubuntu22/riscv
+
+
+Command Line:
+  /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/scripts/run.sh --test=random_instruction_stress_test --program=riscv_pmp_test --interface=axi --clusters=1 --cores=1 --warps=4 --threads=4 --timeout=6700000 --startup-addr=0x80000000 --l2=0 --l3=0 --icache=1 --dcache=1
+
+
+Results:
+  Run Directory: /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_153920_random_instruction_stress_test
+  Date:          20260910
+  Time:          153920
+================================================================================

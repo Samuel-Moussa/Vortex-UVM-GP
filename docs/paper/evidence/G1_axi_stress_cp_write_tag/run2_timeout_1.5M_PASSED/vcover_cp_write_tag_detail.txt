@@ -1,0 +1,20 @@
+#     Coverpoint cp_write_tag                            25.00%        100          -    Uncovered            
+#         covered/total bins:                                 2          8          -                      
+#         missing/total bins:                                 6          8          -                      
+#         % Hit:                                         25.00%        100          -                      
+#         bin tag[0]                                       9084          1          -    Covered              
+#         bin tag[1]                                         37          1          -    Covered              
+#         bin tag[2]                                          0          1          -    ZERO                 
+#         bin tag[3]                                          0          1          -    ZERO                 
+#         bin tag[4]                                          0          1          -    ZERO                 
+#         bin tag[5]                                          0          1          -    ZERO                 
+#         bin tag[6]                                          0          1          -    ZERO                 
+#         bin tag[7]                                          0          1          -    ZERO                 
+#     Coverpoint cp_uuid_present                        100.00%        100          -    Covered              
+#     Coverpoint cp_write_tag                            25.00%        100          -    Uncovered            
+#         covered/total bins:                                 2          8          -                      
+#         missing/total bins:                                 6          8          -                      
+#         % Hit:                                         25.00%        100          -                      
+#         bin tag[0]                                       9084          1          -    Covered              
+#         bin tag[1]                                         37          1          -    Covered              
+#         bin tag[2]                                          0          1          -    ZERO                 

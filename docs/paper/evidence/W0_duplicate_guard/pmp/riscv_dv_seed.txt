@@ -1,0 +1,6 @@
+riscv_dv_test   = riscv_pmp_test
+randomization   = seed=1
+program_md5     = 16be14c6ebe68b50342d0fae4bdb3473
+reproduce_with  = make sim TEST=random_instruction_stress_test PROGRAM=riscv_pmp_test RV_SEED=1 RISCV_DV_REGEN=1
+program_source  = /home/samuel_ubuntu22/riscv-dv/out_vortex_riscv_pmp_test_s1/asm_test/riscv_pmp_test_0.S
+out_dir         = /home/samuel_ubuntu22/riscv-dv/out_vortex_riscv_pmp_test_s1

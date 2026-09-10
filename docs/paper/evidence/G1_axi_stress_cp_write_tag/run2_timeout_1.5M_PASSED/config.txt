@@ -1,0 +1,31 @@
+================================================================================
+Test Run Configuration
+================================================================================
+Date:         Thu Sep 10 18:35:08 EEST 2026
+Test:         kernel_launch_test
+Program:      /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/axi_stress/axi_stress.elf
+Interface:    axi
+Clusters:     1
+Cores:        1
+Warps:        4
+Threads:      4
+Startup Addr: 0x80000000 (passed to vsim as 80000000)
+Timeout:      1500000 cycles
+Simulator:    questa
+
+
+Environment:
+  VORTEX_HOME:  /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex
+  PROJECT_ROOT: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim
+  RISCV:        /home/samuel_ubuntu22/riscv
+
+
+Command Line:
+  /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/scripts/run.sh --test=kernel_launch_test --program=/home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/axi_stress/axi_stress.elf --interface=axi --clusters=1 --cores=1 --warps=4 --threads=4 --timeout=1500000 --startup-addr=0x80000000 --l2=0 --l3=0 --icache=1 --dcache=1 --no-compile
+
+
+Results:
+  Run Directory: /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183508_kernel_launch_test
+  Date:          20260910
+  Time:          183508
+================================================================================
