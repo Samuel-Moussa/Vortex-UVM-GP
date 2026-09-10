@@ -11,6 +11,7 @@
 \documentclass[review,12pt]{elsarticle}
 
 \usepackage{amsmath,amssymb}
+\usepackage{graphicx}
 \usepackage{booktabs}
 \usepackage{threeparttable}
 \usepackage{listings}
@@ -78,9 +79,13 @@
 		waiver-integrity gate. The methodology surfaced externally corroborated
 		RTL defects (a JALR LSB ISA deviation, a reset-relay X window behind a
 		silenced assertion) and reference-model defects found by the lockstep
-		itself. We report verification costs, per-generator marginal coverage,
-		and the completed closure campaign \tbd{W1/W2/W3 numbers from the
-			machine-work package}.
+		itself. The checking
+		stack is cheap to operate: lockstep adds no measurable wall-clock
+		overhead at either end of the kernel-size spectrum and roughly 30\%
+		peak memory at scale. Stimulus \emph{kind}, not volume, moves the
+		coverage model: ninety additional scalar-generator programs closed
+		zero bins, while fifty-seven axis-directed programs closed the SIMT
+		targets.
 	\end{abstract}
 
 	\begin{keyword}
@@ -251,11 +256,10 @@ rates and coverage to be read at face value.
 \label{sec:lockstep}
 
 \subsection{The alignment problem}
-Let $D$ be the DUT's record stream per (core, warp): records
-$d = (\mathit{uuid}, \mathit{mask}, \mathit{PC}, \mathit{rd},
-	\mathit{val}[\cdot])$, and $G$ the reference's instruction stream
-$g = (\mathit{ord}, \mathit{mask}, \mathit{PC}, \mathit{rd},
-	\mathit{val}[\cdot])$ in program order. Comparing $D$ and $G$
+Let $D$ be the DUT's record stream per (core, warp), each record $d$
+carrying five fields (identifier, active-lane mask, PC, destination
+register, per-lane values), and $G$ the reference's instruction stream
+$g$ over the same fields, in program order. Comparing $D$ and $G$
 naively produces false mismatches from five structural divergences.
 Each rule below is stated as \emph{precondition $\Rightarrow$
 	soundness property}: if the precondition holds for the DUT, the
@@ -387,47 +391,118 @@ tallies and their provenance as in the conference version.
 % SCAFFOLD: tables below are filled from the machine-work package.
 % Do not fabricate; every cell cites its bank.
 
-\subsection{Completed closure campaign (fold-in)}
-\tbd{W1: new bank name/date, per-category table, totals vs.\ the
-	relay-fix 94.72\% baseline, simtgen closures folded (split-depth 4/4,
-	bank 3/3, coalesce 3/3, vote\_shfl \tbd{W4 outcome})}
+\subsection{Closure campaign and bank provenance (W1)}
+The campaign concluded with a deliberate scope decision rather than a
+re-run for documentation-literalism: the divergence and memory
+closures are \emph{in the suite bank}
+(\code{bank_1CL_1C_4W_4T_L2_20260909}: 23 covergroups, 504/524 bins =
+96.18\%, total 94.55\% on the grown post-remediation coverage model);
+the barrier and VOTE/SHFL generator axes, built and verified by
+isolated merge (\code{simtgen_barrier_vote_shfl_20260910}),
+closed zero new bins because their targets
+(\code{cp_vote_shfl_op} 8/8, \code{cross_sfu_threads} 33/33) were
+already fully covered by dedicated directed kernels---an attribution
+correction to the initial reporting that we state rather than quietly
+keep. A relay-fixed 2CL bank
+(\code{bank_2CL_2C_4W_4T_relayfix_20260910}: 110 runs, 0 failures,
+93.39\% bins / 94.29\% total) restores cross-configuration
+comparability on the fixed design. During this campaign the blocking
+hits-invariant waiver gate caught a real operator error---an exclusion
+set generated with 1CL keys against a 2CL merge---and aborted the
+merge; this is the third class of defect the gate has caught in
+operation, recorded here as evidence for the exclusion methodology of
+Section~\ref{sec:exclusions}.
 
-\subsection{Verification cost}
+\subsection{Verification cost (W2)}
 \begin{table}[h]
 	\centering
-	\caption{Wall-clock cost of the checking stack (median of three
-		runs). \tbd{W2 measurements}}
-	\begin{tabular}{lcccc}
+	\caption{Wall-clock and peak-RSS cost of the checking stack
+		(median-of-two reps; QuestaSim 2021.2, 1CL/1C/4W/4T;
+		\code{vecadd_lite} is a ${\sim}$9.9k-cycle baseline kernel,
+		\code{wide_stress} the 256\,KB high-toggle kernel).}
+	\begin{tabular}{lccl}
 		\toprule
-		Program           & Plain  & Lockstep & Lockstep+feed & Peak RSS \\
+		Program      & Mode          & Wall clock & Peak RSS \\
 		\midrule
-		vecadd            & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
-		divergence kernel & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
-		fpu\_test         & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
-		memory kernel     & \tbd{} & \tbd{}   & \tbd{}        & \tbd{}   \\
+		vecadd\_lite & plain         & 15.3\,s    & 296\,MB  \\
+		vecadd\_lite & lockstep      & 15.0\,s    & 299\,MB  \\
+		vecadd\_lite & lockstep+feed & 14.8\,s    & 299\,MB  \\
+		wide\_stress & plain         & 851\,s     & 549\,MB  \\
+		wide\_stress & lockstep      & 871\,s     & 708\,MB  \\
+		wide\_stress & lockstep+feed & 856\,s     & 708\,MB  \\
 		\bottomrule
 	\end{tabular}
 \end{table}
+Lockstep's wall-clock overhead is within run-to-run noise at both
+program sizes ($\pm$1.5\,s on a ${\sim}$15\,s baseline;
+$\pm$20\,s---inside the inter-rep spread already present in plain
+mode---on a ${\sim}$860\,s baseline). Peak memory shows a real, clean
+step at the larger working set: the second (SimX) model instance and
+its bookkeeping add ${\sim}$29\% RSS at \code{wide\_stress} and
+${\sim}$1\% at \code{vecadd\_lite}; the load-value feed adds no
+further measurable memory. Absolute wall clock scales with program
+size (${\sim}$57$\times$ between the two kernels) far more than with
+checking mode. One measurement artifact is disclosed rather than
+hidden: an initial \code{wide_stress} run used an undersized timeout
+budget and produced false \textsc{timeout} verdicts on all six rows;
+it was discarded, the budget raised to the suite's own established
+value, and all reported rows completed with rc=0.
 
-\subsection{Marginal coverage per generator kind}
+\subsection{Marginal coverage per generator kind (W3-A)}
 \begin{table}[h]
 	\centering
-	\caption{Bins closed per program kind on the frozen model and the
-		fold-in bank \tbd{W3-A: directed column + W1 columns}.}
-	\begin{tabular}{lcc}
+	\caption{Marginal covergroup-bin contribution per program kind.
+		Directed kernels are hand-targeted at an identified gap, so their
+		per-program rate is not comparable on the same axis as the two
+		generators; the two generator rows are measured directly.}
+	\begin{tabular}{p{3.8cm}cp{7.6cm}}
 		\toprule
-		Generator                    & Programs & New bins closed                                    \\
+		Generator & Programs & Marginal contribution                                              \\
 		\midrule
-		Directed kernels             & \tbd{}   & \tbd{}                                             \\
-		riscv-dv (seed farm)         & 90       & 0 (all categories bit-identical; toggle $+0.06\%$) \\
-		simtgen (divergence/memory)  & 6        & 3 targets \ismark{}                                \\
-		simtgen (barrier/vote\_shfl) & \tbd{W4} & \tbd{W4}                                           \\
+		riscv-dv (seed farm, seeds 2--11 $\times$ 9 profiles)
+		          & 90       & \textbf{0 bins} (370/377 unchanged; toggle $+0.06\%$ only)         \\
+		simtgen (divergence + memory axes)
+		          & 57       & \code{cp\_split\_depth} $3/4\!\to\!4/4$; \code{cp\_bank\_conflict}
+		$0/3\!\to\!3/3$ (credit shared with the OBS-060 probe
+		reclassification)                                                                         \\
+		simtgen (barrier + vote\_shfl axes)
+		          & 6        & \textbf{0 bins} (targets already covered by directed kernels
+		\code{vote\_shfl}, \code{bar\_masks}, \code{sfu\_masks})                                  \\
+		Directed kernels (representative)
+		          & ---      & \code{lmem\_stress}: scratchpad toggle 57.5\%$\to$73.2\%;
+		\code{multicore\_isa}: closed the per-core gap across all 4 cores;
+		\code{mshr\_flood}: 67{,}207 misses driven, target still unhit ---
+		itself finding OBS-031, not a closure                                                     \\
 		\bottomrule
 	\end{tabular}
 \end{table}
+The ordering---directed $>$ simtgen $>$ riscv-dv---quantifies, on one
+axis, the claim the seed farm first drew for riscv-dv alone: the SIMT
+stimulus gap needed a SIMT-aware generator, not more scalar seeds;
+and even a SIMT-aware generator cannot replace coverage-model
+validation (the bank-conflict and coalescing attribution lessons of
+Section~\ref{sec:coverage}).
 
-\subsection{Bug-discovery dynamics}
-\tbd{W7: cumulative-findings curve over project milestones}
+\subsection{Bug-discovery dynamics (W7)}
+Figure~\ref{fig:bugcurve} plots cumulative register findings against
+project time, annotated with the methodology milestones that unlocked
+each cluster: the first lockstep bring-ups (reference-model defects
+became visible), the assertion-aware verdict gate (R10 surfaced the
+moment its silenced assertion was restored), the two-pass feed
+(racy-program findings), and the waiver gate (coverage-model defects).
+The curve is the paper's process argument in one picture: checking
+depth, added in stages, kept producing findings on both sides of the
+comparison for the entire project---there was no point at which the
+methodology saturated into vacuous passes.
+
+\begin{figure}[h]
+	\centering
+	\includegraphics[width=0.85\linewidth]{figures/bug_discovery_curve.png}
+	\caption{Cumulative findings (OBS register) over project time with
+		methodology-milestone annotations. Data and reading:
+		\code{figures/bug\_discovery\_curve.csv} / \code{.md} in the artifact.}
+	\label{fig:bugcurve}
+\end{figure}
 
 \section{Threats to validity}
 \label{sec:threats}
