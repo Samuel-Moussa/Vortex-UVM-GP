@@ -915,7 +915,7 @@ below rather than done opportunistically.
 | W0 (md5 duplicate guard in `run_suite.sh`) | **done** — see below | 1–2 h |
 | W4 (simtgen `barrier` + `vote_shfl` axes) | **done** — see below; found the underlying coverage targets were already closed by directed kernels, built anyway for generator-completeness | 3–5 days budgeted, actual ~2h |
 | W1 full re-definition (suite bank literally titled `_simtgen_<date>`) | **effectively superseded** — the 2026-09-09 rebank already folds `simtgen`'s divergence/memory closures into the suite bank (`cp_split_depth` 4/4, `cp_bank_conflict`/`cp_coalesce_kind` 3/3, in-bank not isolated-merge); `cp_vote_shfl_op` was ALREADY 8/8 pre-W4 via the `vote_shfl` directed kernel, not pending on it | — |
-| W2 (verification-cost timing table) | not started | 0.5 day |
+| W2 (verification-cost timing table) | **done** — see below; scope reduced to 2 programs (vecadd_lite, wide_stress) vs runbook's suggested 3-4, disclosed | 0.5 day |
 | W3-A (marginal-coverage-per-program-kind table) | not started — mostly re-reading existing reports | 2–3 h |
 | W3-B (FuzzGPU PoC repro at our pin) | not started | 1–2 days |
 | W7 (bug-discovery curve, no Questa needed) | **done** — `docs/paper/figures/bug_discovery_curve.{csv,png,md}` | 0.5 day |
@@ -1066,3 +1066,63 @@ solely for this.
 **What NOT to do, honored this pass:** no frozen bank was modified or overwritten; both new
 banks are new directories; no newly-unhit bin was waived to inflate a total; the
 1CL-vs-2CL comparison above states both configs explicitly rather than blending them.
+
+### W2 — verification-cost table (DONE)
+
+**Provenance:** QuestaSim 2021.2_1 · outer repo `af6bd9227e0e97df929f45c78eafc75a78f1c9b5`'s
+submodule pointer / submodule HEAD `af6bd9227` at measurement time (post docs-reorg commit) ·
+config 1CL/1C/4W/4T · measured via `/usr/bin/time -v` wrapping `make sim-only`, wall clock and
+peak RSS (`Maximum resident set size`) read from its output; 2 reps per (program, mode) cell.
+
+**Scope, disclosed honestly:** the runbook's own suggestion was 3–4 programs; this pass measured
+**2** — `vecadd_lite` (small, ~9.9k-cycle baseline kernel) and `wide_stress` (large, high-toggle
+256 KB kernel, TIMEOUT budget raised to `run_suite.sh`'s own established `40000000` after an
+initial undersized-timeout run at `TIMEOUT=500000` produced false `TIMEOUT` failures on all 6
+rows — a budget artifact, not a DUT/TB defect, per the project's own OBS-042 precedent; that
+invalid run was discarded, not reported below). Reduced from the runbook's suggested scope for
+time; both programs' full 3-mode × 2-rep matrices completed cleanly (rc=0 on all 12 rows).
+
+**Three lockstep modes** (env vars read directly by `simulate.sh`, not passed via Makefile CFG
+vars): `plain` = no env vars; `lockstep` = `LOCKSTEP=1`; `lockstep_feed` = `LOCKSTEP=1
+LOCKSTEP_LOADFEED=1`.
+
+| Program | Mode | Wall clock (avg of 2 reps) | Peak RSS (avg of 2 reps) |
+| :--- | :--- | :--- | :--- |
+| vecadd_lite | plain | 15.3 s | 296,378 KB |
+| vecadd_lite | lockstep | 15.0 s | 299,204 KB |
+| vecadd_lite | lockstep_feed | 14.8 s | 299,124 KB |
+| wide_stress | plain | 851.4 s (14m 11s) | 549,144 KB |
+| wide_stress | lockstep | 871.1 s (14m 31s) | 707,994 KB |
+| wide_stress | lockstep_feed | 856.0 s (14m 16s) | 707,718 KB |
+
+**Reading the numbers:**
+- Lockstep's wall-clock overhead is small and within run-to-run noise at both program sizes
+  (vecadd_lite ±1.5 s across modes on a ~15 s baseline; wide_stress ±20 s across modes on a
+  ~860 s baseline, i.e. within the 6.5 s inter-rep spread already seen in `plain` alone).
+- Peak RSS shows a clear, consistent step at `wide_stress` between `plain` (549 MB) and either
+  lockstep mode (708 MB, +29%) — the second (SimX) model instance and its lockstep bookkeeping
+  add real memory, not noticeable at `vecadd_lite`'s much smaller working set (296→299 MB, +1%).
+  `LOCKSTEP_LOADFEED` adds no further measurable RSS over plain `LOCKSTEP` at either program size.
+- Absolute wall-clock scales with program size far more than with lockstep mode: `wide_stress` is
+  ~57x `vecadd_lite`'s wall clock at every mode, consistent with it being the intentionally
+  high-toggle / high-instruction-volume kernel (`docs/COVERAGE_GAPPUSH_20260815.md`), not a
+  lockstep-specific cost.
+
+**Raw per-rep data**, `/tmp/w2_results.csv` (vecadd_lite) + `/tmp/w2_results2.csv` (wide_stress,
+correct-budget run):
+
+```
+program,mode,rep,wall_s,max_rss_kb,rc
+vecadd_lite,plain,1,0:15.78,296304,0
+vecadd_lite,plain,2,0:14.85,296452,0
+vecadd_lite,lockstep,1,0:14.68,299032,0
+vecadd_lite,lockstep,2,0:15.41,299376,0
+vecadd_lite,lockstep_feed,1,0:14.74,299252,0
+vecadd_lite,lockstep_feed,2,0:14.82,298996,0
+wide_stress,plain,1,14:06.46,549564,0
+wide_stress,plain,2,14:16.27,548724,0
+wide_stress,lockstep,1,14:24.08,707992,0
+wide_stress,lockstep,2,14:38.21,707996,0
+wide_stress,lockstep_feed,1,14:21.84,707808,0
+wide_stress,lockstep_feed,2,14:10.16,707628,0
+```
