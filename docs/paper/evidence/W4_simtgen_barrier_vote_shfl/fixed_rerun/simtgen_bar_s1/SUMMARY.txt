@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 16:38:08 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   1
+  Cores:      1
+  Warps:      4
+  Threads:    4
+  Timeout:    200000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/simtgen_bar_s1/simtgen_bar_s1.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/simtgen_bar_s1/simtgen_bar_s1.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_163754_kernel_launch_test/programs/simtgen_bar_s1.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_163754_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 86555000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 86555000  cycles=8266  instrs=1420  IPC=0.172
+#   Total Cycles: 8370  Mem Ops: 857  Instructions: 1420
+#   Cycles: 8371
+#   IPC:    0.1696 (calculated)
+#   Total Cycles: 8367
+#   Final IPC:    0.170
+#   Cycles: 8372
+#   IPC:    0.1696 (calculated)
+#   Cycles: 8373
+#   IPC:    0.1696 (calculated)
+#   Cycles: 8374
+#   IPC:    0.1696 (calculated)
+#   Cycles: 8375
+#   IPC:    0.1696 (calculated)
+#   Cycles: 8376
+#   IPC:    0.1695 (calculated)
+#   Total Cycles:        8367
+#   Total Instructions:  1420
+#   Average IPC:         0.170
+#   Peak IPC:            0.310
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       8377
+#   Instructions: 1420
+#   IPC:          0.170
+#   Total Cycles: 8377  Instructions: 1420
+================================================================================

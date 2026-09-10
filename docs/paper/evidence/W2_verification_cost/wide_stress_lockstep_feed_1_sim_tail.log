@@ -1,0 +1,304 @@
+# NOTE: full log is ~37MB (Questa per-cycle probe trace). This is the tool's own
+# final Results/Statistics block (tail -300 of the real simulation.log), not
+# reconstructed. Full file kept locally at /tmp/w2_log2_wide_stress_lockstep_feed_1.log
+# ------------------------------------------------------------------------------
+# [SimX-DPI] Read 8 bytes from 0x800062a0
+# [SimX-DPI] Read 8 bytes from 0x800062a8
+# [SimX-DPI] Read 8 bytes from 0x800062b0
+# [SimX-DPI] Read 8 bytes from 0x800062b8
+# [SimX-DPI] Read 8 bytes from 0x800062c0
+# [SimX-DPI] Read 8 bytes from 0x800062c8
+# [SimX-DPI] Read 8 bytes from 0x800062d0
+# [SimX-DPI] Read 8 bytes from 0x800062d8
+# [SimX-DPI] Read 8 bytes from 0x800062e0
+# [SimX-DPI] Read 8 bytes from 0x800062e8
+# [SimX-DPI] Read 8 bytes from 0x800062f0
+# [SimX-DPI] Read 8 bytes from 0x800062f8
+# [SimX-DPI] Read 8 bytes from 0x80006300
+# [SimX-DPI] Read 8 bytes from 0x80006308
+# [SimX-DPI] Read 8 bytes from 0x80006310
+# [SimX-DPI] Read 8 bytes from 0x80006318
+# [SimX-DPI] Read 8 bytes from 0x80006320
+# [SimX-DPI] Read 8 bytes from 0x80006328
+# [SimX-DPI] Read 8 bytes from 0x80006330
+# [SimX-DPI] Read 8 bytes from 0x80006338
+# [SimX-DPI] Read 8 bytes from 0x80006340
+# [SimX-DPI] Read 8 bytes from 0x80006348
+# [SimX-DPI] Read 8 bytes from 0x80006350
+# [SimX-DPI] Read 8 bytes from 0x80006358
+# [SimX-DPI] Read 8 bytes from 0x80006360
+# [SimX-DPI] Read 8 bytes from 0x80006368
+# [SimX-DPI] Read 8 bytes from 0x80006370
+# [SimX-DPI] Read 8 bytes from 0x80006378
+# [SimX-DPI] Read 8 bytes from 0x80006380
+# [SimX-DPI] Read 8 bytes from 0x80006388
+# [SimX-DPI] Read 8 bytes from 0x80006390
+# [SimX-DPI] Read 8 bytes from 0x80006398
+# [SimX-DPI] Read 8 bytes from 0x800063a0
+# [SimX-DPI] Read 8 bytes from 0x800063a8
+# [SimX-DPI] Read 8 bytes from 0x800063b0
+# [SimX-DPI] Read 8 bytes from 0x800063b8
+# [SimX-DPI] Read 8 bytes from 0x800063c0
+# [SimX-DPI] Read 8 bytes from 0x800063c8
+# [SimX-DPI] Read 8 bytes from 0x800063d0
+# [SimX-DPI] Read 8 bytes from 0x800063d8
+# [SimX-DPI] Read 8 bytes from 0x800063e0
+# [SimX-DPI] Read 8 bytes from 0x800063e8
+# [SimX-DPI] Read 8 bytes from 0x800063f0
+# [SimX-DPI] Read 8 bytes from 0x800063f8
+# [SimX-DPI] Read 8 bytes from 0x80006400
+# [SimX-DPI] Read 8 bytes from 0x80006408
+# [SimX-DPI] Read 8 bytes from 0x80006410
+# [SimX-DPI] Read 8 bytes from 0x80006418
+# [SimX-DPI] Read 8 bytes from 0x80006420
+# [SimX-DPI] Read 8 bytes from 0x80006428
+# [SimX-DPI] Read 8 bytes from 0x80006430
+# [SimX-DPI] Read 8 bytes from 0x80006438
+# [SimX-DPI] Read 8 bytes from 0x80006440
+# [SimX-DPI] Read 8 bytes from 0x80006448
+# [SimX-DPI] Read 8 bytes from 0x80006450
+# [SimX-DPI] Read 8 bytes from 0x80006458
+# [SimX-DPI] Read 8 bytes from 0x80006460
+# [SimX-DPI] Read 8 bytes from 0x80006468
+# [SimX-DPI] Read 8 bytes from 0x80006470
+# [SimX-DPI] Read 8 bytes from 0x80006478
+# [SimX-DPI] Read 8 bytes from 0x80006480
+# [SimX-DPI] Read 8 bytes from 0x80006488
+# [SimX-DPI] Read 8 bytes from 0x80006490
+# [SimX-DPI] Read 8 bytes from 0x80006498
+# [SimX-DPI] Read 8 bytes from 0x800064a0
+# [SimX-DPI] Read 8 bytes from 0x800064a8
+# [SimX-DPI] Read 8 bytes from 0x800064b0
+# [SimX-DPI] Read 8 bytes from 0x800064b8
+# [SimX-DPI] Read 8 bytes from 0x800064c0
+# [SimX-DPI] Read 8 bytes from 0x800064c8
+# [SimX-DPI] Read 8 bytes from 0x800064d0
+# [SimX-DPI] Read 8 bytes from 0x800064d8
+# [SimX-DPI] Read 8 bytes from 0x800064e0
+# [SimX-DPI] Read 8 bytes from 0x800064e8
+# [SimX-DPI] Read 8 bytes from 0x800064f0
+# [SimX-DPI] Read 8 bytes from 0x800064f8
+# [SimX-DPI] Read 8 bytes from 0x80006500
+# [SimX-DPI] Read 8 bytes from 0x80006508
+# [SimX-DPI] Read 8 bytes from 0x80006510
+# [SimX-DPI] Read 8 bytes from 0x80006518
+# [SimX-DPI] Read 8 bytes from 0x80006520
+# [SimX-DPI] Read 8 bytes from 0x80006528
+# [SimX-DPI] Read 8 bytes from 0x80006530
+# [SimX-DPI] Read 8 bytes from 0x80006538
+# [SimX-DPI] Read 8 bytes from 0x80006540
+# [SimX-DPI] Read 8 bytes from 0x80006548
+# [SimX-DPI] Read 8 bytes from 0x80006550
+# [SimX-DPI] Read 8 bytes from 0x80006558
+# [SimX-DPI] Read 8 bytes from 0x80006560
+# [SimX-DPI] Read 8 bytes from 0x80006568
+# [SimX-DPI] Read 8 bytes from 0x80006570
+# [SimX-DPI] Read 8 bytes from 0x80006578
+# [SimX-DPI] Read 8 bytes from 0x80006580
+# [SimX-DPI] Read 8 bytes from 0x80006588
+# [SimX-DPI] Read 8 bytes from 0x80006590
+# [SimX-DPI] Read 8 bytes from 0x80006598
+# [SimX-DPI] Read 8 bytes from 0x800065a0
+# [SimX-DPI] Read 8 bytes from 0x800065a8
+# [SimX-DPI] Read 8 bytes from 0x800065b0
+# [SimX-DPI] Read 8 bytes from 0x800065b8
+# [SimX-DPI] Read 8 bytes from 0x800065c0
+# [SimX-DPI] Read 8 bytes from 0x800065c8
+# [SimX-DPI] Read 8 bytes from 0x800075d0
+# [SimX-DPI] Read 8 bytes from 0x800075d8
+# [SimX-DPI] Read 8 bytes from 0x800075e0
+# [SimX-DPI] Read 8 bytes from 0x800075e8
+# [SimX-DPI] Read 8 bytes from 0x800075f0
+# [SimX-DPI] Read 8 bytes from 0x800075f8
+# [SimX-DPI] Read 8 bytes from 0x80007600
+# [SimX-DPI] Read 8 bytes from 0x80007608
+# [SimX-DPI] Read 8 bytes from 0x80007610
+# [SimX-DPI] Read 8 bytes from 0x80007618
+# [SimX-DPI] Read 8 bytes from 0x80007620
+# [SimX-DPI] Read 8 bytes from 0x80007628
+# [SimX-DPI] Read 8 bytes from 0x80007630
+# [SimX-DPI] Read 8 bytes from 0x80007638
+# [SimX-DPI] Read 8 bytes from 0x80007640
+# [SimX-DPI] Read 8 bytes from 0x80007648
+# [SimX-DPI] Read 8 bytes from 0x80007650
+# [SimX-DPI] Read 8 bytes from 0x80007658
+# [SimX-DPI] Read 8 bytes from 0x80007660
+# [SimX-DPI] Read 8 bytes from 0x80007668
+# [SimX-DPI] Read 8 bytes from 0x80007670
+# [SimX-DPI] Read 8 bytes from 0x80007678
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(825) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] compare_all_written: data_compared=32892  fp_tol_passed=0  skipped_stack/MMIO=155  skipped_poison=0  skipped_got=0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(993) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] 
+# ââââââââââââââââââââââââââââââââââââââââââââ
+# â        Vortex Scoreboard Results         â
+# â âââââââââââââââââââââââââââââââââââââââââââ£
+# â  Transactions       : 132400             â
+# â  DCR Writes         : 7                  â
+# â  Memory checks      : 32892              â
+# â    Passed           : 32892              â
+# â    Failed           : 0                  â
+# â  Console checks     : 0                  â
+# â    Passed           : 0                  â
+# â    Failed           : 0                  â
+# â  Total Passed       : 32892              â
+# â  Total Failed       : 0                  â
+# â  Skipped            : 155                â
+# â  Pass Rate          : 100.00           % â
+# â  SimX Enabled       : YES                â
+# â  SimX Ran           : YES                â
+# ââââââââââââââââââââââââââââââââââââââââââââ
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(1069) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] SIMULATION PASSED â all checks matched!
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/status_agent/status_monitor.svh(367) @ 12325415000: uvm_test_top.env.m_status_agent.m_monitor [STATUS_MON] 
+# ========================================
+#     Status Monitor Statistics
+# ========================================
+#   Busy Transitions:    1
+#   Idle Transitions:    1
+#   Execution Started:   YES
+#   Execution Completed: YES
+#   Total Cycles:        1232147
+#   Total Instructions:  270529
+#   Average IPC:         0.220
+#   Peak IPC:            0.308
+#   Stall Cycles:        0 (0.00%)
+#   Execution Time:      12321470000
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(405) @ 12325415000: uvm_test_top.env [VORTEX_ENV] Environment report phase complete
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/kernel_launch_test.svh(321) @ 12325415000: uvm_test_top [kernel_launch_test] Non-vacuity satisfied: end-state checks=32892, lockstep instruction pairs=122084 (both vs SimX)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(316) @ 12325415000: uvm_test_top [kernel_launch_test] 
+# ================================================================================
+#                               TEST SUMMARY
+# ================================================================================
+#   Test:         kernel_launch_test
+#   Status:       PASSED â
+#   Errors:       0
+#   Warnings:     0
+# --------------------------------------------------------------------------------
+#   Cycles:       1232157
+#   Instructions: 270529
+#   IPC:          0.220
+# ================================================================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(332) @ 12325415000: uvm_test_top [kernel_launch_test] 
+# *** TEST PASSED ***
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(965) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] Cleaning up SimX
+# [SimX-DPI] ========================================
+# [SimX-DPI] Cleaning up SimX...
+# [SimX-DPI] Processor deleted
+# [SimX-DPI] RAM deleted
+# [SimX-DPI] Arch deleted
+# [SimX-DPI] Cleanup complete
+# [SimX-DPI] ========================================
+# UVM_INFO /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_report_server.svh(847) @ 12325415000: reporter [UVM/REPORT/SERVER] 
+# --- UVM Report Summary ---
+# 
+# ** Report counts by severity
+# UVM_INFO :  166
+# UVM_WARNING :    0
+# UVM_ERROR :    0
+# UVM_FATAL :    0
+# ** Report counts by id
+# [AXI_AGENT]     1
+# [AXI_DRV]     3
+# [AXI_MON]     2
+# [COVERAGE]    43
+# [DCR_AGENT]     1
+# [DCR_DRV]     9
+# [DCR_MON]     2
+# [DCR_RAL]     2
+# [DCR_SQCR]     1
+# [HOST_AGENT]     1
+# [HOST_DRV]    10
+# [HOST_MON]     5
+# [HOST_SEQ]     3
+# [HOST_SQCR]     1
+# [LOCKSTEP]    17
+# [RNTST]     1
+# [RVVI_MON]     2
+# [SCOREBOARD]    12
+# [STATUS_AGENT]     2
+# [STATUS_MON]     4
+# [TEST_DONE]     1
+# [UVM/RELNOTES]     1
+# [VIRT_SQCR]     1
+# [VORTEX_ENV]    17
+# [kernel_launch_test]    22
+# [kernel_launch_vseq]     2
+# 
+# ** Note: $finish    : /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh(517)
+#    Time: 12325415 ns  Iteration: 69  Instance: /vortex_tb_top
+# Break in Task uvm_pkg/uvm_root::run_test at /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh line 517
+# Stopped at /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh line 517
+#  coverage save -testname kernel_launch_test_wide_stress /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_174222_kernel_launch_test/reports/coverage.ucdb
+#  quit -f
+# [P1-PROBE vortex_tb_top.dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.u_commit_probe] retired instructions observed = 270529
+# 
+# ================================================================================
+# [TB_TOP @ 12325415000] Simulation Complete
+# Test Result:    PASS
+#   Total Cycles: 1232157  Instructions: 270529
+# ================================================================
+#   mem_model statistics
+# ----------------------------------------------------------------
+#   Reads                 : 4527968
+#   Writes                : 449168
+#   Bytes written         : 449168
+#   Allocated byte entries: 290540
+# ================================================================
+# ================================================================================
+# 
+# End time: 17:56:42 on Sep 10,2026, Elapsed time: 0:14:18
+# Errors: 0, Warnings: 122137
+[0;36m================================================================================[0m
+[0;36mResults[0m
+[0;36m================================================================================[0m
+[0;32m✓ TEST PASSED ✓  (0 UVM errors, 0 RTL errors)[0m
+
+[0;34mℹ Statistics:[0m
+  # UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 12324355000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 12324355000  cycles=1232046  instrs=270529  IPC=0.220
+  #   Total Cycles: 1232150  Mem Ops: 132369  Instructions: 270529
+  #   Cycles: 1232151
+  #   IPC:    0.2196 (calculated)
+  #   Total Cycles: 1232147
+  #   Final IPC:    0.220
+  #   Cycles: 1232152
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232153
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232154
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232155
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232156
+  #   IPC:    0.2196 (calculated)
+  #   Total Cycles:        1232147
+  #   Total Instructions:  270529
+  #   Average IPC:         0.220
+  #   Peak IPC:            0.308
+  #   Stall Cycles:        0 (0.00%)
+  #   Cycles:       1232157
+  #   Instructions: 270529
+  #   IPC:          0.220
+  #   Total Cycles: 1232157  Instructions: 270529
+[0;36m================================================================================[0m
+[0;36mSummary[0m
+[0;36m================================================================================[0m
+[0;32m✓ TEST PASSED ✓[0m
+
+Test:      kernel_launch_test
+Program:   /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/wide_stress/wide_stress.elf
+Status:    PASSED
+
+Files:
+  Run Dir:   /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_174222_kernel_launch_test
+  Log:       logs/simulation.log
+  Waveform:  waves/kernel_launch_test_axi.vcd
+  Summary:   reports/SUMMARY.txt
+  Config:    reports/config.txt
+
+Quick access:
+  cd results/latest
+  cat reports/SUMMARY.txt
+  vsim -view waves/*.vcd
+
+[0;32m✓ All done! ✓[0m

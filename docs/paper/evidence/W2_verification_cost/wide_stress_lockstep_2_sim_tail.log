@@ -1,0 +1,304 @@
+# NOTE: full log is ~37MB (Questa per-cycle probe trace). This is the tool's own
+# final Results/Statistics block (tail -300 of the real simulation.log), not
+# reconstructed. Full file kept locally at /tmp/w2_log2_wide_stress_lockstep_2.log
+# ------------------------------------------------------------------------------
+#   Write Responses:     99268
+#   Read Addresses:      33114
+#   Read Data Beats:     33114
+#   Protocol Violations: 0
+#   R-beat Mismatches:   0
+#   mem_model active:    YES
+#   Pending AW (no W):   0
+#   Pending B:           0
+#   Pending R:           0
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(925) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE] Coverage cfg: enable_coverage=1, axi_agent_enable=1, mem_agent_enable=0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(926) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE] Sample counts: mem=0, axi=132382, dcr=7, host=11, status=123255
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(935) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE] Raw coverage: mem=  0.00, axi= 94.23, dcr= 68.75, host= 89.33, status= 91.77
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(938) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE] Per-bin hit summary:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI addr:high = 132318
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI addr:low = 64
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI id:0-63 = 1
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI id:192-255 = 132381
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI len:single = 132382
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI type:0 = 33114
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(940) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   AXI type:1 = 99268
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR addr:argv0 = 1
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR addr:argv1 = 1
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR addr:mpm_class = 1
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR addr:startup0 = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR addr:startup1 = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR data:hi_code = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(943) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   DCR data:zero = 5
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(946) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   HOST op:2 = 7
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(946) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   HOST op:3 = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(946) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   HOST op:4 = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(946) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   HOST threads:4 = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(946) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   HOST timeout:high = 1
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(946) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   HOST timeout:mid = 10
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS busy:0 = 50
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS busy:1 = 123205
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS ebreak:0 = 123253
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS ebreak:1 = 2
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS ipc:0 = 47
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS ipc:1 = 122920
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS ipc:2 = 288
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS pc:text_high = 43
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS pc:text_low = 110695
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS pc:text_mid = 12517
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS stall:decode = 2812
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS stall:execute = 253
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS stall:fetch = 139
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS stall:issue = 2812
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(949) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE]   STATUS stall:memory = 176
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(981) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE] 
+# ââââââââââââââââââââââââââââââââââââââââââââ
+# â   Vortex Interface (Bus) Coverage        â
+# â   â sanity check only, NOT sign-off â    â
+# â âââââââââââââââââââââââââââââââââââââââââââ£
+# â  AXI Transactions  :  94.23%             â
+# â  DCR Configuration  :  68.75%             â
+# â  Host Operations    :  89.33%             â
+# â  Status/Performance :  91.77%             â
+# â âââââââââââââââââââââââââââââââââââââââââââ£
+# â  INTERFACE SUBTOTAL :  86.02%             â
+# ââââââââââââââââââââââââââââââââââââââââââââ
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(1000) @ 12325415000: uvm_test_top.env.m_coverage [COVERAGE] Interface-only subtotal above. Authoritative coverage = merged UCDB via merge_coverage.sh (adds instr_class_cg + code coverage).
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(253) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV] 
+# ========================================
+#     DCR Driver Statistics
+# ========================================
+#   Total Writes:       5
+#   Startup Configs:    0
+#   Perf Configs:       0
+#   Unique DCRs:        5
+# ========================================
+#   DCR Shadow State:
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(269) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV]     STARTUP_ADDR0 = 0x80000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(269) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV]     STARTUP_ADDR1 = 0x00000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(269) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV]     ARGV_PTR0 = 0x00000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(269) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV]     ARGV_PTR1 = 0x00000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(269) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV]     MPM_CLASS = 0x00000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_monitor.svh(230) @ 12325415000: uvm_test_top.env.m_dcr_agent.m_monitor [DCR_MON] 
+# ========================================
+#     DCR Monitor Statistics
+# ========================================
+#   Total Writes:       7
+#   Startup Configs:    6
+#   Perf Configs:       1
+#   Protocol Violations:0
+#   Unique DCRs:        5
+#   Startup Complete:   YES
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(270) @ 12325415000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] 
+# ========================================
+#     Host Driver Statistics
+# ========================================
+#   Programs Loaded:   0
+#   DCR Writes:        2
+#   Kernels Launched:  1
+#   Completions:       1
+#   Timeouts:          0
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(319) @ 12325415000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] 
+# ========================================
+#     Host Monitor Statistics
+# ========================================
+#   DCR Writes:        7
+#   Kernel Launches:   1
+#   Kernel Completions:1
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(900) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP] ==================== A0 LOCKSTEP SUMMARY ====================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(901) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   cores exercised     : 1 (distinct cid)  warps/core buckets: 4
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(966) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   compared pairs      : 122084
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(967) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   matched             : 122084
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(968) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   dut_orphan          : 0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(969) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   simx_orphan         : 0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(970) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   field_mismatch PC   : 0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(971) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   field_mismatch rd   : 0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(972) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   field_mismatch data : 0
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(973) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   field_mismatch LOAD : 0 (load-writeback data, via LSU probe)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(974) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   load data-compared  : 8210 (LSU-probe overlay; needs +LOCKSTEP_LOADS)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(975) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   load data-skipped   : 118 (gated off / no LSU beat; end-state covers)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(976) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   volatile-CSR skipped: 62 (perf counters; model-divergent)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(977) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   multireg end-state  : 0 (WMMA tile regs not on DUT commit trace; end-state covers)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(978) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   fsqrt 1-ULP tol     : 0 (OBS-014 DUT hardware fsqrt.s vs SoftFloat; bounded <=1 ULP, sqrt only)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(997) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP]   uuid alignment      : DIVERGENT on 122083/122084 pairs (schemes differ; program-order key used)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/lockstep_scoreboard.svh(1000) @ 12325415000: uvm_test_top.env.m_lockstep_scoreboard [LOCKSTEP] ============================================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/rvvi_monitor.svh(90) @ 12325415000: uvm_test_top.env.m_rvvi_monitor [RVVI_MON] published 180020 rvvi_txn record(s) from 2 interface(s)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(993) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] 
+# ââââââââââââââââââââââââââââââââââââââââââââ
+# â        Vortex Scoreboard Results         â
+# â âââââââââââââââââââââââââââââââââââââââââââ£
+# â  Transactions       : 132400             â
+# â  DCR Writes         : 7                  â
+# â  Memory checks      : 32892              â
+# â    Passed           : 32892              â
+# â    Failed           : 0                  â
+# â  Console checks     : 0                  â
+# â    Passed           : 0                  â
+# â    Failed           : 0                  â
+# â  Total Passed       : 32892              â
+# â  Total Failed       : 0                  â
+# â  Skipped            : 155                â
+# â  Pass Rate          : 100.00           % â
+# â  SimX Enabled       : YES                â
+# â  SimX Ran           : YES                â
+# ââââââââââââââââââââââââââââââââââââââââââââ
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(1069) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] SIMULATION PASSED â all checks matched!
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/status_agent/status_monitor.svh(367) @ 12325415000: uvm_test_top.env.m_status_agent.m_monitor [STATUS_MON] 
+# ========================================
+#     Status Monitor Statistics
+# ========================================
+#   Busy Transitions:    1
+#   Idle Transitions:    1
+#   Execution Started:   YES
+#   Execution Completed: YES
+#   Total Cycles:        1232147
+#   Total Instructions:  270529
+#   Average IPC:         0.220
+#   Peak IPC:            0.308
+#   Stall Cycles:        0 (0.00%)
+#   Execution Time:      12321470000
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(405) @ 12325415000: uvm_test_top.env [VORTEX_ENV] Environment report phase complete
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(316) @ 12325415000: uvm_test_top [kernel_launch_test] 
+# ================================================================================
+#                               TEST SUMMARY
+# ================================================================================
+#   Test:         kernel_launch_test
+#   Status:       PASSED â
+#   Errors:       0
+#   Warnings:     0
+# --------------------------------------------------------------------------------
+#   Cycles:       1232157
+#   Instructions: 270529
+#   IPC:          0.220
+# ================================================================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(332) @ 12325415000: uvm_test_top [kernel_launch_test] 
+# *** TEST PASSED ***
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(965) @ 12325415000: uvm_test_top.env.m_scoreboard [SCOREBOARD] Cleaning up SimX
+# [SimX-DPI] ========================================
+# [SimX-DPI] Cleaning up SimX...
+# [SimX-DPI] Processor deleted
+# [SimX-DPI] RAM deleted
+# [SimX-DPI] Arch deleted
+# [SimX-DPI] Cleanup complete
+# [SimX-DPI] ========================================
+# UVM_INFO /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_report_server.svh(847) @ 12325415000: reporter [UVM/REPORT/SERVER] 
+# --- UVM Report Summary ---
+# 
+# ** Report counts by severity
+# UVM_INFO :  162
+# UVM_WARNING :    0
+# UVM_ERROR :    0
+# UVM_FATAL :    0
+# ** Report counts by id
+# [AXI_AGENT]     1
+# [AXI_DRV]     3
+# [AXI_MON]     2
+# [COVERAGE]    43
+# [DCR_AGENT]     1
+# [DCR_DRV]     9
+# [DCR_MON]     2
+# [DCR_RAL]     2
+# [DCR_SQCR]     1
+# [HOST_AGENT]     1
+# [HOST_DRV]    10
+# [HOST_MON]     5
+# [HOST_SEQ]     3
+# [HOST_SQCR]     1
+# [LOCKSTEP]    17
+# [RNTST]     1
+# [RVVI_MON]     2
+# [SCOREBOARD]    10
+# [STATUS_AGENT]     2
+# [STATUS_MON]     4
+# [TEST_DONE]     1
+# [UVM/RELNOTES]     1
+# [VIRT_SQCR]     1
+# [VORTEX_ENV]    17
+# [kernel_launch_test]    20
+# [kernel_launch_vseq]     2
+# 
+# ** Note: $finish    : /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh(517)
+#    Time: 12325415 ns  Iteration: 69  Instance: /vortex_tb_top
+# Break in Task uvm_pkg/uvm_root::run_test at /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh line 517
+# Stopped at /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh line 517
+#  coverage save -testname kernel_launch_test_wide_stress /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_172744_kernel_launch_test/reports/coverage.ucdb
+#  quit -f
+# [P1-PROBE vortex_tb_top.dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.u_commit_probe] retired instructions observed = 270529
+# 
+# ================================================================================
+# [TB_TOP @ 12325415000] Simulation Complete
+# Test Result:    PASS
+#   Total Cycles: 1232157  Instructions: 270529
+# ================================================================
+#   mem_model statistics
+# ----------------------------------------------------------------
+#   Reads                 : 4527968
+#   Writes                : 449168
+#   Bytes written         : 449168
+#   Allocated byte entries: 290540
+# ================================================================
+# ================================================================================
+# 
+# End time: 17:42:20 on Sep 10,2026, Elapsed time: 0:14:34
+# Errors: 0, Warnings: 122137
+[0;36m================================================================================[0m
+[0;36mResults[0m
+[0;36m================================================================================[0m
+[0;32m✓ TEST PASSED ✓  (0 UVM errors, 0 RTL errors)[0m
+
+[0;34mℹ Statistics:[0m
+  # UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 12324355000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 12324355000  cycles=1232046  instrs=270529  IPC=0.220
+  #   Total Cycles: 1232150  Mem Ops: 132369  Instructions: 270529
+  #   Cycles: 1232151
+  #   IPC:    0.2196 (calculated)
+  #   Total Cycles: 1232147
+  #   Final IPC:    0.220
+  #   Cycles: 1232152
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232153
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232154
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232155
+  #   IPC:    0.2196 (calculated)
+  #   Cycles: 1232156
+  #   IPC:    0.2196 (calculated)
+  #   Total Cycles:        1232147
+  #   Total Instructions:  270529
+  #   Average IPC:         0.220
+  #   Peak IPC:            0.308
+  #   Stall Cycles:        0 (0.00%)
+  #   Cycles:       1232157
+  #   Instructions: 270529
+  #   IPC:          0.220
+  #   Total Cycles: 1232157  Instructions: 270529
+[0;36m================================================================================[0m
+[0;36mSummary[0m
+[0;36m================================================================================[0m
+[0;32m✓ TEST PASSED ✓[0m
+
+Test:      kernel_launch_test
+Program:   /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/wide_stress/wide_stress.elf
+Status:    PASSED
+
+Files:
+  Run Dir:   /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_172744_kernel_launch_test
+  Log:       logs/simulation.log
+  Waveform:  waves/kernel_launch_test_axi.vcd
+  Summary:   reports/SUMMARY.txt
+  Config:    reports/config.txt
+
+Quick access:
+  cd results/latest
+  cat reports/SUMMARY.txt
+  vsim -view waves/*.vcd
+
+[0;32m✓ All done! ✓[0m

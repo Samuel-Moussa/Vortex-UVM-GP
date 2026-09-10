@@ -1,0 +1,1190 @@
+Reading pref.tcl
+
+# 2021.2_1
+
+# vsim -coverage -c vortex_tb_top "+UVM_TESTNAME=kernel_launch_test" "+NUM_CLUSTERS=1" "+NUM_CORES=1" "+NUM_WARPS=4" "+NUM_THREADS=4" "+TIMEOUT=200000" "+STARTUP_ADDR=80000000" "+USE_AXI_WRAPPER" "+PROGRAM=/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex" "+WAVE=/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/waves/kernel_launch_test_axi.vcd" -sv_lib /opt/questa_sim-2021.2_1/questasim/uvm-1.2/linux_x86_64/uvm_dpi -sv_lib /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/ref_model/simx_model -onfinish stop -do "run -all; coverage save -testname kernel_launch_test_axi_stress /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/reports/coverage.ucdb; quit -f" 
+# Start time: 18:33:01 on Sep 10,2026
+# Loading /tmp/samuel_ubuntu22@SAMUEL_dpi_29415/linux_x86_64_gcc-7.4.0/export_tramp.so
+# ** Note: (vsim-8009) Loading existing optimized design _opt2
+# //  Questa Sim-64
+# //  Version 2021.2_1 linux_x86_64 May 15 2021
+# //
+# //  Copyright 1991-2021 Mentor Graphics Corporation
+# //  All Rights Reserved.
+# //
+# //  QuestaSim and its associated documentation contain trade
+# //  secrets and commercial or financial information that are the property of
+# //  Mentor Graphics Corporation and are privileged, confidential,
+# //  and exempt from disclosure under the Freedom of Information Act,
+# //  5 U.S.C. Section 552. Furthermore, this information
+# //  is prohibited from disclosure under the Trade Secrets Act,
+# //  18 U.S.C. Section 1905.
+# //
+# ** Note: (vsim-8785) UVM-aware debugging capabilities will be disabled since no compiled "questa_uvm_pkg" can be found.
+# This also means that later if you turn on UVM-aware debugging your debug simulations may have
+# different random seeds from your non-debug simulations.
+# Loading sv_std.std
+# Loading work.VX_gpu_pkg(fast)
+# Loading work.uvm_pkg(fast)
+# Loading work.vortex_config_pkg(fast)
+# Loading work.vortex_dcr_if_sv_unit(fast)
+# Loading work.vortex_mem_if_sv_unit(fast)
+# Loading work.vortex_if_sv_unit(fast)
+# Loading work.vortex_if(fast)
+# Loading work.rvvi_if(fast)
+# Loading work.vortex_dcr_if(fast)
+# Loading work.dcr_agent_pkg(fast)
+# Loading work.vortex_dcr_ral_pkg(fast)
+# Loading work.rvvi_registry_pkg(fast)
+# Loading work.lockstep_pkg(fast)
+# Loading work.simx_pkg(fast)
+# Loading work.vortex_status_if(fast)
+# Loading work.status_agent_pkg(fast)
+# Loading work.vortex_mem_if(fast)
+# Loading work.mem_model_pkg(fast)
+# Loading work.host_agent_pkg(fast)
+# ** Warning: (vsim-PLI-3691) Expected a system task, not a system function '$fseek'.
+#    Time: 0 ns  Iteration: 0  Region: /host_agent_pkg::host_transaction::load_program_from_file File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_transaction.svh Line: 185
+# ** Warning: (vsim-PLI-3691) Expected a system task, not a system function '$fseek'.
+#    Time: 0 ns  Iteration: 0  Region: /host_agent_pkg::host_transaction::load_program_from_file File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_transaction.svh Line: 187
+# Loading work.vortex_axi_if(fast)
+# Loading work.axi_agent_pkg(fast)
+# Loading work.mem_agent_pkg(fast)
+# Loading work.vortex_env_pkg(fast)
+# Loading work.vortex_test_pkg(fast)
+# Loading work.vortex_tb_top(fast)
+# Loading work.Vortex_axi(fast)
+# Loading work.Vortex(fast)
+# Loading work.VX_cache_wrap(fast)
+# Loading work.VX_cache_bypass(fast)
+# Loading work.VX_mem_switch(fast)
+# Loading work.VX_mem_arb(fast)
+# Loading work.VX_cluster(fast)
+# Loading work.VX_cache_wrap(fast__1)
+# Loading work.VX_cache_bypass(fast__1)
+# Loading work.VX_mem_switch(fast__1)
+# Loading work.VX_socket(fast)
+# Loading work.VX_cache_cluster(fast)
+# Loading work.VX_mem_arb(fast__1)
+# Loading work.VX_cache_wrap(fast__2)
+# Loading work.VX_cache(fast)
+# Loading work.VX_cache_init(fast)
+# Loading work.VX_elastic_buffer(fast__5)
+# Loading work.vx_cache_probe(fast)
+# Loading work.VX_elastic_buffer(fast__8)
+# Loading work.VX_elastic_buffer(fast__10)
+# Loading work.VX_mem_arb(fast__2)
+# Loading work.VX_cache_cluster(fast__1)
+# Loading work.VX_mem_arb(fast__3)
+# Loading work.VX_cache_wrap(fast__3)
+# Loading work.VX_cache_bypass(fast__2)
+# Loading work.VX_mem_switch(fast__2)
+# Loading work.VX_mem_arb(fast__4)
+# Loading work.VX_bits_remove(fast)
+# Loading work.VX_mem_arb(fast__5)
+# Loading work.VX_bits_insert(fast__1)
+# Loading work.VX_bits_remove(fast__1)
+# Loading work.VX_cache(fast__1)
+# Loading work.VX_cache_init(fast__1)
+# Loading work.VX_elastic_buffer(fast__18)
+# Loading work.vx_cache_probe(fast__1)
+# Loading work.VX_elastic_buffer(fast__20)
+# Loading work.VX_elastic_buffer(fast__21)
+# Loading work.VX_mem_arb(fast__6)
+# Loading work.VX_mem_arb(fast__7)
+# Loading work.VX_bits_insert(fast__2)
+# Loading work.VX_bits_remove(fast__2)
+# Loading work.VX_core(fast)
+# Loading work.vx_dcr_probe(fast)
+# Loading work.VX_schedule(fast)
+# Loading work.VX_elastic_buffer(fast__26)
+# Loading work.vx_sched_probe(fast)
+# Loading work.VX_fetch(fast)
+# Loading work.VX_dp_ram(fast__6)
+# Loading work.VX_elastic_buffer(fast__27)
+# Loading work.VX_decode(fast)
+# Loading work.VX_elastic_buffer(fast__28)
+# Loading work.VX_issue(fast)
+# Loading work.VX_issue_slice(fast)
+# Loading work.VX_ibuffer(fast)
+# Loading work.VX_elastic_buffer(fast__29)
+# Loading work.VX_tcu_pkg(fast)
+# Loading work.VX_uop_sequencer(fast)
+# Loading work.VX_scoreboard(fast)
+# Loading work.VX_stream_arb(fast__15)
+# Loading work.vx_hazard_probe(fast)
+# Loading work.VX_operands(fast)
+# Loading work.VX_opc_unit(fast)
+# Loading work.VX_nz_iterator(fast)
+# Loading work.VX_dp_ram(fast__8)
+# Loading work.VX_elastic_buffer(fast__32)
+# Loading work.VX_dispatch(fast)
+# Loading work.VX_elastic_buffer(fast__34)
+# Loading work.vx_instr_probe(fast)
+# Loading work.VX_fpu_pkg(fast)
+# Loading work.VX_execute(fast)
+# Loading work.VX_alu_unit(fast)
+# Loading work.VX_dispatch_unit(fast)
+# Loading work.VX_elastic_buffer(fast__35)
+# Loading work.VX_pe_switch(fast)
+# Loading work.VX_alu_int(fast)
+# Loading work.VX_priority_encoder(fast__4)
+# Loading work.VX_elastic_buffer(fast__37)
+# Loading work.VX_pipe_register(fast__11)
+# Loading work.VX_alu_muldiv(fast)
+# Loading work.VX_shift_register(fast__13)
+# Loading work.VX_stream_arb(fast__19)
+# Loading work.VX_gather_unit(fast)
+# Loading work.VX_elastic_buffer(fast__39)
+# Loading work.VX_lsu_unit(fast)
+# Loading work.VX_dispatch_unit(fast__1)
+# Loading work.VX_lsu_slice(fast)
+# Loading work.VX_elastic_buffer(fast__43)
+# Loading work.VX_elastic_buffer(fast__44)
+# Loading work.VX_stream_arb(fast__20)
+# Loading work.vx_lsu_probe(fast)
+# Loading work.VX_gather_unit(fast__1)
+# Loading work.VX_elastic_buffer(fast__45)
+# Loading work.VX_fpu_unit(fast)
+# Loading work.VX_dispatch_unit(fast__2)
+# Loading work.VX_index_buffer(fast__1)
+# Loading work.defs_div_sqrt_mvp(fast)
+# Loading work.cf_math_pkg(fast)
+# Loading work.fpnew_pkg(fast)
+# Loading work.VX_fpu_fpnew(fast)
+# Loading work.norm_div_sqrt_mvp_sv_unit(fast)
+# Loading work.control_mvp_sv_unit(fast)
+# Loading work.nrbd_nrsc_mvp_sv_unit(fast)
+# Loading work.preprocess_mvp_sv_unit(fast)
+# Loading work.div_sqrt_top_mvp_sv_unit(fast)
+# Loading work.fpnew_top(fast)
+# Loading work.rr_arb_tree(fast)
+# Loading work.rr_arb_tree(fast__1)
+# Loading work.rr_arb_tree(fast__2)
+# Loading work.rr_arb_tree(fast__3)
+# Loading work.rr_arb_tree(fast__4)
+# Loading work.VX_pipe_register(fast__13)
+# Loading work.VX_elastic_buffer(fast__47)
+# Loading work.VX_gather_unit(fast__2)
+# Loading work.VX_tcu_unit(fast)
+# Loading work.VX_dispatch_unit(fast__3)
+# Loading work.VX_pe_switch(fast__1)
+# Loading work.VX_tcu_fp(fast)
+# Loading work.VX_tcu_fedp_bhf(fast)
+# Loading work.VX_tcu_int(fast)
+# Loading work.VX_gather_unit(fast__3)
+# Loading work.VX_sfu_unit(fast)
+# Loading work.VX_dispatch_unit(fast__4)
+# Loading work.VX_pe_switch(fast__2)
+# Loading work.VX_wctl_unit(fast)
+# Loading work.VX_elastic_buffer(fast__48)
+# Loading work.VX_pipe_register(fast__27)
+# Loading work.VX_csr_unit(fast)
+# Loading work.VX_csr_data(fast)
+# Loading work.VX_gather_unit(fast__4)
+# Loading work.VX_commit(fast)
+# Loading work.VX_pipe_register(fast__30)
+# Loading work.vx_commit_probe(fast)
+# Loading work.VX_mem_unit(fast)
+# Loading work.VX_lmem_switch(fast)
+# Loading work.VX_elastic_buffer(fast__50)
+# Loading work.VX_stream_arb(fast__22)
+# Loading work.VX_lsu_mem_arb(fast)
+# Loading work.VX_lsu_adapter(fast)
+# Loading work.VX_stream_unpack(fast)
+# Loading work.VX_stream_pack(fast)
+# Loading work.VX_local_mem(fast)
+# Loading work.vx_lmem_probe(fast)
+# Loading work.VX_mem_coalescer(fast)
+# Loading work.vx_coalescer_probe(fast)
+# Loading work.VX_lsu_adapter(fast__1)
+# Loading work.VX_stream_unpack(fast__1)
+# Loading work.VX_stream_pack(fast__1)
+# Loading work.VX_axi_adapter(fast)
+# ** Warning: (vsim-3015) [PCDPC] - Port size (8) does not match connection size (4) for port 'barrier_ctrs'. The port definition is at: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_sched_probe.sv(69).
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vortex_tb_top_binds.svh Line: 25
+# Compiling /tmp/samuel_ubuntu22@SAMUEL_dpi_29415/linux_x86_64_gcc-7.4.0/exportwrapper.c
+# Compiling /tmp/samuel_ubuntu22@SAMUEL_dpi_29415/linux_x86_64_gcc-11/exportwrapper.c
+# Loading /tmp/samuel_ubuntu22@SAMUEL_dpi_29415/linux_x86_64_gcc-11/vsim_auto_compile.so
+# Loading /opt/questa_sim-2021.2_1/questasim/uvm-1.2/linux_x86_64/uvm_dpi.so
+# Loading /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/ref_model/simx_model.so
+# ** Warning: (vsim-3770) Failed to find user specified function 'dpi_trace' in DPI precompiled library search list "/opt/questa_sim-2021.2_1/questasim/uvm-1.2/linux_x86_64/uvm_dpi.so /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/ref_model/simx_model.so ".
+#    Time: 0 ps  Iteration: 0  Region: /VX_tcu_pkg File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/hw/rtl/tcu/VX_tcu_pkg.sv
+# run -all
+# UVM_INFO /opt/questa_sim-2021.2_1/questasim/verilog_src/uvm-1.2/src/base/uvm_root.svh(392) @ 0: reporter [UVM/RELNOTES] 
+# ----------------------------------------------------------------
+# UVM-1.2
+# (C) 2007-2014 Mentor Graphics Corporation
+# (C) 2007-2014 Cadence Design Systems, Inc.
+# (C) 2006-2014 Synopsys, Inc.
+# (C) 2011-2013 Cypress Semiconductor Corp.
+# (C) 2013-2014 NVIDIA Corporation
+# ----------------------------------------------------------------
+# 
+#   ***********       IMPORTANT RELEASE NOTES         ************
+# 
+#   You are using a version of the UVM library that has been compiled
+#   with `UVM_NO_DEPRECATED undefined.
+#   See http://www.eda.org/svdb/view.php?id=3313 for more details.
+# 
+#   You are using a version of the UVM library that has been compiled
+#   with `UVM_OBJECT_DO_NOT_NEED_CONSTRUCTOR undefined.
+#   See http://www.eda.org/svdb/view.php?id=3770 for more details.
+# 
+#       (Specify +UVM_NO_RELNOTES to turn off this notice)
+# 
+# ** Warning: (vsim-8556) On evaluating the expression 'binsof(axi_usage_cp) intersect{ value_list }' inside the select expression of Bin 'simul' of Cross 'system_axi_cross' in Covergroup instance 'vortex_system_coverage', no matching bins were found. The binsof expression will result in an empty set.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top
+# ** Warning: (vsim-8560) On evaluating the select expression of Cross bin 'system_axi_cross.simul' in Covergroup instance 'vortex_system_coverage', the bin is found to be empty since no cross products are selected.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top
+# ** Warning: (vsim-3881) /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_sched_probe.sv(170): Sign-and-Width conversion applied in bin 'deeper' for Coverpoint 'cp_split_depth'. Value '4' changed to '3 (maximum)' value.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe
+# ** Warning: (vsim-8475) The invalid value range [4 : 3] is found in bin 'deeper' of Coverpoint 'cp_split_depth'. It will be ignored.
+#    Time: 0 ps  Iteration: 0  Process: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe/#INITIAL#281 File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_sched_probe.sv Line: 170
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'deeper' in Coverpoint 'cp_split_depth' of Covergroup instance 'warp_divergence_cg' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe
+# ** Warning: (vsim-3881) /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_sched_probe.sv(204): Sign-and-Width conversion applied in bin 'deeper' for Coverpoint 'cp_join_depth'. Value '4' changed to '3 (maximum)' value.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe
+# ** Warning: (vsim-8475) The invalid value range [4 : 3] is found in bin 'deeper' of Coverpoint 'cp_join_depth'. It will be ignored.
+#    Time: 0 ps  Iteration: 0  Process: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe/#INITIAL#281 File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_sched_probe.sv Line: 204
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'deeper' in Coverpoint 'cp_join_depth' of Covergroup instance 'warp_reconverge_cg' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/schedule/u_sched_probe
+# ================================================================================
+# VORTEX INTERFACE INITIALIZED
+# ================================================================================
+# Sub-interfaces instantiated:
+#   - vortex_axi_if    ADDR=32 DATA=512 ID=50
+#   - vortex_mem_if    ADDR=26 DATA=512 TAG=50
+#   - vortex_dcr_if    ADDR=12 DATA=32
+#   - vortex_status_if (Status and performance monitoring)
+# All interfaces use clocking blocks for race-free operation
+# ================================================================================
+# [TB_TOP @ 0] Program file: /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex
+# [TB_TOP @ 0] Custom timeout: 200000 cycles
+# [TB_TOP @ 0] Waveform output: /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/waves/kernel_launch_test_axi.vcd
+# [TB_TOP @ 0] Waveforms: vsim.wlf (Questa)
+# [TB_TOP @ 0] DUT: Vortex_axi AXI_TID_W=50
+# [I2-ASSERT] Topology OK: 1CL 1C 4W 4T (RTL == UVM plusargs)
+# [I2-ASSERT] Structural config OK: XLEN=32 L2=0 L3=0 icache=1 dcache=1 (RTL == UVM)
+# ================================================================================
+# [TB_TOP @ 0] Vortex GPGPU UVM Testbench Initialized
+# ================================================================================
+# [TB_TOP @ 0] Memory model created
+# [MEM_MODEL] Loaded 25716 bytes from /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex at base=0x0000000080000000
+# [TB_TOP @ 0] Pre-loaded 25716 bytes from '/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex' @ 0x0000000080000000 (before reset)
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'writeback' in Coverpoint 'cp_event' of Covergroup instance 'cache_event_cg_cluster0-socket0-icache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'flush' in Coverpoint 'cp_event' of Covergroup instance 'cache_event_cg_cluster0-socket0-icache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'wr' in Coverpoint 'cp_rw' of Covergroup instance 'cache_event_cg_cluster0-socket0-icache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'stall' in Coverpoint 'cp_mshr_stall' of Covergroup instance 'cache_event_cg_cluster0-socket0-icache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/icache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8855) The evaluation of coverpoint bin 'flush_unreachable' 'with' expression resulted in an empty value range list.
+#    Time: 0 ps  Iteration: 0  Process: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/dcache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe/#INITIAL#217 File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_cache_probe.sv Line: 145
+# ** Warning: (vsim-8858) After processing coverbin with/set expression, the values list associated with scalar bin 'flush_unreachable' in Coverpoint 'cp_event' of Covergroup instance 'cache_event_cg_cluster0-socket0-dcache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/dcache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'writeback' in Coverpoint 'cp_event' of Covergroup instance 'cache_event_cg_cluster0-socket0-dcache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/dcache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8855) The evaluation of coverpoint bin 'wr_unreachable' 'with' expression resulted in an empty value range list.
+#    Time: 0 ps  Iteration: 0  Process: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/dcache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe/#INITIAL#217 File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vx_cache_probe.sv Line: 165
+# ** Warning: (vsim-8858) After processing coverbin with/set expression, the values list associated with scalar bin 'wr_unreachable' in Coverpoint 'cp_rw' of Covergroup instance 'cache_event_cg_cluster0-socket0-dcache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/dcache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'stall' in Coverpoint 'cp_mshr_stall' of Covergroup instance 'cache_event_cg_cluster0-socket0-dcache0-bank0_b0' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/dcache/g_cache_wrap[0]/cache_wrap/g_cache/cache/g_banks[0]/bank/u_cache_probe
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'f2f' in Coverpoint 'cp_fpu_op' of Covergroup instance 'instr_class_cg_fpu' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 0  Instance: /vortex_tb_top/dut/vortex/g_clusters[0]/cluster/g_sockets[0]/socket/g_cores[0]/core/issue/g_slices[0]/issue_slice/dispatch/u_instr_probe
+# CONFIGS: num_threads=4, num_warps=4, num_cores=1, num_clusters=1, socket_size=1, local_mem_base=0xffff0000, num_barriers=2
+# [TB_TOP @ 0] Virtual interfaces registered in UVM config DB
+# [TB_TOP @ 0] Starting UVM test phase...
+# ================================================================================
+# UVM_INFO @ 0: reporter [RNTST] Running test kernel_launch_test...
+# [TB_TOP @ 0] Timeout watchdog armed (200000 cycles)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(66) @ 0: uvm_test_top [kernel_launch_test] Building test...
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(73) @ 0: uvm_test_top [kernel_launch_test] DEBUG cfg after plusargs: cores=1 warps=4 threads=4 str=1CL_1C_4W_4T_RV32_ F_AXI
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/kernel_launch_test.svh(84) @ 0: uvm_test_top [kernel_launch_test] Kernel launch cfg: startup=0x0000000080000000 result=0x0000000000000000 size=0 timeout=200000 cycles iface=     AXI4 program=/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(156) @ 0: uvm_test_top.env [VORTEX_ENV] axi_agent created
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(161) @ 0: uvm_test_top.env [VORTEX_ENV] dcr_agent created
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(172) @ 0: uvm_test_top.env [VORTEX_ENV] DCR RAL (reg block + backdoor checker) created
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(177) @ 0: uvm_test_top.env [VORTEX_ENV] host_agent created
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(182) @ 0: uvm_test_top.env [VORTEX_ENV] status_agent created (always PASSIVE)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(191) @ 0: uvm_test_top.env [VORTEX_ENV] Virtual sequencer created
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(199) @ 0: uvm_test_top.env [VORTEX_ENV] Scoreboard created
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with array bin 'slot' in Coverpoint 'cp_route_slot' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8522) The number of coverpoint bins is zero for the coverpoint 'cp_route_slot' of covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg '. All the user defined bins in the coverpoint are empty bins and hence it would not contribute towards the overall coverage result.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'byte_1' in Coverpoint 'cp_size' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'byte_2' in Coverpoint 'cp_size' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'byte_4' in Coverpoint 'cp_size' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'byte_8' in Coverpoint 'cp_size' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8550) The number of coverable (sub)bins is zero for the Coverpoint 'cp_route_slot' specified in the list of Coverpoints of Cross 'cross_port_slot' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::axi_transaction_cg '. The cross will never be covered.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'sm' in Coverpoint 'cp_num_clusters' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'lg' in Coverpoint 'cp_num_clusters' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'sm' in Coverpoint 'cp_num_cores' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'md' in Coverpoint 'cp_num_cores' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'lg' in Coverpoint 'cp_num_cores' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'xl' in Coverpoint 'cp_num_cores' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'low' in Coverpoint 'cp_num_warps' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'high' in Coverpoint 'cp_num_warps' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'wide' in Coverpoint 'cp_num_warps' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'xl' in Coverpoint 'cp_num_warps' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 't1' in Coverpoint 'cp_num_threads' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 't2' in Coverpoint 'cp_num_threads' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 't8' in Coverpoint 'cp_num_threads' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 't16' in Coverpoint 'cp_num_threads' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'txl' in Coverpoint 'cp_num_threads' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::host_operation_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'high_ipc' in Coverpoint 'cp_ipc_bucket' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::status_performance_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# ** Warning: (vsim-8549) After dropping the illegal, ignore or invalid values, the values list associated with scalar bin 'many' in Coverpoint 'cp_active_warps' of Covergroup instance '\/vortex_env_pkg::vortex_coverage_collector::status_performance_cg ' has converged to empty list. The bin will be taken out of coverage calculation.
+#    Time: 0 ps  Iteration: 12  Region: /uvm_pkg::uvm_phase::m_run_phases
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(225) @ 0: uvm_test_top.env [VORTEX_ENV] Coverage collector created
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/axi_agent/axi_monitor.svh(149) @ 0: uvm_test_top.env.m_axi_agent.m_monitor [AXI_MON] mem_model found â R-beat inline comparison enabled
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(781) @ 0: uvm_test_top.env.m_coverage [COVERAGE] AXI route decode: AXI_ID_W=50 UUID_W=44 ROUTE_W=6 | MEM_PORTS=1 PORT_SEL_W=0 | TAG_BUF_SZ=16 SLOT_W=4
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_coverage_collector.svh(791) @ 0: uvm_test_top.env.m_coverage [COVERAGE] AXI tag buffer  ABSENT (MEM_PORTS=1) -> cp_route_slot/cross_port_slot IGNORED (read id is the raw cache tag)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(264) @ 0: uvm_test_top.env [VORTEX_ENV] DCR RAL frontdoor attached to dcr_sequencer
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(272) @ 0: uvm_test_top.env [VORTEX_ENV] DCR RAL predictor attached to dcr monitor
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(283) @ 0: uvm_test_top.env [VORTEX_ENV] DCR RAL per-core completeness armed: expecting 1 probe instance(s) (1 cluster(s) x 1 core(s))
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(315) @ 0: uvm_test_top.env [VORTEX_ENV] Scoreboard connected to all agents
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(347) @ 0: uvm_test_top.env [VORTEX_ENV] Coverage collector connected to all agents
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/axi_agent/axi_agent.svh(136) @ 0: uvm_test_top.env.m_axi_agent [AXI_AGENT] AXI Agent configured:  ACTIVE mode, ID_WIDTH=50
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_sequencer.svh(59) @ 0: uvm_test_top.env.m_dcr_agent.m_sequencer [DCR_SQCR] DCR sequencer ready
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_agent.svh(143) @ 0: uvm_test_top.env.m_dcr_agent [DCR_AGENT] DCR agent configured: ACTIVE mode
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_sequencer.svh(66) @ 0: uvm_test_top.env.m_host_agent.m_sequencer [HOST_SQCR] Host sequencer ready
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_agent.svh(140) @ 0: uvm_test_top.env.m_host_agent [HOST_AGENT] 
+# ========================================
+#     Host Agent Configuration
+# ========================================
+#   Mode:           ACTIVE
+#   Driver:        â
+#   Sequencer:     â
+#   Monitor:       â
+# ========================================
+#   Interfaces Used:
+#     - vortex_mem_if.master_driver
+#     - vortex_dcr_if.master_driver
+#     - vortex_status_if.monitor
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/status_agent/status_agent.svh(115) @ 0: uvm_test_top.env.m_status_agent [STATUS_AGENT] Status agent configured: PASSIVE (monitor-only)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/status_agent/status_agent.svh(118) @ 0: uvm_test_top.env.m_status_agent [STATUS_AGENT] Status sampling every 10 cycles
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_virtual_sequencer.svh(83) @ 0: uvm_test_top.env.m_virtual_sequencer [VIRT_SQCR] 
+# ========================================
+#   Virtual Sequencer Configuration
+# ========================================
+#   mem_sequencer:  â
+#   axi_sequencer:  â
+#   dcr_sequencer:  â
+#   host_sequencer: â
+# ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_env.svh(359) @ 0: uvm_test_top.env [VORTEX_ENV] 
+# ââââââââââââââââââââââââââââââââââââââââââââââââ
+# â       Vortex UVM Environment Topology        â
+# â âââââââââââââââââââââââââââââââââââââââââââââââ£
+# â  Config        : 1CL_1C_4W_4T_RV32_ F_AXI   â
+# â âââââââââââââââââââââââââââââââââââââââââââââââ£
+# â  mem_agent     : DISABLED                   â
+# â  axi_agent     : ACTIVE                     â
+# â  dcr_agent     : ACTIVE                     â
+# â  host_agent    : ACTIVE                     â
+# â  status_agent  : PASSIVE                    â
+# â âââââââââââââââââââââââââââââââââââââââââââââââ£
+# â  Scoreboard    : ENABLED                    â
+# â  Coverage      : ENABLED                    â
+# â  Virt Seqr     : CREATED                    â
+# ââââââââââââââââââââââââââââââââââââââââââââââââ
+# 
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(125) @ 0: uvm_test_top [kernel_launch_test] 
+# ================================================================================
+#   Test:        kernel_launch_test
+#   Config:      1CL_1C_4W_4T_RV32_ F_AXI
+#   Timeout:     200000 cycles
+# ================================================================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/kernel_launch_test.svh(96) @ 0: uvm_test_top [kernel_launch_test] 
+# ----------------------------------------------------------------
+#  KERNEL LAUNCH TEST                                            
+# ----------------------------------------------------------------
+#   Test Flow:                                                   
+#     1. preload kernel binary into mem_model                    
+#     2. wait for reset release                                  
+#     3. launch kernel through host agent                       
+#     4. wait for completion                                     
+#     5. compare result window against SimX                      
+#   Startup   : 0x0000000080000000
+#   Result    : 0x0000000000000000 (0 bytes)
+#   Timeout   : 200000 cycles
+# ----------------------------------------------------------------
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(147) @ 0: uvm_test_top [kernel_launch_test] Starting test execution...
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(250) @ 0: uvm_test_top.env.m_scoreboard [SCOREBOARD] Initialising SimX: cores=1 warps=4 threads=4
+# [SimX-DPI] ========================================
+# [SimX-DPI] Initializing SimX Golden Model
+# [SimX-DPI] Cores=1, Warps=4, Threads=4
+# [SimX-DPI] Architecture created successfully
+# [SimX-DPI] Creating RAM: capacity=0x100000000, page_size=0x1000
+# [SimX-DPI] RAM created successfully
+# [SimX-DPI] Attaching RAM to processor...
+# [SimX-DPI] RAM attached successfully
+# [SimX-DPI] Verifying RAM...
+# [SimX-DPI] RAM verification PASSED
+# [SimX-DPI] Initialization successful
+# [SimX-DPI] ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(261) @ 0: uvm_test_top.env.m_scoreboard [SCOREBOARD] SimX initialised successfully
+# [SimX-DPI] Loaded 25716 bytes from '/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex' mapped to absolute memory
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/vortex_scoreboard.svh(280) @ 0: uvm_test_top.env.m_scoreboard [SCOREBOARD] SimX: loaded hex '/home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex' @ 0x80000000
+# [SimX-DPI] ========================================
+# [SimX-DPI] Installing Exit Code Bootstrap
+# [SimX-DPI] Bootstrap address: 0x7ffffff0
+# [SimX-DPI] Main program at:   0x80000000
+# [SimX-DPI] Bootstrap code written to memory
+# [SimX-DPI] DCRs updated to start at bootstrap
+# [SimX-DPI] Bootstrap will:
+# [SimX-DPI]   1. Set x3 = 0 (exit code)
+# [SimX-DPI]   2. Jump to 0x80000000 (auipc+jalr x1+12)
+# [SimX-DPI] ========================================
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/axi_agent/axi_driver.svh(147) @ 0: uvm_test_top.env.m_axi_agent.m_driver [AXI_DRV] Waiting for reset...
+# [TB_TOP @ 1000] mem_model verified in config_db
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/kernel_launch_test.svh(145) @ 2000: uvm_test_top [kernel_launch_test] Loading kernel program: /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex (HEX format) at 0x0000000080000000
+# [MEM_MODEL] Loaded 25716 bytes from /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/programs/axi_stress.hex at base=0x0000000080000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/kernel_launch_test.svh(157) @ 2000: uvm_test_top [kernel_launch_test] â Loaded 25716 bytes into mem_model
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(215) @ 2000: uvm_test_top [kernel_launch_test] Waiting for reset...
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(115) @ 5000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV] Applying bootstrap DCRs during reset: PC=0x0000000080000000 argv=0x0000000000000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(108) @ 5000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Host driver reset complete
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(143) @ 35000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Startup address set to 0x80000000
+# [SimX-DPI] DCR Write: addr=0x1, value=0x80000000
+# [SimX-DPI] DCR write successful
+# [SimX-DPI] DCR Write: addr=0x2, value=0x0
+# [SimX-DPI] DCR write successful
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_monitor.svh(176) @ 75000: uvm_test_top.env.m_dcr_agent.m_monitor [DCR_MON] â Startup configuration complete: PC=0x0000000080000000
+# [SimX-DPI] DCR Write: addr=0x3, value=0x0
+# [SimX-DPI] DCR write successful
+# [SimX-DPI] DCR Write: addr=0x4, value=0x0
+# [SimX-DPI] DCR write successful
+# [SimX-DPI] DCR Write: addr=0x5, value=0x0
+# [SimX-DPI] DCR write successful
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(130) @ 205000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV] Bootstrap DCRs written during reset â signalled dcr_bootstrap_done
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/dcr_agent/dcr_driver.svh(133) @ 205000: uvm_test_top.env.m_dcr_agent.m_driver [DCR_DRV] DCR driver reset complete
+# [TB_TOP @ 3845000] Releasing reset
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/axi_agent/axi_driver.svh(174) @ 3845000: uvm_test_top.env.m_axi_agent.m_driver [AXI_DRV] Reset complete â slave responder ready
+# [TB_TOP @ 3895000] Hardware Reset Complete - System ready
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/vortex_base_test.svh(218) @ 3895000: uvm_test_top [kernel_launch_test] Reset complete
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_tests/kernel_launch_test.svh(175) @ 3895000: uvm_test_top [kernel_launch_test] Executing kernel launch virtual sequence at 0x0000000080000000 (cores=1 warps=4 threads=4 timeout=200000)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/sequences/kernel_launch_vseq.svh(36) @ 3895000: uvm_test_top.env.m_virtual_sequencer@@vseq [kernel_launch_vseq] kernel_launch_vseq: launching kernel at 0x0000000080000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_sequences.svh(214) @ 3895000: uvm_test_top.env.m_host_agent.m_sequencer@@launch_seq [HOST_SEQ] Launching kernel at 0x0000000080000000 (clusters=1 cores=1 warps=4 threads=4)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(121) @ 3895000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Executing transaction:
+# 
+# ââ Host Transaction âââââââââââââââ
+# â Operation: HOST_LAUNCH_KERNEL
+# â Startup Addr:  0x0000000080000000
+# â Configuration: 1 clusters, 1 cores, 4 warps, 4 threads
+# â [Executed via dcr_vif.master_cb]
+# âââââââââââââââââââââââââââââââââââ
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(199) @ 3895000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Launching kernel...
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(175) @ 3895000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Writing DCR[0x00000001] = 0x80000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/status_agent/status_monitor.svh(224) @ 3895000: uvm_test_top.env.m_status_agent.m_monitor [STATUS_MON] â Execution started @ cycle 4, time 3895000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(213) @ 3895000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution started at time 3895000, cycle 4
+# [DCR_IF @ 3915000] Write: STARTUP_ADDR0 [0x001] = 0x80000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(143) @ 3915000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Startup address set to 0x80000000
+# [SimX-DPI] DCR Write: addr=0x1, value=0x80000000
+# [SimX-DPI] DCR write successful
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(175) @ 3945000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Writing DCR[0x00000002] = 0x00000000
+# [DCR_IF @ 3975000] Write: UNKNOWN_DCR[0x002] [0x002] = 0x00000000
+# [SimX-DPI] DCR Write: addr=0x2, value=0x0
+# [SimX-DPI] DCR write successful
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(222) @ 4005000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Kernel launched at 0x0000000080000000
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/sequences/kernel_launch_vseq.svh(42) @ 4005000: uvm_test_top.env.m_virtual_sequencer@@vseq [kernel_launch_vseq] kernel_launch_vseq: waiting for completion (timeout=200000 cycles)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_sequences.svh(256) @ 4005000: uvm_test_top.env.m_host_agent.m_sequencer@@wait_seq [HOST_SEQ] Waiting for completion (timeout=200000 cycles)
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(121) @ 4005000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Executing transaction:
+# 
+# ââ Host Transaction âââââââââââââââ
+# â Operation: HOST_WAIT_DONE
+# â Timeout:       200000 cycles
+# â Completed:      NO
+# â [Monitored via status_vif.monitor_cb]
+# âââââââââââââââââââââââââââââââââââ
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_driver.svh(228) @ 4005000: uvm_test_top.env.m_host_agent.m_driver [HOST_DRV] Waiting for completion (timeout: 200000 cycles)
+# [TB_TOP @ 4535000] DCR-write-timing assertion armed (startup config window closed)
+# 
+# [TB_STATUS @ 4575000] Execution STARTED
+# [TB_STATUS @ 13855000] cyc=1000 mem=106 busy=1 idle=0
+# [TB_PROBE_AXI @ 13855000] cyc=1000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 13855000] cyc=1000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=3 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=0 | PC=0x80003370 instr=0x05858593 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 23855000] cyc=2000 mem=377 busy=1 idle=1
+# [TB_PROBE_AXI @ 23855000] cyc=2000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 23855000] cyc=2000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=3 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x8000348c instr=0x001ea88b ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 33855000] cyc=3000 mem=574 busy=1 idle=6
+# [TB_PROBE_AXI @ 33855000] cyc=3000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 33855000] cyc=3000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfece2223 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 43855000] cyc=4000 mem=646 busy=1 idle=3
+# [TB_PROBE_AXI @ 43855000] cyc=4000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 43855000] cyc=4000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80003520 instr=0x007ed08b ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 53855000] cyc=5000 mem=718 busy=1 idle=3
+# [TB_PROBE_AXI @ 53855000] cyc=5000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 53855000] cyc=5000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 63855000] cyc=6000 mem=798 busy=1 idle=3
+# [TB_PROBE_AXI @ 63855000] cyc=6000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 63855000] cyc=6000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 73855000] cyc=7000 mem=870 busy=1 idle=2
+# [TB_PROBE_AXI @ 73855000] cyc=7000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 73855000] cyc=7000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 83855000] cyc=8000 mem=950 busy=1 idle=8
+# [TB_PROBE_AXI @ 83855000] cyc=8000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 83855000] cyc=8000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 93855000] cyc=9000 mem=1023 busy=1 idle=1
+# [TB_PROBE_AXI @ 93855000] cyc=9000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 93855000] cyc=9000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 103855000] cyc=10000 mem=1102 busy=1 idle=4
+# [TB_PROBE_AXI @ 103855000] cyc=10000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 103855000] cyc=10000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# ** Warning: [STATUS_IF @ 103895000] Busy stuck high for >10000 cycles!
+#    Time: 103895 ns Started: 3895 ns  Scope: vortex_tb_top.vif.status_if.assert_busy_eventually_idles File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vortex_status_if.sv Line: 135
+# [TB_STATUS @ 113855000] cyc=11000 mem=1176 busy=1 idle=0
+# [TB_PROBE_AXI @ 113855000] cyc=11000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 113855000] cyc=11000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 123855000] cyc=12000 mem=1254 busy=1 idle=9
+# [TB_PROBE_AXI @ 123855000] cyc=12000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 123855000] cyc=12000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 133855000] cyc=13000 mem=1329 busy=1 idle=3
+# [TB_PROBE_AXI @ 133855000] cyc=13000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 133855000] cyc=13000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=1 ready=1 rsp=0 stall_cyc=24 | PC=0x8000350c instr=0x00c32c23 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 143855000] cyc=14000 mem=1406 busy=1 idle=3
+# [TB_PROBE_AXI @ 143855000] cyc=14000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 143855000] cyc=14000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 153855000] cyc=15000 mem=1482 busy=1 idle=1
+# [TB_PROBE_AXI @ 153855000] cyc=15000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 153855000] cyc=15000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 163855000] cyc=16000 mem=1558 busy=1 idle=8
+# [TB_PROBE_AXI @ 163855000] cyc=16000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 163855000] cyc=16000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 173855000] cyc=17000 mem=1635 busy=1 idle=1
+# [TB_PROBE_AXI @ 173855000] cyc=17000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 173855000] cyc=17000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 183855000] cyc=18000 mem=1710 busy=1 idle=0
+# [TB_PROBE_AXI @ 183855000] cyc=18000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 183855000] cyc=18000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 193855000] cyc=19000 mem=1787 busy=1 idle=2
+# [TB_PROBE_AXI @ 193855000] cyc=19000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 193855000] cyc=19000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 203855000] cyc=20000 mem=1862 busy=1 idle=5
+# [TB_PROBE_AXI @ 203855000] cyc=20000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 203855000] cyc=20000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 213855000] cyc=21000 mem=1940 busy=1 idle=1
+# [TB_PROBE_AXI @ 213855000] cyc=21000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 213855000] cyc=21000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 223855000] cyc=22000 mem=2014 busy=1 idle=10
+# [TB_PROBE_AXI @ 223855000] cyc=22000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 223855000] cyc=22000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x800034f8 instr=0x00c32223 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 233855000] cyc=23000 mem=2093 busy=1 idle=2
+# [TB_PROBE_AXI @ 233855000] cyc=23000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 233855000] cyc=23000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 243855000] cyc=24000 mem=2166 busy=1 idle=15
+# [TB_PROBE_AXI @ 243855000] cyc=24000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 243855000] cyc=24000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 253855000] cyc=25000 mem=2246 busy=1 idle=3
+# [TB_PROBE_AXI @ 253855000] cyc=25000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 253855000] cyc=25000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80003520 instr=0x007ed08b ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 263855000] cyc=26000 mem=2318 busy=1 idle=3
+# [TB_PROBE_AXI @ 263855000] cyc=26000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 263855000] cyc=26000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 273855000] cyc=27000 mem=2398 busy=1 idle=3
+# [TB_PROBE_AXI @ 273855000] cyc=27000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 273855000] cyc=27000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 283855000] cyc=28000 mem=2470 busy=1 idle=2
+# [TB_PROBE_AXI @ 283855000] cyc=28000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 283855000] cyc=28000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 293855000] cyc=29000 mem=2550 busy=1 idle=8
+# [TB_PROBE_AXI @ 293855000] cyc=29000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 293855000] cyc=29000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 303855000] cyc=30000 mem=2623 busy=1 idle=1
+# [TB_PROBE_AXI @ 303855000] cyc=30000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 303855000] cyc=30000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 313855000] cyc=31000 mem=2702 busy=1 idle=4
+# [TB_PROBE_AXI @ 313855000] cyc=31000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 313855000] cyc=31000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 323855000] cyc=32000 mem=2776 busy=1 idle=0
+# [TB_PROBE_AXI @ 323855000] cyc=32000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 323855000] cyc=32000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 333855000] cyc=33000 mem=2854 busy=1 idle=9
+# [TB_PROBE_AXI @ 333855000] cyc=33000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 333855000] cyc=33000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 343855000] cyc=34000 mem=2929 busy=1 idle=3
+# [TB_PROBE_AXI @ 343855000] cyc=34000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 343855000] cyc=34000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=1 ready=1 rsp=0 stall_cyc=24 | PC=0x8000350c instr=0x00c32c23 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 353855000] cyc=35000 mem=3006 busy=1 idle=3
+# [TB_PROBE_AXI @ 353855000] cyc=35000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 353855000] cyc=35000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 363855000] cyc=36000 mem=3082 busy=1 idle=1
+# [TB_PROBE_AXI @ 363855000] cyc=36000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 363855000] cyc=36000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 373855000] cyc=37000 mem=3158 busy=1 idle=8
+# [TB_PROBE_AXI @ 373855000] cyc=37000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 373855000] cyc=37000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 383855000] cyc=38000 mem=3235 busy=1 idle=1
+# [TB_PROBE_AXI @ 383855000] cyc=38000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 383855000] cyc=38000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 393855000] cyc=39000 mem=3310 busy=1 idle=0
+# [TB_PROBE_AXI @ 393855000] cyc=39000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 393855000] cyc=39000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 403855000] cyc=40000 mem=3387 busy=1 idle=2
+# [TB_PROBE_AXI @ 403855000] cyc=40000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 403855000] cyc=40000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 413855000] cyc=41000 mem=3462 busy=1 idle=5
+# [TB_PROBE_AXI @ 413855000] cyc=41000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 413855000] cyc=41000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 423855000] cyc=42000 mem=3540 busy=1 idle=1
+# [TB_PROBE_AXI @ 423855000] cyc=42000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 423855000] cyc=42000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 433855000] cyc=43000 mem=3614 busy=1 idle=10
+# [TB_PROBE_AXI @ 433855000] cyc=43000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 433855000] cyc=43000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x800034f8 instr=0x00c32223 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 443855000] cyc=44000 mem=3693 busy=1 idle=2
+# [TB_PROBE_AXI @ 443855000] cyc=44000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 443855000] cyc=44000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 453855000] cyc=45000 mem=3766 busy=1 idle=15
+# [TB_PROBE_AXI @ 453855000] cyc=45000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 453855000] cyc=45000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 463855000] cyc=46000 mem=3846 busy=1 idle=3
+# [TB_PROBE_AXI @ 463855000] cyc=46000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 463855000] cyc=46000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80003520 instr=0x007ed08b ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 473855000] cyc=47000 mem=3918 busy=1 idle=3
+# [TB_PROBE_AXI @ 473855000] cyc=47000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 473855000] cyc=47000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00a282b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 483855000] cyc=48000 mem=3998 busy=1 idle=3
+# [TB_PROBE_AXI @ 483855000] cyc=48000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 483855000] cyc=48000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 493855000] cyc=49000 mem=4070 busy=1 idle=2
+# [TB_PROBE_AXI @ 493855000] cyc=49000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 493855000] cyc=49000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 503855000] cyc=50000 mem=4150 busy=1 idle=8
+# [TB_PROBE_AXI @ 503855000] cyc=50000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 503855000] cyc=50000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 513855000] cyc=51000 mem=4223 busy=1 idle=1
+# [TB_PROBE_AXI @ 513855000] cyc=51000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 513855000] cyc=51000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 523855000] cyc=52000 mem=4302 busy=1 idle=4
+# [TB_PROBE_AXI @ 523855000] cyc=52000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 523855000] cyc=52000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 533855000] cyc=53000 mem=4376 busy=1 idle=0
+# [TB_PROBE_AXI @ 533855000] cyc=53000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 533855000] cyc=53000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 543855000] cyc=54000 mem=4454 busy=1 idle=9
+# [TB_PROBE_AXI @ 543855000] cyc=54000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 543855000] cyc=54000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 553855000] cyc=55000 mem=4529 busy=1 idle=3
+# [TB_PROBE_AXI @ 553855000] cyc=55000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 553855000] cyc=55000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=1 ready=1 rsp=0 stall_cyc=24 | PC=0x8000350c instr=0x00c32c23 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 563855000] cyc=56000 mem=4606 busy=1 idle=3
+# [TB_PROBE_AXI @ 563855000] cyc=56000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 563855000] cyc=56000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 573855000] cyc=57000 mem=4682 busy=1 idle=1
+# [TB_PROBE_AXI @ 573855000] cyc=57000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 573855000] cyc=57000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0xfc0e88e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 583855000] cyc=58000 mem=4724 busy=1 idle=2
+# [TB_PROBE_AXI @ 583855000] cyc=58000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 583855000] cyc=58000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 593855000] cyc=59000 mem=4739 busy=1 idle=2
+# [TB_PROBE_AXI @ 593855000] cyc=59000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 593855000] cyc=59000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 603855000] cyc=60000 mem=4755 busy=1 idle=0
+# [TB_PROBE_AXI @ 603855000] cyc=60000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 603855000] cyc=60000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 613855000] cyc=61000 mem=4770 busy=1 idle=1
+# [TB_PROBE_AXI @ 613855000] cyc=61000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 613855000] cyc=61000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 623855000] cyc=62000 mem=4785 busy=1 idle=0
+# [TB_PROBE_AXI @ 623855000] cyc=62000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 623855000] cyc=62000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 633855000] cyc=63000 mem=4800 busy=1 idle=10
+# [TB_PROBE_AXI @ 633855000] cyc=63000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 633855000] cyc=63000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 643855000] cyc=64000 mem=4815 busy=1 idle=7
+# [TB_PROBE_AXI @ 643855000] cyc=64000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 643855000] cyc=64000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 653855000] cyc=65000 mem=4830 busy=1 idle=0
+# [TB_PROBE_AXI @ 653855000] cyc=65000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 653855000] cyc=65000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 663855000] cyc=66000 mem=4846 busy=1 idle=0
+# [TB_PROBE_AXI @ 663855000] cyc=66000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 663855000] cyc=66000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 673855000] cyc=67000 mem=4861 busy=1 idle=4
+# [TB_PROBE_AXI @ 673855000] cyc=67000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 673855000] cyc=67000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 683855000] cyc=68000 mem=4876 busy=1 idle=5
+# [TB_PROBE_AXI @ 683855000] cyc=68000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 683855000] cyc=68000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 693855000] cyc=69000 mem=4891 busy=1 idle=4
+# [TB_PROBE_AXI @ 693855000] cyc=69000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 693855000] cyc=69000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 703855000] cyc=70000 mem=4906 busy=1 idle=1
+# [TB_PROBE_AXI @ 703855000] cyc=70000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 703855000] cyc=70000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 713855000] cyc=71000 mem=4921 busy=1 idle=11
+# [TB_PROBE_AXI @ 713855000] cyc=71000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 713855000] cyc=71000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 723855000] cyc=72000 mem=4936 busy=1 idle=0
+# [TB_PROBE_AXI @ 723855000] cyc=72000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 723855000] cyc=72000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 733855000] cyc=73000 mem=4952 busy=1 idle=4
+# [TB_PROBE_AXI @ 733855000] cyc=73000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 733855000] cyc=73000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 743855000] cyc=74000 mem=4967 busy=1 idle=8
+# [TB_PROBE_AXI @ 743855000] cyc=74000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 743855000] cyc=74000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 753855000] cyc=75000 mem=4982 busy=1 idle=9
+# [TB_PROBE_AXI @ 753855000] cyc=75000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 753855000] cyc=75000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 763855000] cyc=76000 mem=4997 busy=1 idle=8
+# [TB_PROBE_AXI @ 763855000] cyc=76000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 763855000] cyc=76000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 773855000] cyc=77000 mem=5012 busy=1 idle=5
+# [TB_PROBE_AXI @ 773855000] cyc=77000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 773855000] cyc=77000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 783855000] cyc=78000 mem=5027 busy=1 idle=15
+# [TB_PROBE_AXI @ 783855000] cyc=78000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 783855000] cyc=78000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 793855000] cyc=79000 mem=5042 busy=1 idle=4
+# [TB_PROBE_AXI @ 793855000] cyc=79000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 793855000] cyc=79000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 803855000] cyc=80000 mem=5058 busy=1 idle=2
+# [TB_PROBE_AXI @ 803855000] cyc=80000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 803855000] cyc=80000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 813855000] cyc=81000 mem=5073 busy=1 idle=3
+# [TB_PROBE_AXI @ 813855000] cyc=81000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 813855000] cyc=81000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 823855000] cyc=82000 mem=5088 busy=1 idle=2
+# [TB_PROBE_AXI @ 823855000] cyc=82000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 823855000] cyc=82000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x800001b0 instr=0xfe0784e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 833855000] cyc=83000 mem=5103 busy=1 idle=12
+# [TB_PROBE_AXI @ 833855000] cyc=83000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 833855000] cyc=83000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 843855000] cyc=84000 mem=5118 busy=1 idle=9
+# [TB_PROBE_AXI @ 843855000] cyc=84000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 843855000] cyc=84000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 853855000] cyc=85000 mem=5133 busy=1 idle=2
+# [TB_PROBE_AXI @ 853855000] cyc=85000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 853855000] cyc=85000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 863855000] cyc=86000 mem=5149 busy=1 idle=2
+# [TB_PROBE_AXI @ 863855000] cyc=86000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 863855000] cyc=86000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 873855000] cyc=87000 mem=5164 busy=1 idle=6
+# [TB_PROBE_AXI @ 873855000] cyc=87000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 873855000] cyc=87000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 883855000] cyc=88000 mem=5179 busy=1 idle=7
+# [TB_PROBE_AXI @ 883855000] cyc=88000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 883855000] cyc=88000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 893855000] cyc=89000 mem=5194 busy=1 idle=6
+# [TB_PROBE_AXI @ 893855000] cyc=89000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 893855000] cyc=89000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 903855000] cyc=90000 mem=5209 busy=1 idle=3
+# [TB_PROBE_AXI @ 903855000] cyc=90000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 903855000] cyc=90000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 913855000] cyc=91000 mem=5224 busy=1 idle=13
+# [TB_PROBE_AXI @ 913855000] cyc=91000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 913855000] cyc=91000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 923855000] cyc=92000 mem=5239 busy=1 idle=2
+# [TB_PROBE_AXI @ 923855000] cyc=92000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 923855000] cyc=92000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 933855000] cyc=93000 mem=5255 busy=1 idle=0
+# [TB_PROBE_AXI @ 933855000] cyc=93000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 933855000] cyc=93000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 943855000] cyc=94000 mem=5270 busy=1 idle=1
+# [TB_PROBE_AXI @ 943855000] cyc=94000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 943855000] cyc=94000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 953855000] cyc=95000 mem=5285 busy=1 idle=0
+# [TB_PROBE_AXI @ 953855000] cyc=95000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 953855000] cyc=95000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 963855000] cyc=96000 mem=5300 busy=1 idle=10
+# [TB_PROBE_AXI @ 963855000] cyc=96000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 963855000] cyc=96000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 973855000] cyc=97000 mem=5315 busy=1 idle=7
+# [TB_PROBE_AXI @ 973855000] cyc=97000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 973855000] cyc=97000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 983855000] cyc=98000 mem=5330 busy=1 idle=0
+# [TB_PROBE_AXI @ 983855000] cyc=98000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 983855000] cyc=98000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 993855000] cyc=99000 mem=5346 busy=1 idle=0
+# [TB_PROBE_AXI @ 993855000] cyc=99000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 993855000] cyc=99000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_TOP @ 1003845000] Progress: 100000 cycles
+# [TB_STATUS @ 1003855000] cyc=100000 mem=5361 busy=1 idle=4
+# [TB_PROBE_AXI @ 1003855000] cyc=100000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1003855000] cyc=100000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1013855000] cyc=101000 mem=5376 busy=1 idle=5
+# [TB_PROBE_AXI @ 1013855000] cyc=101000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1013855000] cyc=101000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1023855000] cyc=102000 mem=5391 busy=1 idle=4
+# [TB_PROBE_AXI @ 1023855000] cyc=102000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1023855000] cyc=102000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1033855000] cyc=103000 mem=5406 busy=1 idle=1
+# [TB_PROBE_AXI @ 1033855000] cyc=103000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1033855000] cyc=103000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1043855000] cyc=104000 mem=5421 busy=1 idle=11
+# [TB_PROBE_AXI @ 1043855000] cyc=104000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1043855000] cyc=104000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1053855000] cyc=105000 mem=5436 busy=1 idle=0
+# [TB_PROBE_AXI @ 1053855000] cyc=105000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1053855000] cyc=105000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1063855000] cyc=106000 mem=5452 busy=1 idle=4
+# [TB_PROBE_AXI @ 1063855000] cyc=106000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1063855000] cyc=106000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1073855000] cyc=107000 mem=5467 busy=1 idle=8
+# [TB_PROBE_AXI @ 1073855000] cyc=107000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1073855000] cyc=107000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1083855000] cyc=108000 mem=5482 busy=1 idle=9
+# [TB_PROBE_AXI @ 1083855000] cyc=108000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1083855000] cyc=108000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1093855000] cyc=109000 mem=5497 busy=1 idle=8
+# [TB_PROBE_AXI @ 1093855000] cyc=109000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1093855000] cyc=109000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1103855000] cyc=110000 mem=5512 busy=1 idle=5
+# [TB_PROBE_AXI @ 1103855000] cyc=110000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1103855000] cyc=110000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1113855000] cyc=111000 mem=5527 busy=1 idle=15
+# [TB_PROBE_AXI @ 1113855000] cyc=111000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1113855000] cyc=111000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1123855000] cyc=112000 mem=5542 busy=1 idle=4
+# [TB_PROBE_AXI @ 1123855000] cyc=112000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1123855000] cyc=112000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1133855000] cyc=113000 mem=5558 busy=1 idle=2
+# [TB_PROBE_AXI @ 1133855000] cyc=113000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1133855000] cyc=113000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1143855000] cyc=114000 mem=5573 busy=1 idle=3
+# [TB_PROBE_AXI @ 1143855000] cyc=114000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1143855000] cyc=114000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1153855000] cyc=115000 mem=5588 busy=1 idle=2
+# [TB_PROBE_AXI @ 1153855000] cyc=115000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1153855000] cyc=115000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x800001b0 instr=0xfe0784e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1163855000] cyc=116000 mem=5603 busy=1 idle=12
+# [TB_PROBE_AXI @ 1163855000] cyc=116000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1163855000] cyc=116000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1173855000] cyc=117000 mem=5618 busy=1 idle=9
+# [TB_PROBE_AXI @ 1173855000] cyc=117000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1173855000] cyc=117000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1183855000] cyc=118000 mem=5633 busy=1 idle=2
+# [TB_PROBE_AXI @ 1183855000] cyc=118000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1183855000] cyc=118000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1193855000] cyc=119000 mem=5649 busy=1 idle=2
+# [TB_PROBE_AXI @ 1193855000] cyc=119000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1193855000] cyc=119000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1203855000] cyc=120000 mem=5664 busy=1 idle=6
+# [TB_PROBE_AXI @ 1203855000] cyc=120000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1203855000] cyc=120000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1213855000] cyc=121000 mem=5679 busy=1 idle=7
+# [TB_PROBE_AXI @ 1213855000] cyc=121000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1213855000] cyc=121000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1223855000] cyc=122000 mem=5694 busy=1 idle=6
+# [TB_PROBE_AXI @ 1223855000] cyc=122000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1223855000] cyc=122000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1233855000] cyc=123000 mem=5709 busy=1 idle=3
+# [TB_PROBE_AXI @ 1233855000] cyc=123000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1233855000] cyc=123000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1243855000] cyc=124000 mem=5724 busy=1 idle=13
+# [TB_PROBE_AXI @ 1243855000] cyc=124000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1243855000] cyc=124000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1253855000] cyc=125000 mem=5739 busy=1 idle=2
+# [TB_PROBE_AXI @ 1253855000] cyc=125000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1253855000] cyc=125000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1263855000] cyc=126000 mem=5755 busy=1 idle=0
+# [TB_PROBE_AXI @ 1263855000] cyc=126000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1263855000] cyc=126000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1273855000] cyc=127000 mem=5770 busy=1 idle=1
+# [TB_PROBE_AXI @ 1273855000] cyc=127000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1273855000] cyc=127000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1283855000] cyc=128000 mem=5785 busy=1 idle=0
+# [TB_PROBE_AXI @ 1283855000] cyc=128000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1283855000] cyc=128000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1293855000] cyc=129000 mem=5800 busy=1 idle=10
+# [TB_PROBE_AXI @ 1293855000] cyc=129000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1293855000] cyc=129000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1303855000] cyc=130000 mem=5815 busy=1 idle=7
+# [TB_PROBE_AXI @ 1303855000] cyc=130000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1303855000] cyc=130000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1313855000] cyc=131000 mem=5830 busy=1 idle=0
+# [TB_PROBE_AXI @ 1313855000] cyc=131000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1313855000] cyc=131000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1323855000] cyc=132000 mem=5846 busy=1 idle=0
+# [TB_PROBE_AXI @ 1323855000] cyc=132000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1323855000] cyc=132000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1333855000] cyc=133000 mem=5861 busy=1 idle=4
+# [TB_PROBE_AXI @ 1333855000] cyc=133000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1333855000] cyc=133000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1343855000] cyc=134000 mem=5876 busy=1 idle=5
+# [TB_PROBE_AXI @ 1343855000] cyc=134000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1343855000] cyc=134000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1353855000] cyc=135000 mem=5891 busy=1 idle=4
+# [TB_PROBE_AXI @ 1353855000] cyc=135000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1353855000] cyc=135000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1363855000] cyc=136000 mem=5906 busy=1 idle=1
+# [TB_PROBE_AXI @ 1363855000] cyc=136000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1363855000] cyc=136000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1373855000] cyc=137000 mem=5921 busy=1 idle=11
+# [TB_PROBE_AXI @ 1373855000] cyc=137000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1373855000] cyc=137000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1383855000] cyc=138000 mem=5936 busy=1 idle=0
+# [TB_PROBE_AXI @ 1383855000] cyc=138000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1383855000] cyc=138000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1393855000] cyc=139000 mem=5952 busy=1 idle=4
+# [TB_PROBE_AXI @ 1393855000] cyc=139000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1393855000] cyc=139000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1403855000] cyc=140000 mem=5967 busy=1 idle=8
+# [TB_PROBE_AXI @ 1403855000] cyc=140000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1403855000] cyc=140000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1413855000] cyc=141000 mem=5982 busy=1 idle=9
+# [TB_PROBE_AXI @ 1413855000] cyc=141000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1413855000] cyc=141000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1423855000] cyc=142000 mem=5997 busy=1 idle=8
+# [TB_PROBE_AXI @ 1423855000] cyc=142000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1423855000] cyc=142000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1433855000] cyc=143000 mem=6012 busy=1 idle=5
+# [TB_PROBE_AXI @ 1433855000] cyc=143000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1433855000] cyc=143000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1443855000] cyc=144000 mem=6027 busy=1 idle=15
+# [TB_PROBE_AXI @ 1443855000] cyc=144000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1443855000] cyc=144000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1453855000] cyc=145000 mem=6042 busy=1 idle=4
+# [TB_PROBE_AXI @ 1453855000] cyc=145000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1453855000] cyc=145000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1463855000] cyc=146000 mem=6058 busy=1 idle=2
+# [TB_PROBE_AXI @ 1463855000] cyc=146000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1463855000] cyc=146000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1473855000] cyc=147000 mem=6073 busy=1 idle=3
+# [TB_PROBE_AXI @ 1473855000] cyc=147000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1473855000] cyc=147000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1483855000] cyc=148000 mem=6088 busy=1 idle=2
+# [TB_PROBE_AXI @ 1483855000] cyc=148000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1483855000] cyc=148000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x800001b0 instr=0xfe0784e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1493855000] cyc=149000 mem=6103 busy=1 idle=12
+# [TB_PROBE_AXI @ 1493855000] cyc=149000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1493855000] cyc=149000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1503855000] cyc=150000 mem=6118 busy=1 idle=9
+# [TB_PROBE_AXI @ 1503855000] cyc=150000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1503855000] cyc=150000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1513855000] cyc=151000 mem=6133 busy=1 idle=2
+# [TB_PROBE_AXI @ 1513855000] cyc=151000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1513855000] cyc=151000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1523855000] cyc=152000 mem=6149 busy=1 idle=2
+# [TB_PROBE_AXI @ 1523855000] cyc=152000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1523855000] cyc=152000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1533855000] cyc=153000 mem=6164 busy=1 idle=6
+# [TB_PROBE_AXI @ 1533855000] cyc=153000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1533855000] cyc=153000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1543855000] cyc=154000 mem=6179 busy=1 idle=7
+# [TB_PROBE_AXI @ 1543855000] cyc=154000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1543855000] cyc=154000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1553855000] cyc=155000 mem=6194 busy=1 idle=6
+# [TB_PROBE_AXI @ 1553855000] cyc=155000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1553855000] cyc=155000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1563855000] cyc=156000 mem=6209 busy=1 idle=3
+# [TB_PROBE_AXI @ 1563855000] cyc=156000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1563855000] cyc=156000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1573855000] cyc=157000 mem=6224 busy=1 idle=13
+# [TB_PROBE_AXI @ 1573855000] cyc=157000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1573855000] cyc=157000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1583855000] cyc=158000 mem=6239 busy=1 idle=2
+# [TB_PROBE_AXI @ 1583855000] cyc=158000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1583855000] cyc=158000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1593855000] cyc=159000 mem=6255 busy=1 idle=0
+# [TB_PROBE_AXI @ 1593855000] cyc=159000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1593855000] cyc=159000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1603855000] cyc=160000 mem=6270 busy=1 idle=1
+# [TB_PROBE_AXI @ 1603855000] cyc=160000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1603855000] cyc=160000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1613855000] cyc=161000 mem=6285 busy=1 idle=0
+# [TB_PROBE_AXI @ 1613855000] cyc=161000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1613855000] cyc=161000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1623855000] cyc=162000 mem=6300 busy=1 idle=10
+# [TB_PROBE_AXI @ 1623855000] cyc=162000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1623855000] cyc=162000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1633855000] cyc=163000 mem=6315 busy=1 idle=7
+# [TB_PROBE_AXI @ 1633855000] cyc=163000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1633855000] cyc=163000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1643855000] cyc=164000 mem=6330 busy=1 idle=0
+# [TB_PROBE_AXI @ 1643855000] cyc=164000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1643855000] cyc=164000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1653855000] cyc=165000 mem=6346 busy=1 idle=0
+# [TB_PROBE_AXI @ 1653855000] cyc=165000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1653855000] cyc=165000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1663855000] cyc=166000 mem=6361 busy=1 idle=4
+# [TB_PROBE_AXI @ 1663855000] cyc=166000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1663855000] cyc=166000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1673855000] cyc=167000 mem=6376 busy=1 idle=5
+# [TB_PROBE_AXI @ 1673855000] cyc=167000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1673855000] cyc=167000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1683855000] cyc=168000 mem=6391 busy=1 idle=4
+# [TB_PROBE_AXI @ 1683855000] cyc=168000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1683855000] cyc=168000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1693855000] cyc=169000 mem=6406 busy=1 idle=1
+# [TB_PROBE_AXI @ 1693855000] cyc=169000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1693855000] cyc=169000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1703855000] cyc=170000 mem=6421 busy=1 idle=11
+# [TB_PROBE_AXI @ 1703855000] cyc=170000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1703855000] cyc=170000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1713855000] cyc=171000 mem=6436 busy=1 idle=0
+# [TB_PROBE_AXI @ 1713855000] cyc=171000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1713855000] cyc=171000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1723855000] cyc=172000 mem=6452 busy=1 idle=4
+# [TB_PROBE_AXI @ 1723855000] cyc=172000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1723855000] cyc=172000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1733855000] cyc=173000 mem=6467 busy=1 idle=8
+# [TB_PROBE_AXI @ 1733855000] cyc=173000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1733855000] cyc=173000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1743855000] cyc=174000 mem=6482 busy=1 idle=9
+# [TB_PROBE_AXI @ 1743855000] cyc=174000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1743855000] cyc=174000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1753855000] cyc=175000 mem=6497 busy=1 idle=8
+# [TB_PROBE_AXI @ 1753855000] cyc=175000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1753855000] cyc=175000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1763855000] cyc=176000 mem=6512 busy=1 idle=5
+# [TB_PROBE_AXI @ 1763855000] cyc=176000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1763855000] cyc=176000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1773855000] cyc=177000 mem=6527 busy=1 idle=15
+# [TB_PROBE_AXI @ 1773855000] cyc=177000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1773855000] cyc=177000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1783855000] cyc=178000 mem=6542 busy=1 idle=4
+# [TB_PROBE_AXI @ 1783855000] cyc=178000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1783855000] cyc=178000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1793855000] cyc=179000 mem=6558 busy=1 idle=2
+# [TB_PROBE_AXI @ 1793855000] cyc=179000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1793855000] cyc=179000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1803855000] cyc=180000 mem=6573 busy=1 idle=3
+# [TB_PROBE_AXI @ 1803855000] cyc=180000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1803855000] cyc=180000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1813855000] cyc=181000 mem=6588 busy=1 idle=2
+# [TB_PROBE_AXI @ 1813855000] cyc=181000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1813855000] cyc=181000 | ICACHE: req=0 ready=1 rsp=1 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x800001b0 instr=0xfe0784e3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1823855000] cyc=182000 mem=6603 busy=1 idle=12
+# [TB_PROBE_AXI @ 1823855000] cyc=182000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1823855000] cyc=182000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1833855000] cyc=183000 mem=6618 busy=1 idle=9
+# [TB_PROBE_AXI @ 1833855000] cyc=183000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1833855000] cyc=183000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1843855000] cyc=184000 mem=6633 busy=1 idle=2
+# [TB_PROBE_AXI @ 1843855000] cyc=184000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1843855000] cyc=184000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1853855000] cyc=185000 mem=6649 busy=1 idle=2
+# [TB_PROBE_AXI @ 1853855000] cyc=185000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1853855000] cyc=185000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1863855000] cyc=186000 mem=6664 busy=1 idle=6
+# [TB_PROBE_AXI @ 1863855000] cyc=186000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1863855000] cyc=186000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1873855000] cyc=187000 mem=6679 busy=1 idle=7
+# [TB_PROBE_AXI @ 1873855000] cyc=187000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1873855000] cyc=187000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1883855000] cyc=188000 mem=6694 busy=1 idle=6
+# [TB_PROBE_AXI @ 1883855000] cyc=188000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1883855000] cyc=188000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1893855000] cyc=189000 mem=6709 busy=1 idle=3
+# [TB_PROBE_AXI @ 1893855000] cyc=189000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1893855000] cyc=189000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1903855000] cyc=190000 mem=6724 busy=1 idle=13
+# [TB_PROBE_AXI @ 1903855000] cyc=190000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1903855000] cyc=190000 | ICACHE: req=1 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1913855000] cyc=191000 mem=6739 busy=1 idle=2
+# [TB_PROBE_AXI @ 1913855000] cyc=191000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=0 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1913855000] cyc=191000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1923855000] cyc=192000 mem=6755 busy=1 idle=0
+# [TB_PROBE_AXI @ 1923855000] cyc=192000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1923855000] cyc=192000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1933855000] cyc=193000 mem=6770 busy=1 idle=1
+# [TB_PROBE_AXI @ 1933855000] cyc=193000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1933855000] cyc=193000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1943855000] cyc=194000 mem=6785 busy=1 idle=0
+# [TB_PROBE_AXI @ 1943855000] cyc=194000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1943855000] cyc=194000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1953855000] cyc=195000 mem=6800 busy=1 idle=10
+# [TB_PROBE_AXI @ 1953855000] cyc=195000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1953855000] cyc=195000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00c5c7b3 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1963855000] cyc=196000 mem=6816 busy=1 idle=8
+# [TB_PROBE_AXI @ 1963855000] cyc=196000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1963855000] cyc=196000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00912823 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1973855000] cyc=197000 mem=6832 busy=1 idle=0
+# [TB_PROBE_AXI @ 1973855000] cyc=197000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1973855000] cyc=197000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00912823 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1983855000] cyc=198000 mem=6848 busy=1 idle=5
+# [TB_PROBE_AXI @ 1983855000] cyc=198000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1983855000] cyc=198000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00912823 ebreak_seen=0 exit_addr_seen=0
+# [TB_STATUS @ 1993855000] cyc=199000 mem=6864 busy=1 idle=8
+# [TB_PROBE_AXI @ 1993855000] cyc=199000 per_cluster_busy=1 dut_busy=1 ebreak_detect=0 axi_idle=1 mem_idle=1
+# [TB_PROBE_PIPELINE @ 1993855000] cyc=199000 | ICACHE: req=0 ready=1 rsp=0 stall_cyc=90 | DCACHE: req=0 ready=1 rsp=0 stall_cyc=24 | PC=0x80000360 instr=0x00912823 ebreak_seen=0 exit_addr_seen=0
+# [TB_TOP @ 2003845000] Progress: 200000 cycles
+# ** Error: [TB_TOP @ 2003845000] TIMEOUT after 200000 cycles!
+#    Time: 2003845 ns  Scope: vortex_tb_top File: /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vortex_tb_top.sv Line: 431
+# ================================================================================
+# VORTEX INTERFACE STATUS @ 2003845000
+# ================================================================================
+# Clock: 1 | Reset: 1
+# 
+# STATUS INTERFACE:
+#   Busy:   1
+#   Idle:   0
+#   ebreak: 0
+#   Cycles: 199999
+#   Instrs: 22594
+#   IPC:    0.1130 (calculated)
+# 
+# AXI INTERFACE:
+#   AW: valid=0 ready=1 addr=0x80009600
+#   W:  valid=0 ready=0 last=1
+#   B:  valid=0 ready=1
+#   AR: valid=0 ready=1 addr=0x80009600
+#   R:  valid=0 ready=1 last=0
+# 
+# MEMORY INTERFACE:
+#   Req: valid=x ready=x rw=x addr=0xxxxxxxx
+#   Rsp: valid=x ready=x
+# 
+# DCR INTERFACE:
+#   Write: valid=0 addr=0x002 data=0x00000000
+# ================================================================================
+# ================================================================
+#   mem_model statistics
+# ----------------------------------------------------------------
+#   Reads                 : 15744
+#   Writes                : 78072
+#   Bytes written         : 78072
+#   Allocated byte entries: 43100
+# ================================================================
+# ** Note: Data structure takes 237653071 bytes of memory
+#          Process time 77.75 seconds
+#          $finish    : /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vortex_tb_top.sv(434)
+#    Time: 2003845 ns  Iteration: 1  Instance: /vortex_tb_top
+# Break at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vortex_tb_top.sv line 434
+# Stopped at /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/tb/vortex_tb_top.sv line 434
+#  coverage save -testname kernel_launch_test_axi_stress /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_183259_kernel_launch_test/reports/coverage.ucdb
+#  quit -f
+# [P1-PROBE vortex_tb_top.dut.vortex.g_clusters[0].cluster.g_sockets[0].socket.g_cores[0].core.commit.u_commit_probe] retired instructions observed = 22594
+# 
+# ================================================================================
+# [TB_TOP @ 2003845000] Simulation Complete
+# Test Result:    PASS
+#   Total Cycles: 199999  Instructions: 22594
+# ================================================================
+#   mem_model statistics
+# ----------------------------------------------------------------
+#   Reads                 : 15744
+#   Writes                : 78072
+#   Bytes written         : 78072
+#   Allocated byte entries: 43100
+# ================================================================
+# ================================================================================
+# 
+# End time: 18:34:25 on Sep 10,2026, Elapsed time: 0:01:24
+# Errors: 1, Warnings: 48

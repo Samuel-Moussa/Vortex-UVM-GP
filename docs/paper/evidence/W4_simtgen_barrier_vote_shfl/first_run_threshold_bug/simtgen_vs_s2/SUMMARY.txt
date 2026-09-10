@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 16:30:59 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   1
+  Cores:      1
+  Warps:      4
+  Threads:    4
+  Timeout:    200000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/simtgen_vs_s2/simtgen_vs_s2.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/simtgen_vs_s2/simtgen_vs_s2.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_163045_kernel_launch_test/programs/simtgen_vs_s2.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_163045_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 102075000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 102075000  cycles=9818  instrs=1893  IPC=0.193
+#   Total Cycles: 9922  Mem Ops: 1215  Instructions: 1893
+#   Cycles: 9923
+#   IPC:    0.1908 (calculated)
+#   Total Cycles: 9919
+#   Final IPC:    0.191
+#   Cycles: 9924
+#   IPC:    0.1907 (calculated)
+#   Cycles: 9925
+#   IPC:    0.1907 (calculated)
+#   Cycles: 9926
+#   IPC:    0.1907 (calculated)
+#   Cycles: 9927
+#   IPC:    0.1907 (calculated)
+#   Cycles: 9928
+#   IPC:    0.1907 (calculated)
+#   Total Cycles:        9919
+#   Total Instructions:  1893
+#   Average IPC:         0.191
+#   Peak IPC:            0.310
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       9929
+#   Instructions: 1893
+#   IPC:          0.191
+#   Total Cycles: 9929  Instructions: 1893
+================================================================================
