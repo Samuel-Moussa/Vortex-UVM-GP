@@ -7,6 +7,14 @@ the exact commit that produced it (not a branch link — it will not move under 
 Outer repo: `Samuel-Moussa/Vortex-UVM-GP` @ [`9ed91ce`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/9ed91ce)
 Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](https://github.com/Samuel-Moussa/vortex-uvm-gp-rtl/commit/1c72d523c)
 
+**Raw tool output, not just write-ups:** every item below with a run behind it now has a
+"Raw tool output" line pointing into
+[`docs/paper/evidence/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence)
+— QuestaSim's own `SUMMARY.txt` / `simulation.log` / `vcover report` text, copied unedited
+from `vortex_uvm_env/results/` and `vortex_uvm_env/cov/` (both normally gitignored — too
+large to track wholesale). See that folder's own `README.md` for what is and is not
+included in full (a few very large lockstep logs are excerpted, disclosed there).
+
 | Order | Item | Status | Evidence |
 | :---: | :--- | :---: | :--- |
 | 1 | **W0** — md5 duplicate guard | ✅ done | see below |
@@ -25,6 +33,13 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 - Code: [`run_suite.sh` — the guard itself](https://github.com/Samuel-Moussa/vortex-uvm-gp-rtl/commit/d00c565d3) (Vortex submodule commit `d00c565d3`)
 - Write-up + validation evidence (real Questa runs, positive + negative control): [`PAPER_BASE_EVALUATION.md` §W0](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/9ed91ce/docs/PAPER_BASE_EVALUATION.md#L923-L952)
 - Commit that landed the write-up: [`2be2419`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/2be2419)
+- **Raw tool output** — real `SUMMARY.txt` / `simulation.log` / `riscv_dv_seed.txt` (with the
+  actual `program_md5` values) for each of the 3 validation runs:
+  [`pmp`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W0_duplicate_guard/pmp),
+  [`non_compressed`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W0_duplicate_guard/non_compressed)
+  (md5 matches `pmp` — the FW-1b duplicate),
+  [`arithmetic_basic`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W0_duplicate_guard/arithmetic_basic)
+  (md5 differs — no false positive)
 
 ## W4 — simtgen barrier + vote_shfl axis generators
 
@@ -34,6 +49,13 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 - Paper lines that need the correction (not edited by this campaign — corresponding-author call):
   [`isqed27_vortex_uvm.tex:588`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/9ed91ce/docs/paper/isqed27_vortex_uvm.tex#L588),
   [`arxiv_vortex_uvm_2026.tex:834`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/9ed91ce/docs/paper/arxiv_vortex_uvm_2026.tex#L834)
+- **Raw tool output** — the threshold-bug first run (`<bar,partial[3]>` never actually hit,
+  the bug this session caught before banking anything) vs. the fixed re-run:
+  [`first_run_threshold_bug/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W4_simtgen_barrier_vote_shfl/first_run_threshold_bug),
+  [`fixed_rerun/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W4_simtgen_barrier_vote_shfl/fixed_rerun)
+  (SUMMARY.txt + full simulation.log per kernel), and the isolated-merge bank's real `vcover
+  report` text: [`coverage_report_summary.txt`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ecf62c0/docs/paper/evidence/W4_simtgen_barrier_vote_shfl/coverage_report_summary.txt),
+  [`coverage_report_functional.txt`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ecf62c0/docs/paper/evidence/W4_simtgen_barrier_vote_shfl/coverage_report_functional.txt)
 
 ## W1 — fold-in re-run decision
 
@@ -45,6 +67,11 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 - Write-up (2 programs × 3 lockstep modes × 2 reps; scope reduced from the runbook's suggested
   3-4 programs, disclosed): [`PAPER_BASE_EVALUATION.md` §W2](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ea8ca1d/docs/PAPER_BASE_EVALUATION.md#L1070-L1128)
 - Commit: [`2595ba7`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/2595ba7)
+- **Raw tool output** — all 12 real `/usr/bin/time -v` files (the actual wall-clock/RSS
+  numbers in the table) plus the matching Questa simulation logs (full for `vecadd_lite` and
+  `wide_stress plain`; tail excerpt of the tool's own final Results block for the two ~37MB
+  `wide_stress` lockstep logs — see the folder's `README.md`):
+  [`W2_verification_cost/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W2_verification_cost)
 
 ## W3 — generator comparison evidence
 
@@ -56,6 +83,10 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
   · full findings: [`RTL_OBSERVATIONS.md` OBS-063](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/4672e5f/docs/RTL_OBSERVATIONS.md#L3522-L3594) / [OBS-064](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/4672e5f/docs/RTL_OBSERVATIONS.md#L3597-L3663)
   · repro kernel: [`fuzzgpu_repro/main.cpp`](https://github.com/Samuel-Moussa/vortex-uvm-gp-rtl/blob/fcb6fed17/tests/kernel/fuzzgpu_repro/main.cpp)
   · Commit: [`4672e5f`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/4672e5f)
+  · **Raw tool output** — the real run that fired both X1's RTL assertion and X2's
+    DUT-vs-SimX memory mismatch: [`W3B_fuzzgpu_repro/`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/tree/ecf62c0/docs/paper/evidence/W3B_fuzzgpu_repro)
+    (`SUMMARY.txt`, `config.txt`, full `simulation.log` — search it for
+    `invalid writeback register` (X1) and `MEM MISMATCH` (X2))
 
 ## W5 — EXT_D-off confirmatory elaboration
 
@@ -67,7 +98,12 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 
 - Write-up + coverage table (2CL, 110 runs, 0 failures, 93.39% cg bins / 94.29% total): [`PAPER_BASE_EVALUATION.md` §W6](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/9ed91ce/docs/PAPER_BASE_EVALUATION.md#L848-L885)
 - Commit: [`dd8fa91`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/dd8fa91)
-- Coverage bank itself (`vortex_uvm_env/cov/bank_2CL_2C_4W_4T_relayfix_20260910/`) is machine-local (large UCDB binaries, per repo convention) — not on GitHub; the write-up above is the citable evidence.
+- **Raw tool output** — the bank's real `vcover report` text (the actual source of every
+  number in the table above): [`coverage_report_summary.txt`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ecf62c0/docs/paper/evidence/W6_2CL_relayfix_rebank/coverage_report_summary.txt),
+  [`coverage_report_functional.txt`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/ecf62c0/docs/paper/evidence/W6_2CL_relayfix_rebank/coverage_report_functional.txt)
+- The raw UCDB binary itself (`vortex_uvm_env/cov/bank_2CL_2C_4W_4T_relayfix_20260910/merged.ucdb`)
+  is machine-local, per the repo's standing coverage-binary policy — the text reports above are
+  Questa's own export of that same UCDB, not a re-derivation.
 
 ## W7 — bug-discovery curve
 
