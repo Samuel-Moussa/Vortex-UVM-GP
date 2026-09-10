@@ -3,7 +3,7 @@
 **Config:** 2CL / 2C / 4W / 4T RV32 AXI (scale point) · **44 distinct programs, 44 staged, 0 FAILED**
 **Bank:** `vortex_uvm_env/cov/bank_2CL_2C_4W_4T/`
 **Stale predecessor preserved as:** `cov/bank_2CL_2C_4W_4T_stale_20260710/` (85.16%, never quote it)
-**Companion:** `docs/COVERAGE_GAPS_1CL_20260813.md` — ⚠ never blend the two UCDBs.
+**Companion:** `docs/coverage/COVERAGE_GAPS_1CL_20260813.md` — ⚠ never blend the two UCDBs.
 
 ## 🏆 FIRST CLEAN 2CL SWEEP — 44/44, ZERO FAILURES
 

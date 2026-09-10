@@ -428,7 +428,7 @@ credited in the commit history for the bring-up phase.
 | [`docs/paper/vortex_uvm_paper.tex`](docs/paper/) | full paper — method, lockstep, findings (11 pp) |
 | [`docs/paper/vortex_uvm_paper_short.tex`](docs/paper/) | condensed submission version (8 pp) |
 | [`docs/paper/vortex_uvm_frontend_paper.tex`](docs/paper/) | front-end-scoped companion paper (5 pp) |
-| [`docs/Coverage_Model_Reference.md`](docs/Coverage_Model_Reference.md) | every covergroup and its rationale |
+| [`docs/coverage/Coverage_Model_Reference.md`](docs/coverage/Coverage_Model_Reference.md) | every covergroup and its rationale |
 | [`docs/RISCV_DV_GUIDE.md`](docs/RISCV_DV_GUIDE.md) | constrained-random pipeline |
 | [`docs/INTERFACE_MAPPING.md`](docs/INTERFACE_MAPPING.md) | RTL interface → UVM agent mapping |
 | [`docs/VERIFICATION_PLAN_v2.md`](docs/VERIFICATION_PLAN_v2.md) | strategy, testcases, coverage goals — current |

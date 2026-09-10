@@ -13,7 +13,7 @@
 
 **▶▶▶ RESUME HERE — 2026-09-09 (LATEST). This block supersedes every block below it as the cold-start
 entry point; the blocks below remain accurate history for their own dates.** Full step-by-step
-detail for everything in this block: **`docs/COVERAGE_RUN_CHECKLIST_20260909.md`** (new this
+detail for everything in this block: **`docs/coverage/COVERAGE_RUN_CHECKLIST_20260909.md`** (new this
 session — the followable plan/matrix doc; read it before re-deriving anything below).
 
 **What landed today (2026-09-09), in order:**
@@ -330,7 +330,7 @@ move; state the caveat instead.
 
 ### ▶▶ RESUME HERE — 2026-08-16 (LATE) · COVERAGE MAXIMISED AND BANKED · ONE RE-RUN IN FLIGHT
 
-**Full analysis: `docs/COVERAGE_MAX_20260816.md`. Evidence: OBS-035 / OBS-036 / OBS-037 / OBS-038,
+**Full analysis: `docs/coverage/COVERAGE_MAX_20260816.md`. Evidence: OBS-035 / OBS-036 / OBS-037 / OBS-038,
 and the OBS-032 update.** This block SUPERSEDES the toggle block below it (which is still correct,
 just earlier).
 
@@ -405,7 +405,7 @@ of the run to produce the bank.
 
 ### ▶▶ RESUME HERE — 2026-08-16 · TOGGLE ROOT-CAUSED AND WAIVED · NOTHING IN FLIGHT
 
-**Full analysis: `docs/COVERAGE_TOGGLE_20260816.md`. Evidence: OBS-033 / OBS-034.**
+**Full analysis: `docs/coverage/COVERAGE_TOGGLE_20260816.md`. Evidence: OBS-033 / OBS-034.**
 **NO SIMULATION WAS RUN** — both banks were RE-REPORTED from their own `merged_raw.ucdb` with an
 extended exclusion set. Stimulus, 47/47 pass results and every functional number are unchanged.
 
@@ -453,7 +453,7 @@ bank. Remaining cheap targets unchanged: `cross_dvg_depth` 2 bins; OBS-032 decis
 ### ▶▶ PREVIOUS — 2026-08-15 · BOTH CONFIGS BANKED CLEAN · CONFIG FIDELITY CLOSED
 
 **✅✅ BOTH POST-SCALING RE-RUNS DONE AND BANKED (2026-08-15). 44/44, 0 FAILED, BOTH CONFIGS.**
-**FULL ANALYSIS: `docs/COVERAGE_POSTSCALE_20260815.md`** — read that before quoting any number.
+**FULL ANALYSIS: `docs/coverage/COVERAGE_POSTSCALE_20260815.md`** — read that before quoting any number.
 
 | bank | total | cg bins | Δ total | Δ bins |
 |---|---|---|---|---|
@@ -509,7 +509,7 @@ config's merge. Archive `results/run_suite_logs/` before each run — it is over
 
 ### ▶▶ COVERAGE-GAP PUSH — 2026-08-15
 **✅✅ GAP-PUSH COMPLETE — BOTH CONFIGS RE-RUN AND BANKED (2026-08-15/16). 47/47, 0 FAILED, BOTH.**
-**NOTHING IS IN FLIGHT.** Full analysis: **`docs/COVERAGE_GAPPUSH_20260815.md`**. Evidence:
+**NOTHING IS IN FLIGHT.** Full analysis: **`docs/coverage/COVERAGE_GAPPUSH_20260815.md`**. Evidence:
 **OBS-030 / OBS-031 / OBS-032**.
 
 | bank | programs | total | cg bins (raw) | cg weighted |
@@ -1254,9 +1254,9 @@ Founding `VERIFICATION_PLAN.md` met **except** toggle>90% + a few planned tests 
 Wire unused `dcr_random_seq` + AXI sequences · **Zicond build** (`-march=…zicond`) for `czeq/czne` · make collector fully config-aware (still 1CL-hardcoded in places) · `cp_num_clusters` unused.
 
 ### Source-doc index (deep detail)
-- Coverage: `docs/Coverage_Report_2026-07-10.md`, `docs/Coverage_Model_Reference.md`
-- AXI SVA: `docs/AXI_SVA_report.md` · 2CL divergence: `docs/investigations/SimX_2CL_no_fence_divergence.md`
-- Founding/plans: `docs/VERIFICATION_PLAN.md`, `vortex_uvm_env/docs/Vortex_UVM_Final_Plan.md`, `vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md`
+- Coverage: `docs/coverage/Coverage_Report_2026-07-10.md`, `docs/coverage/Coverage_Model_Reference.md`
+- AXI SVA: `docs/appendices/AXI_SVA_report.md` · 2CL divergence: `docs/investigations/SimX_2CL_no_fence_divergence.md`
+- Founding/plans: `docs/verification_plan/VERIFICATION_PLAN.md`, `vortex_uvm_env/docs/Vortex_UVM_Final_Plan.md`, `vortex_uvm_env/docs/Vortex_UVM_Plan_Current.md`
 - Fixes/investigations: `docs/fixes/` (fix_01–18, INV1/INV2, HANDOVER_*), `docs/fixes/HANDOVER_Steven_simx_review.md` (SimX edits)
 - Architecture record: `vortex_uvm_env/docs/vortex_uvm_full_report.md` · Papers: MICRO'21 + CARRV'19 (in `/mnt/d/GP_Project/DOCs/`)
 
@@ -1370,7 +1370,7 @@ A0 (W1 + comparator) is the critical build and de-risks the rest — because the
 
 ## Phase C — Coverage & closure
 
-- **C1 — Traceable coverage plan.** Promote `docs/Coverage_Model_Reference.md` to a reviewed plan mapping each covergroup → a named spec requirement (ISA op, microarch feature, protocol). Requirements sourced from the MICRO'21 paper §3–4 + RTL.
+- **C1 — Traceable coverage plan.** Promote `docs/coverage/Coverage_Model_Reference.md` to a reviewed plan mapping each covergroup → a named spec requirement (ISA op, microarch feature, protocol). Requirements sourced from the MICRO'21 paper §3–4 + RTL.
 - **C2 — 2CL coverage push.** Multi-core directed kernels spawning ≥ `NCL×NC×NW×NT` so every per-core probe instance fires (func 92.48%→higher). Honest, real stimulus.
 - **C3 — Assertion coverage.** Add SVA cover directives; include in the merged metric.
 - **C4 — CDV feedback loop.** riscv-dv seed generation steered by functional-coverage holes.
@@ -1555,7 +1555,7 @@ verified" or "we stressed the design"** — neither is currently supportable (se
   DCRs have **no reset**.
 
 - **FW-6 — Spec-traced coverage model. ✅ MATRIX DONE (2026-08-07), gaps now named:
-  `docs/COVERAGE_TRACEABILITY_MATRIX.md`.** Traces 17 design features → 18 covergroup types, and
+  `docs/coverage/COVERAGE_TRACEABILITY_MATRIX.md`.** Traces 17 design features → 18 covergroup types, and
   — the actual payoff — names the features **no covergroup observes at all**:
   - **G1 — ✅ CLOSED 2026-08-07** (`tb/vx_cache_probe.sv`, commit `f017814`): `cache_event_cg`
     bound into `VX_cache_bank` gives hit/miss, fill, writeback, flush, MSHR replay and MSHR

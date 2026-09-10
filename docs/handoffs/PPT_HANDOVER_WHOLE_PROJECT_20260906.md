@@ -394,7 +394,7 @@ argument for verification maturity than any coverage percentage.
 |---|---|
 | `docs/VERIFICATION_PLAN_v2.md` | the 53 feature areas, three-layer model, waivers |
 | `docs/RTL_OBSERVATIONS.md` | all 29 observations, OBS-001 … OBS-056 |
-| `docs/RISCVISACOV_STATUS.md` | L1 integration detail, coverpoint taxonomy |
+| `docs/riscvisacov/RISCVISACOV_STATUS.md` | L1 integration detail, coverpoint taxonomy |
 | `Vortex/sim/uvmsim/scripts/isacov_exclude.do` | the two exclusion classes, with citations |
 | `Vortex/sim/uvmsim/docs/*_EXPLAINED.md` | RVVI / RAL / AXI / probes / SVA deep dives |
 | `vortex_uvm_env/cov/bank_*_DEFENCE_FROZEN_*` | the quotable coverage banks |

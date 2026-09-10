@@ -79,7 +79,7 @@ EX-11 note "covergroup compiled out by default" follows from the same mistake an
 
 True of the **submodule**, misleading overall. The banks are in the outer repo and the numbers are
 known and banked: **1CL 94.72% · 2CL 94.55% · L2/L3 93.18%** total, with per-category breakdowns in
-`docs/COVERAGE_MAX_20260816.md`. The founding toggle target is met at neither config
+`docs/coverage/COVERAGE_MAX_20260816.md`. The founding toggle target is met at neither config
 (82.16% / 79.47%) and the reason is root-caused and waived (OBS-033/034, the icache
 `.WRITE_ENABLE(0)` subtree). The row should state that, not "not measured".
 
@@ -108,7 +108,7 @@ known and banked: **1CL 94.72% · 2CL 94.55% · L2/L3 93.18%** total, with per-c
 * **EX-2 (branch)** — still fully open. Neither model covers branch direction; riscvISACOV covers the
   branch *mnemonics* but taken/not-taken is not in its BASIC set.
 * **P1 "sample the remaining `op_args` fields"** — independently reached the same conclusion from the
-  other direction (`RISCVISACOV_STATUS.md` §6c): `dispatch_t` already carries `rd`, `rs1_data`,
+  other direction (`../riscvisacov/RISCVISACOV_STATUS.md` §6c): `dispatch_t` already carries `rd`, `rs1_data`,
   `rs2_data`, `rs3_data` at the probe we already bind, so this is a small edit, **not** a new probe.
   That materially lowers the cost estimate for the whole P1 row.
 

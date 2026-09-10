@@ -1,8 +1,8 @@
 # Vortex GPGPU — Enhanced Verification Plan v2
 
 **Date:** 2026-09-03 · **DUT:** Vortex RISC-V GPGPU · **Env:** `Vortex/sim/uvmsim`
-**Supersedes** `VERIFICATION_PLAN_v1.md` (corrections in §5) and the founding
-`VERIFICATION_PLAN.md` (re-scoped targets in §5.3).
+**Supersedes** `verification_plan/VERIFICATION_PLAN_v1.md` (corrections in §5) and the founding
+`verification_plan/VERIFICATION_PLAN.md` (re-scoped targets in §5.3).
 
 **Target: verifying the features that make Vortex a GPU**, not re-verifying RISC-V.
 
@@ -22,7 +22,7 @@ resolve; it is a layering to make explicit.
 
 **L1 is now real: 80 active covergroups.** RV32I 39 (Imperas) + RV32F 26 + RV32M 8 +
 RV32Zicsr 6 + **RV32Zifencei 1** (all generated from Imperas' own DV plans; the generator
-is proven by regenerating RV32I byte-for-byte). See `RISCVISACOV_STATUS.md`.
+is proven by regenerating RV32I byte-for-byte). See `riscvisacov/RISCVISACOV_STATUS.md`.
 
 **L1 gap-hunt CLOSED/FROZEN 2026-09-06 (OBS-056).** A targeted, per-program `+ISACOV`
 campaign (baseline `vecadd_lite` → directed kernels `fpu_test`/`div_edge`/`csr_probe`/
@@ -274,7 +274,7 @@ covergroup is *not* absent by default. `compile.sh:51` promotes
 
 ## 5. Corrections carried into this plan
 
-### 5.1 To `VERIFICATION_PLAN_v1.md`
+### 5.1 To `verification_plan/VERIFICATION_PLAN_v1.md`
 * **D-8 is FALSE** — `+LOCKSTEP_INJECT` is wired at `tb/vx_commit_probe.sv:60,116-118` and has been run (1 injection → 1 mismatch). C-LOCK's non-vacuity is proven. Strike it from P1.
 * **EX-4 stale** — Zicond bins are hit (czeq 16 / czne 20 in the 1CL bank).
 * **TCU config row wrong** — `compile.sh:51` promotes `+define+EXT_TCU_ENABLE=1` globally; the TCU is on in **every** build.
@@ -298,8 +298,8 @@ fail"* — which is a stronger, and true, claim.
 |---|---|---|---|
 | **W-10** | Unaligned data access | Not implemented: RTL asserts, no trap, access silently torn | `VX_lsu_slice.sv:189`, OBS-013, `misalign_neg` |
 | **W-11** | Trap-cause / interrupt coverage | No trap architecture exists | no trap logic in `VX_decode.sv` / `VX_csr_data.sv`; `mcause` is a bare number at `VX_types.vh:59` |
-| **W-12** | L1 ISA coverage of Vortex custom ops (SFU, VOTE/SHFL, TCU, Zicond) | No third-party model covers them and none can — Zicond has no dvplan in riscvISACOV at all | `RISCVISACOV_STATUS.md` §2 |
-| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `RISCVISACOV_STATUS.md` §6c — quote **83.14%** (429/516, EOTH-excluded), never the bare **22.32%** raw figure. *(Corrected 2026-09-07: this row previously said "42.6%/10.3%" — stale numbers from before the L1 gap-hunt campaign updated the headline in §1–§2 of this same document. Two different figures for the same waiver was itself the integrity bug.)* |
+| **W-12** | L1 ISA coverage of Vortex custom ops (SFU, VOTE/SHFL, TCU, Zicond) | No third-party model covers them and none can — Zicond has no dvplan in riscvISACOV at all | `riscvisacov/RISCVISACOV_STATUS.md` §2 |
+| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `riscvisacov/RISCVISACOV_STATUS.md` §6c — quote **83.14%** (429/516, EOTH-excluded), never the bare **22.32%** raw figure. *(Corrected 2026-09-07: this row previously said "42.6%/10.3%" — stale numbers from before the L1 gap-hunt campaign updated the headline in §1–§2 of this same document. Two different figures for the same waiver was itself the integrity bug.)* |
 
 ---
 

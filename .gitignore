@@ -13,6 +13,16 @@ vsim.dbg
 *.wlf
 *.vcd
 *.fsdb
+
+# ---- LaTeX build byproducts (docs/paper/) — regenerate from the .tex, never track ----
+*.aux
+*.fdb_latexmk
+*.fls
+*.synctex.gz
+docs/paper/*.log
+
+# ---- Windows download-metadata stubs -----------------------------------------
+*:Zone.Identifier
 *.log
 *.old
 

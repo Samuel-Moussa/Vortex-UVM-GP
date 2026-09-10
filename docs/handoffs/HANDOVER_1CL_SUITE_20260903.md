@@ -80,7 +80,7 @@ under `nohup` regardless), re-arm it or just check manually per §2.
      bin it never should have. That inflation is gone.
 
    Report the new total as "more honest, not worse" — the write-up in
-   `docs/PPT_HANDOFF_REPORT_20260903.md` is deliberately headline-only (no
+   `docs/handoffs/PPT_HANDOFF_REPORT_20260903.md` is deliberately headline-only (no
    percentages) for exactly this reason: the percentage needs this context attached,
    or it reads as a regression to someone skimming a slide.
 
@@ -96,7 +96,7 @@ library, concurrent runs corrupt each other)
 2. **2CL (2-cluster) re-run**, same collector — the pass that actually stresses
    cross-cluster/cross-core behaviour (G-10). This is the one the user asked for
    alongside 1CL.
-3. Only after both land: update `docs/PPT_HANDOFF_REPORT_20260903.md` with the real
+3. Only after both land: update `docs/handoffs/PPT_HANDOFF_REPORT_20260903.md` with the real
    percentages, and decide whether `docs/VERIFICATION_PLAN_v2.md`'s G-2..G-10
    backlog gets picked up next or the session moves to writing up results.
 
@@ -130,7 +130,7 @@ library, concurrent runs corrupt each other)
   OBS-050, OBS-051.
 - Gap tracking: `docs/VERIFICATION_PLAN_v2.md` §4 (G-0, G-1 now marked CLOSED).
 - PPT-drafting handoff (headline counts, no percentages — send to claude.ai):
-  `docs/PPT_HANDOFF_REPORT_20260903.md`.
+  `docs/handoffs/PPT_HANDOFF_REPORT_20260903.md`.
 - Frozen defence banks, untouched: `vortex_uvm_env/cov/bank_1CL_1C_4W_4T/`,
   `bank_2CL_2C_4W_4T/`, and the L2/L3 bank. Verified backup of the 1CL one at
   `bank_1CL_1C_4W_4T_DEFENCE_FROZEN_20260903/`.

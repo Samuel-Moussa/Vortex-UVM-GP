@@ -231,7 +231,7 @@ Every claim in this document was re-verified against primary artifacts on 2026-0
   block at the top): **98.14% of covergroup bins (99.79% weighted), 94.72% total coverage on
   the primary configuration, 50/50 simulation runs passing, 0 failures**; a second full bank at a scaled
   multi-cluster configuration (85.16% total).
-  - *Evidence:* `docs/Coverage_Report_2026-07-10.md` (banked report, both configs);
+  - *Evidence:* `docs/coverage/Coverage_Report_2026-07-10.md` (banked report, both configs);
     coverage banks `vortex_uvm_env/cov/bank_1CL_1C_4W_4T/` and `bank_2CL_2C_4W_4T/`.
 
 ## 2. Novelty candidates (the paper's argument)
@@ -353,7 +353,7 @@ The bench itself was audited and repaired before any metric was trusted:
 - **AXI4 SVA layer**: ~15–18 protocol properties + 11 handshake-stability assertions
   inline on the AXI interface (burst legality, outstanding-count consistency, stability
   under backpressure) — all pass; every plan-vs-implemented drop documented with RTL
-  evidence. *Evidence:* `docs/AXI_SVA_report.md`.
+  evidence. *Evidence:* `docs/appendices/AXI_SVA_report.md`.
 - Assertion coverage 93.79% (1CL) with residual reachability analysis documented
   (e.g. `b_valid_stable` structurally unreachable — `VX_axi_adapter.sv:313`;
   `r_valid/r_data_stable` reachable-but-not-hit, left honestly uncovered).
@@ -376,11 +376,11 @@ The bench itself was audited and repaired before any metric was trusted:
 | **Total** | **91.00%** | **85.16%** |
 | Tests | 43/43 | 40/42 (2 = golden-model seed limits, root-caused) |
 
-- *Evidence:* `docs/Coverage_Report_2026-07-10.md`; banks under `vortex_uvm_env/cov/`.
+- *Evidence:* `docs/coverage/Coverage_Report_2026-07-10.md`; banks under `vortex_uvm_env/cov/`.
 - **Functional model**: 17 covergroups — instruction classes per execution unit
   (ALU/FPU/LSU/SFU/TCU, op-decoded), SIMT divergence × IPDOM depth, warp/thread-mask
   crosses, barrier/wspawn/tmc, stall taxonomy × IPC, AXI fields, DCR/host, system state —
-  each with a written "why sufficient" rationale: `docs/Coverage_Model_Reference.md`
+  each with a written "why sufficient" rationale: `docs/coverage/Coverage_Model_Reference.md`
   (commit `fc34b3f`).
 - **Cross-config UCDB merging shown invalid** (instance inflation 2247→8260 + width
   toggles ⇒ by-instance % drops) → per-config reporting rule (session record 2026-06-29).
@@ -471,8 +471,8 @@ The bench itself was audited and repaired before any metric was trusted:
   self-documenting `DECODE_ABORT` macro; the plan-time count was 69).
 - Toggle > 90% founding goal unmet (structural ceiling, documented, not gamed).
 - Founding-plan status: met **except** toggle>90% and two planned test families
-  (T-cache, T-exc). *Evidence:* `docs/VERIFICATION_PLAN.md` vs
-  `docs/Coverage_Report_2026-07-10.md`.
+  (T-cache, T-exc). *Evidence:* `docs/verification_plan/VERIFICATION_PLAN.md` vs
+  `docs/coverage/Coverage_Report_2026-07-10.md`.
 
 ---
 
@@ -708,13 +708,13 @@ Closes Part I's two biggest open items.
 | `cc15697` `2614ee0` `ee4fea8` `d9df0eb` | OBS-010 interrupt-timing boundary + keying-independence proof + ENH-1/2/3 backlog |
 
 ### Documents
-- `docs/Coverage_Report_2026-07-10.md` — banked two-config coverage report
-- `docs/Coverage_Model_Reference.md` — all 17 covergroups + sufficiency rationale
-- `docs/AXI_SVA_report.md` — SVA layer, drops with RTL evidence
+- `docs/coverage/Coverage_Report_2026-07-10.md` — banked two-config coverage report
+- `docs/coverage/Coverage_Model_Reference.md` — all 17 covergroups + sufficiency rationale
+- `docs/appendices/AXI_SVA_report.md` — SVA layer, drops with RTL evidence
 - `docs/investigations/SimX_2CL_no_fence_divergence.md` — multi-cluster divergence + real fix
 - `docs/RTL_OBSERVATIONS.md` — OBS-001…010 running register (branch)
 - `docs/fixes/` — fix_01–18, INV-1/INV-2 root-cause writeups
-- `docs/VERIFICATION_PLAN.md` — founding plan (goals baseline)
+- `docs/verification_plan/VERIFICATION_PLAN.md` — founding plan (goals baseline)
 - `docs/INDUSTRIAL_TRANSFORMATION_PLAN.md` — transformation plan + status (branch)
 - `Vortex_UVM_Issues_Report_Final.docx` (external, team) — 43-issue bring-up report:
   symptom/root-cause/fix per issue, hex-authoring rules, program-loading guide (§8.0)
@@ -777,7 +777,7 @@ Total coverage (filtered view): 85.16%
 Every number in the Part I §7 table reproduces exactly. The 374/377 covergroup raw bins
 (99.20%) also confirms the documented "3 weight-0 red-herring bins" (weighted metric
 100.00%, 17 groups). The 43/43 and 40/42 pass counts are recorded in
-`docs/Coverage_Report_2026-07-10.md` (banked, committed `6692541`).
+`docs/coverage/Coverage_Report_2026-07-10.md` (banked, committed `6692541`).
 
 ### P.2 RTL / SimX citations — excerpts re-read from the working tree (pin `7a52ee5`)
 
@@ -954,7 +954,7 @@ Provenance: QuestaSim 2021.2_1, repo commit `dd8fa91` + this `run_suite.sh` chan
 
 **One correction to the runbook's own framing before the table:** W3 says "6 simtgen
 programs → 3 targets." The current, accurate count (checked against
-`Vortex/tests/kernel/simtgen_*`, and `docs/COVERAGE_RUN_CHECKLIST_20260909.md`) is
+`Vortex/tests/kernel/simtgen_*`, and `docs/coverage/COVERAGE_RUN_CHECKLIST_20260909.md`) is
 **57 simtgen programs** (50 divergence-seed + 6 memory-seed + 1 smoke) — "6" was true of an
 early 2026-09-07 demo batch, superseded by the fuller sweep folded into the bank on
 2026-09-09. Use 57, not 6, in the journal draft.
