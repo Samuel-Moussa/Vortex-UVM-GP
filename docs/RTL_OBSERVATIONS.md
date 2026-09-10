@@ -3468,3 +3468,51 @@ regression test is a small follow-up if wanted.
   configuration; this is unintentional-by-documentation and its functional consequences are
   under investigation" — not "FLEN=32" (contradicted) and not "this is a bug" (not yet
   established as one).
+
+## OBS-062 — no hardware exception/interrupt/trap mechanism exists ⟨2026-09-09⟩
+
+**What we saw:** scoping T-exc (checklist Tier-2, "ebreak / misaligned / illegal-instr
+stimulus to drive `exception_cg`") by reading the trap-related RTL before writing any
+kernel, per rule 8 (plan/read before touching anything).
+
+**Evidence:**
+- Every trap-control CSR write is a literal no-op:
+  `VX_CSR_MSTATUS, VX_CSR_MNSTATUS, VX_CSR_MEDELEG, VX_CSR_MIDELEG, VX_CSR_MIE,
+  VX_CSR_MTVEC, VX_CSR_MEPC, VX_CSR_PMPCFG0, VX_CSR_PMPADDR0: begin // do nothing! end`
+  — [`VX_csr_data.sv:135-144`](../Vortex/hw/rtl/core/VX_csr_data.sv#L135).
+- Every read of the same set returns the hardcoded constant `0`:
+  [`VX_csr_data.sv:194-202`](../Vortex/hw/rtl/core/VX_csr_data.sv#L194).
+- Misaligned memory access is explicitly commented **"memory misalignment not
+  supported!"** and implemented as a `` `RUNTIME_ASSERT `` — an `$error`-class simulation
+  checker (`VX_platform.vh:45`) that fires on the clock edge and flags a run failure — not
+  a hardware trap the DUT can dispatch to a handler and resume from.
+  [`VX_lsu_slice.sv:185-191`](../Vortex/hw/rtl/core/VX_lsu_slice.sv#L185).
+- `VX_decode.sv`'s `default:` arms for undecoded instruction fields resolve to `'x`
+  (don't-care) — no illegal-instruction fault signal is raised anywhere in decode.
+- No `mcause`, no trap-vector dispatch logic, no interrupt-pending/enable datapath exists
+  in `hw/rtl/core/` at all (project-wide grep for `illegal_instr|mcause|trap_` across
+  every `.sv` file returns only the two citations above).
+- No `exception_cg` covergroup exists anywhere in `tb/` or `uvm_env/` — the checklist
+  item's own target does not exist in the coverage model, consistent with this having
+  been aspirational at write-time rather than scoped against the real RTL.
+
+**Classification: QUIRK/EXPECTED — architecturally-unimplemented, not a bug.** Vortex is a
+GPGPU compute accelerator; the MICRO'21 paper and every downstream artifact describe it as
+running self-contained kernels with host-managed launch/exit (`tmc x0` → `busy`
+deassertion, OBS-024), not as a general-purpose hart needing supervisor trap handling. The
+M-mode CSRs are decoded (readable/writable addresses exist so software doesn't fault on
+touching them) precisely so that toolchains expecting a standard RISC-V CSR space don't
+break — but the actual trap *mechanism* was never built, which is a legitimate scope
+choice for this class of device, not an oversight to "fix" from the verification side.
+
+**Consequence for T-exc:** there is no RTL exception/interrupt datapath to stimulate.
+Driving a misaligned access or an illegal opcode does not exercise a trap handler — it
+trips a simulation-only assertion that would fail the run under Gate-0's honest error gate
+(T4), which is a DUT-limitation finding, not new verified functional coverage. Writing
+directed stimulus here would produce failing runs, not passing ones with populated
+exception bins.
+
+**Disposition: wontfix/expected — recommend closing the T-exc checklist box as
+N/A/architecturally-unimplementable, no new kernel.** This is a finding to state plainly
+in the thesis (a real, RTL-cited boundary of what this device implements), not a gap to
+paper over with stimulus that cannot succeed.
