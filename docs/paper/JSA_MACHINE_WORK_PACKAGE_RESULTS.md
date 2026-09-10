@@ -13,7 +13,7 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 | 2 | **W4** — simtgen barrier + vote_shfl axes | ✅ done | see below |
 | 3 | **W1** — fold-in re-run | ✅ decided (disclose as-is) | see below |
 | 4 | **W2** — verification-cost table | ✅ done | see below |
-| 5 | **W3** — generator comparison | ⚠️ W3-A done, W3-B not started | see below |
+| 5 | **W3** — generator comparison | ✅ W3-A + W3-B done | see below |
 | 6 | **W5** — EXT_D-off confirmatory elaboration | ✅ done | see below |
 | 7 | **W6** — cross-configuration re-bank | ✅ done | see below |
 | 8 | **W7** — bug-discovery curve | ✅ done | see below |
@@ -50,7 +50,12 @@ Vortex (RTL/TB submodule): `Samuel-Moussa/vortex-uvm-gp-rtl` @ [`1c72d523c`](htt
 
 - **Part A (done)**: marginal coverage per program kind — [`PAPER_BASE_EVALUATION.md` §W3-A](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/9ed91ce/docs/PAPER_BASE_EVALUATION.md#L953-L978)
 - Commit: [`acd9107`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/acd9107)
-- **Part B (not started)**: FuzzGPU PoC repro at our pin — 1–2 day stretch item, not attempted this pass.
+- **Part B (done)**: FuzzGPU PoC repro at our pin — [`PAPER_BASE_EVALUATION.md` §W3-B](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/4672e5f/docs/PAPER_BASE_EVALUATION.md#L979-L1018)
+  · X1 and X2 **reproduced with real Questa runs** (X2 also corrects the paper's "3 Vortex RTL
+  bugs" framing — it is a golden-model/SimX bug, not RTL); X3 static-only (engineering cost)
+  · full findings: [`RTL_OBSERVATIONS.md` OBS-063](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/4672e5f/docs/RTL_OBSERVATIONS.md#L3522-L3594) / [OBS-064](https://github.com/Samuel-Moussa/Vortex-UVM-GP/blob/4672e5f/docs/RTL_OBSERVATIONS.md#L3597-L3663)
+  · repro kernel: [`fuzzgpu_repro/main.cpp`](https://github.com/Samuel-Moussa/vortex-uvm-gp-rtl/blob/fcb6fed17/tests/kernel/fuzzgpu_repro/main.cpp)
+  · Commit: [`4672e5f`](https://github.com/Samuel-Moussa/Vortex-UVM-GP/commit/4672e5f)
 
 ## W5 — EXT_D-off confirmatory elaboration
 
