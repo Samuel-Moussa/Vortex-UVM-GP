@@ -913,8 +913,8 @@ below rather than done opportunistically.
 | Item | Status | Effort (runbook) |
 | :--- | :--- | :--- |
 | W0 (md5 duplicate guard in `run_suite.sh`) | **done** — see below | 1–2 h |
-| W4 (simtgen `barrier` + `vote_shfl` axes) | not started — real code+debug work | 3–5 days |
-| W1 full re-definition (suite bank literally titled `_simtgen_<date>`) | **effectively superseded** — the 2026-09-09 rebank already folds `simtgen`'s divergence/memory closures into the suite bank (`cp_split_depth` 4/4, `cp_bank_conflict`/`cp_coalesce_kind` 3/3, in-bank not isolated-merge); `cp_vote_shfl_op` still 0/8 pending W4 | — |
+| W4 (simtgen `barrier` + `vote_shfl` axes) | **done** — see below; found the underlying coverage targets were already closed by directed kernels, built anyway for generator-completeness | 3–5 days budgeted, actual ~2h |
+| W1 full re-definition (suite bank literally titled `_simtgen_<date>`) | **effectively superseded** — the 2026-09-09 rebank already folds `simtgen`'s divergence/memory closures into the suite bank (`cp_split_depth` 4/4, `cp_bank_conflict`/`cp_coalesce_kind` 3/3, in-bank not isolated-merge); `cp_vote_shfl_op` was ALREADY 8/8 pre-W4 via the `vote_shfl` directed kernel, not pending on it | — |
 | W2 (verification-cost timing table) | not started | 0.5 day |
 | W3-A (marginal-coverage-per-program-kind table) | not started — mostly re-reading existing reports | 2–3 h |
 | W3-B (FuzzGPU PoC repro at our pin) | not started | 1–2 days |
@@ -975,6 +975,69 @@ same axis — each one is written *because* a specific gap was identified, not s
 already drew for riscv-dv alone; this table adds `simtgen`'s real, non-zero, comparatively
 small marginal yield to the same axis, and confirms the qualitative claim ("the SIMT
 stimulus gap needed a SIMT-aware generator, not more scalar seeds") the papers already make.
+
+### W4 — simtgen barrier + vote_shfl axis generators (DONE)
+
+**Key finding, established BEFORE writing any generator code (dig-first, per project rule
+8):** the coverage targets these two axes exist to serve — `cp_vote_shfl_op` (8/8 VOTE/SHFL
+ops) and `cross_sfu_threads` (barrier × active-mask-state, 33/33) — were **already 100%
+covered in the current banked build**, via pre-existing, permanent `run_suite.sh` members
+(`vote_shfl`, `bar_masks`, `sfu_masks`), not `simtgen`. This means W4's coverage motivation
+was stale (it cited `cp_vote_shfl_op` as "0/8 post-remediation," true of an older bank, not
+the current one). Built anyway, per explicit instruction, for generator-completeness and
+seed-diversity/robustness evidence — the same category of result as OBS-046's riscv-dv
+seed farm, disclosed as such rather than oversold as a coverage win.
+
+**Implementation** (`Vortex/sim/uvmsim/scripts/simtgen/`, commit `1c72d523c`):
+- `gen_barrier.py` (new) — single-warp, `num_warps=1` on every `vx_barrier` call (deadlock-
+  safe by construction, mirrors the proven `bar_masks` kernel exactly), seed-varied peel
+  chain. **wspawn is deliberately never touched** — it's a runtime-only bootstrap primitive
+  with its own structural waiver; a generated kernel issuing it would be exactly the
+  "broken/unsafe" case that waiver warns about.
+- `gen_vote_shfl.py` (new) — device-derived grid, all 8 VOTE/SHFL intrinsics called every
+  program, reusing the existing `vote_shfl` kernel's proven-safe parameter envelope
+  (`mask=0`, `cval=NUM_THREADS-1`) rather than guessing new ones.
+- `knobs.py`/`simtgen.py` (edited) — both axes flipped from placeholder to implemented.
+
+**One real bug caught and fixed before landing, not after:** the first version of
+`gen_barrier.py` drew peel thresholds from a Python-side `[1, 32)` range with no knowledge
+of the actual runtime `NUM_THREADS` (4 at the primary config) — a threshold ≥4 peels
+nothing (every lane still satisfies `tid < threshold`), so the "partial-mask barrier"
+half of the axis silently degraded to uniform-only stimulus regardless of seed. Caught by
+checking the isolated-merge coverage report (`<bar,partial[3]>` never fired) rather than
+trusting a clean PASS + "looks plausible" source review. Fixed by computing thresholds at
+**C runtime** from `vx_num_threads()` (decrementing, clamped at 1) instead of baking a
+Python-side literal — the same config-awareness discipline this project already applies
+everywhere else. Re-verified after the fix: `<bar,partial[3]>` now genuinely covered.
+
+**Verification, all real Questa runs (QuestaSim 2021.2_1, `Vortex/` pin `1c72d523c`):**
+6 directed-sanity kernels (3 seeds/axis) — **6/6 PASS, byte-exact vs SimX**
+(`data_compared`=92 for barrier seeds, 124 for vote_shfl seeds, `Errors: 0` every run).
+Isolated coverage merge (`vortex_uvm_env/cov/simtgen_barrier_vote_shfl_20260910/`, hits-
+invariant gate passed, 0 merge errors): `cp_vote_shfl_op` 8/8 = 100%; `cross_sfu_threads`
+bar sub-bins include `<bar,uniform>` and `<bar,partial[3]>` covered from just these 6
+kernels alone (`<bar,one_divergent>` not hit by this small 3-seed sample — already covered
+elsewhere in the full suite bank, not a gap).
+
+**Process note:** the first merge attempt for this isolated bank picked up 110 stale staged
+UCDBs left over from an interrupted, unrelated 2CL harvest (staging wasn't cleared first) —
+correctly caught by the same `vcover-6820`/`6821` source-mismatch errors and the
+hits-invariant gate, not a silent corruption. Redone with `--fresh` first; staging was left
+cleared afterward so it doesn't contaminate the next real harvest.
+
+**Paper correction needed (send to corresponding author — not applied here, per the
+runbook's own rule "do not update the conference/arXiv papers from the lab machine"):**
+`docs/paper/isqed27_vortex_uvm.tex:588` and `docs/paper/arxiv_vortex_uvm_2026.tex:834` both
+say *"Two further axes (barrier topology, VOTE/SHFL) are declared but not implemented and
+reported as open."* This is now false in both halves — implemented, AND the underlying
+targets were never actually open (closed by directed kernels all along). Proposed
+replacement:
+
+> "`simtgen` implements four axes: divergence, memory, barrier topology, and VOTE/SHFL. The
+> barrier and VOTE/SHFL axes closed no new coverage (`cp_vote_shfl_op` and
+> `cross_sfu_threads` were already fully covered by dedicated directed kernels — `vote_shfl`,
+> `bar_masks`, `sfu_masks`); their contribution is generator completeness and seed-diversity
+> robustness evidence, the same category of result as the riscv-dv seed farm (§X)."
 
 **What NOT to do, honored this pass:** no frozen bank was modified or overwritten; both new
 banks are new directories; no newly-unhit bin was waived to inflate a total; the
