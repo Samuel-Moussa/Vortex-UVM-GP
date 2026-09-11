@@ -3740,11 +3740,61 @@ coverage banks currently prove. Nothing in this project's evidence base — not 
 constitutes a claim about behavior across a second reset, because that condition has
 literally never been simulated.
 
-**Disposition: OPEN, not fixed.** Recommended if pursued: (1) promote the `initial`
-block's logic into a real UVM driver component bound to `reset_n` (small, mechanical
-— the timing/handshake logic in `tb_top.sv:65-119` can move nearly as-is into a
-`reset_phase` task); (2) add one idle-reset test (paper Figure 6) as the cheapest,
+**Disposition: OPEN, not fixed.** ⚠ **Effort correction (2026-09-11):** an earlier
+version of this entry called step (1) below "small, mechanical" — checked more
+carefully, it is a genuine, moderate (~3-5h) piece of work, not a one-line move, for
+two concrete reasons found by reading the actual code: (a) the reset-drive logic
+lives in a raw `initial` block entirely outside UVM's phase graph
+(`tb_top.sv:65-119`) — a `phase.jump()` cannot re-trigger it as-is, so it must be
+extracted into a real component's `reset_phase` task, not merely relocated; (b)
+`tb_top.sv:103` gates release on `dcr_bootstrap_done_ev.is_on()`, and `uvm_event`'s
+`is_on()` stays latched true once triggered until an explicit `.reset()` — on a
+second reset cycle this would see the *first* cycle's trigger still latched and
+release reset before the second cycle's DCR bootstrap actually completes, a real,
+easy-to-miss correctness hazard, not a hypothetical one. Recommended if pursued:
+(1) promote the `initial` block's logic into a real UVM driver component bound to
+`reset_n`, including an explicit `dcr_bootstrap_done_ev.reset()` per cycle to close
+hazard (b); (2) add one idle-reset test (paper Figure 6) as the cheapest,
 highest-value first step — re-run `vecadd_lite` through a second reset cycle via
 `phase.jump(uvm_pre_reset_phase::get())` and confirm Gate-0's negative tests are
 still non-vacuous after the jump; (3) active/soft/multi-domain reset are real
 follow-on work, not needed to close item (2) first. Effort not yet estimated.
+
+## OBS-067 — no isolated unit tests for verification components; every TB-side bug in this project was found via full-stack differential runs against real RTL ⟨2026-09-11⟩
+
+**Class:** METHODOLOGY NOTE (not an RTL or TB defect) · **Disposition: informational,
+not pursued — correctly out of scope for a frozen deliverable** · **Found:**
+2026-09-11, cross-checking this project against Rensch/Johnson, *"How Do You Verify
+Your Verification Components?"* (SNUG) — the case for SVUnit / TDD-style unit
+testing of UVM components in isolation, before integrating against the DUT.
+
+**What the paper argues.** Testing a verification component only by running it
+against real RTL conflates two unknowns in every failure — is the bug in the DUT or
+in the TB? — and delays TB-side bug discovery until the DUT is far enough along to
+exercise the component. Its fix: SVUnit-style unit tests (`FAIL_IF`/`FAIL_UNLESS`
+macros, `setup()`/`teardown()`, one test file per component) that exercise a driver,
+monitor, or scoreboard's logic directly, independent of the DUT.
+
+**Checked against this repo: no such isolated test exists anywhere.** No SVUnit
+install, no `*_unit_test.sv` files, no component exercised outside the full
+`vortex_tb_top` stack. Every one of this project's own testbench/coverage-model
+findings was in fact discovered exactly the way the paper warns against — by running
+the whole environment against real RTL and then untangling which side was wrong:
+**OBS-002** (commit-arb probe blind spot), **OBS-016/017/019** (L2/L3 build and
+timeout guard bugs), **OBS-027/028** (single-hart-on-N-harts, frozen kernel grid),
+**OBS-030** (AXI route waivers keyed wrong), **OBS-049** (`cp_alu_op` didn't qualify
+on `xtype`), **OBS-052/054** (missing runtime lib, merge name collision), **OBS-053**
+(a merge-time exclusion regression), **OBS-060** (`cp_bank_conflict`'s definition
+was logically impossible to hit). All were correctly root-caused in the end — none
+shipped as a wrong finding — but each cost a full-stack sim run (or several) to
+isolate which side was actually at fault, exactly the "expands the state space of
+where bugs reside" cost the paper describes.
+
+**Disposition and why it stays informational.** This is a real, legitimate
+methodology gap — a project reusing this UVM environment against a different or
+evolving RTL would benefit from isolated tests on the scoreboard/probes before the
+next integration. But retrofitting SVUnit at this point (project frozen for defence,
+every checklist item closed) has low marginal value for the current deliverable and
+real risk of destabilizing a closed, evidence-backed state for no coverage or
+correctness gain. Recorded here as a disclosed limitation / future-work item, not
+pursued.
