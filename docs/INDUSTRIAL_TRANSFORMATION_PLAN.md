@@ -11,12 +11,26 @@
 
 > Samuel `/compact`s every phase to save credits. This block is the cold-start entry point: a fresh session reads it and continues without re-deriving. Keep it current — when a milestone lands, move the marker and record what changed.
 
-**▶▶▶▶ RESUME HERE — 2026-09-10 (LATEST). This block supersedes every block below it as the
-cold-start entry point.** Two separate threads landed this session: (A) the mentor's JSA
-machine-work package (W0-W7, all done — see `docs/paper/JSA_MACHINE_WORK_PACKAGE_RESULTS.md`,
-now self-contained with inlined numbers + raw Questa evidence in `docs/paper/evidence/`, not
-just links); (B) resumed the 2026-09-09 coverage-plan checklist (`COVERAGE_RUN_CHECKLIST_
-20260909.md`) where it left off. This block covers (B) only.
+**▶▶▶▶▶ RESUME HERE — 2026-09-11 (LATEST). `COVERAGE_RUN_CHECKLIST_20260909.md` IS NOW FULLY
+CLOSED — every item, including SIGN, is done.** Final state: **`docs/coverage/SIGN_20260911.md`**
+is the merged sign-off report; read it first for the complete picture (pass rate, per-config
+coverage vs goal, D-matrix status, T-cache/T-exc dispositions) rather than re-deriving from
+the items below. What closed today, in order: (1) **Phase H** — L2/L3 shared-hierarchy bank
+redone on the relay-fixed design (`bank_2CL_2C_4W_4T_L2L3_20260911_relayfix/`, 7-kernel
+reduced cache-focused suite, 0 failures, L2/L3 confirmed genuinely live via non-zero `cp_hit`
+counts, not the sim log); (2) **D-matrix** — reconciled, the stale 2026-06-29 4C/2W and 8C/8W
+sanity checks formally retracted as untested-on-current-design (no bank ever existed for
+either, both predate the I3 fix and the OBS-045 relay fix); (3) **consolidated failure list**
+— every non-zero-error run in the entire 779-log history (`docs/coverage/
+CONSOLIDATED_FAILURE_LIST_20260911.md`) traced to an already-known cause, zero unexplained
+defects; (4) **SIGN** — the final report itself. **Nothing is in flight. There is no
+unchecked box left in `COVERAGE_RUN_CHECKLIST_20260909.md`.**
+
+**Prior (2026-09-10):** two threads landed: (A) the mentor's JSA machine-work package
+(W0-W7, all done — see `docs/paper/JSA_MACHINE_WORK_PACKAGE_RESULTS.md`, self-contained with
+inlined numbers + raw Questa evidence in `docs/paper/evidence/`), including this session's
+extension of W2 (2→4 programs) and W5 (recompile+bin-diff completed) to their full literal
+scope; (B) the 2026-09-09 coverage-plan checklist, up through Phase F and T-cache.
 
 **What landed today on the coverage plan, in order:**
 1. **G1/G2 (1CL `cp_write_tag` gap) — done, negative result.** Re-ran `axi_stress` in
