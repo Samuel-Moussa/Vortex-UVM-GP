@@ -3691,3 +3691,60 @@ either.
 Recorded here only so a future session does not re-diagnose the same "frozen PC" symptom
 as a hang on this specific kernel/config combination — check `mem=` trend and the
 kernel's own documented cost note before assuming a stall.
+
+## OBS-066 — no in-simulation reset-testing methodology exists (idle/active/soft/multi-domain reset), only a single well-engineered power-on reset ⟨2026-09-11⟩
+
+**Class:** TB/methodology gap (not RTL) · **Disposition: OPEN — real gap, not yet
+built** · **Found:** 2026-09-11, cross-checking this project's reset handling against
+Hunter/Chen/Lipon, *"Reset Testing Made Simple with UVM Phases"* (SNUG, Cavium/Synopsys).
+
+**What the paper recommends.** A UVM-native reset-testing framework built on
+`uvm_phase::jump()`: a reset driven by a real UVM driver component (not a raw
+`initial` block), monitors/drivers that cleanly `disable fork`+`cleanup()` on every
+reset edge (not just the first), and four concrete test patterns — idle reset (reset
+after the DUT quiesces, then run again), active reset (reset while stimulus is
+in-flight, via `phase.jump(uvm_pre_reset_phase::get())` mid-`main_phase`), soft reset
+(register-triggered, scoreboard marks in-flight items "unpredictable" via an
+analysis port), and multi-domain reset (`uvm_domain` lets one cluster reset while
+others keep running).
+
+**What we actually have.** `Vortex/sim/uvmsim/tb/vortex_tb_top.sv:54,65,85,115` —
+reset is driven by a raw `initial` block, exactly the pattern the paper names as
+substandard. It asserts **exactly once**, at simulation start, then never again for
+the rest of the run — every kernel launch test is single-reset, single-program,
+single pass/fail. `phase.jump`/`uvm_pre_reset_phase` do not appear anywhere in
+`Vortex/sim/uvmsim` (checked by grep, zero matches) — none of the paper's four test
+patterns exist. Per-agent `reset_phase()` overrides (`mem_driver.svh:77`,
+`dcr_driver.svh:93`, `host_driver.svh:98`, `axi_driver.svh:143`) correctly wait on
+the physical `reset_n` signal for that one event, but contain no logic to survive a
+*second* reset mid-run (no `event`-triggered `disable fork` the way the paper's
+Figure 3-4 driver does). Monitors gate sampling with `if (!vif.reset_n) continue;`
+(e.g. `axi_monitor.svh:189,343,397`) rather than an edge-triggered
+`disable fork`+`cleanup()` — adequate for a reset that happens once before the
+forever loop starts, unexercised for one that happens twice.
+
+**What IS solid, and should not be re-litigated.** The one power-on reset we do
+exercise is genuinely careful: it holds reset until a DCR-bootstrap handshake
+completes (`tb_top.sv:96-113`, addressing the startup-DCR-write ordering hazard from
+INV-2), and its own RTL-side hazard — the reset-relay flop's X-propagation window —
+was found and fixed (**OBS-045**, validated 2026-08-18 against both Gate-0 negative
+tests and a full 1CL re-bank). So "do we handle reset well" has two different
+answers depending on which reset is meant: the single startup reset, yes,
+demonstrably; repeated/mid-flight reset, never attempted.
+
+**Why this is a real, disclosable gap and not just an unbuilt nice-to-have.**
+Reset-recovery correctness (does the DUT come back to a clean, working state after a
+reset asserted mid-execution) is architecturally distinct from what Gate-0 and the
+coverage banks currently prove. Nothing in this project's evidence base — not the
+94.72%/94.29% coverage banks, not the negative tests, not the lockstep scoreboard —
+constitutes a claim about behavior across a second reset, because that condition has
+literally never been simulated.
+
+**Disposition: OPEN, not fixed.** Recommended if pursued: (1) promote the `initial`
+block's logic into a real UVM driver component bound to `reset_n` (small, mechanical
+— the timing/handshake logic in `tb_top.sv:65-119` can move nearly as-is into a
+`reset_phase` task); (2) add one idle-reset test (paper Figure 6) as the cheapest,
+highest-value first step — re-run `vecadd_lite` through a second reset cycle via
+`phase.jump(uvm_pre_reset_phase::get())` and confirm Gate-0's negative tests are
+still non-vacuous after the jump; (3) active/soft/multi-domain reset are real
+follow-on work, not needed to close item (2) first. Effort not yet estimated.
