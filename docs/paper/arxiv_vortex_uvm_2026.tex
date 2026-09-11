@@ -45,7 +45,7 @@
 		Faculty of Engineering, Minia University, Egypt\\
 		\IEEEauthorrefmark{2}Independent Researcher, South Korea \quad
 		\IEEEauthorrefmark{3}Siliconarts, Inc., South Korea\\
-		Corresponding author: samuel.moussa@mu.edu.eg}}
+		Corresponding author: samuelmoussa64@gmail.com}}
 
 \maketitle
 
@@ -330,10 +330,10 @@ checkers and coverage at the bottom.
 		\node[chk] (ess) at ($(dut.south)+(38mm,-32mm)$)
 		{end-state scoreboard\\ bidirectional, byte-exact};
 		% arrows: launch
-		\draw[arr] (host.east) -- ++(4mm,0) |- ([yshift=5mm]dut.west);
-		\draw[arr] (dcr.east)  -- ++(2.5mm,0) |- ([yshift=1mm]dut.west);
+		\draw[arr] (host.east) -- ++(7mm,0) |- ([yshift=5mm]dut.west);
+		\draw[arr] (dcr.east)  -- ++(4.5mm,0) |- ([yshift=1mm]dut.west);
 		\draw[arr, {Stealth[length=2mm]}-{Stealth[length=2mm]}]
-		(axi.east) -- ++(2.5mm,0) |- ([yshift=-4mm]dut.west);
+		(axi.east) -- ++(2mm,0) |- ([yshift=-4mm]dut.west);
 		\draw[arr] (axi) -- (mem);
 		% DPI
 		\draw[arr] ([yshift=4mm]dut.east) -- ([yshift=4mm]simx.west)
