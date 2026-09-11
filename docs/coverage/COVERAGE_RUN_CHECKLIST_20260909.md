@@ -444,9 +444,42 @@ caches change timing, not architectural outcome. Do not claim otherwise.
 
 ## 8. OPEN ITEMS AFTER THIS PLAN
 
-- [ ] **T-cache** — `cache_evict` directed kernel (same-cache-set multi-core contention,
-      device-derived grid, end-state compare vs SimX). Plan agreed, not yet written.
-- [ ] **T-exc** — recommend closing as N/A / architecturally unimplementable
-      (see OBS-024: Vortex kernels terminate via `tmc x0` → `busy` deassert, not `ebreak`).
-- [ ] **D-matrix** — broader config-point sweep, per-config banks only.
+- [x] **T-cache** — CLOSED 2026-09-10. `cache_evict` directed kernel written (fence-based
+      eviction, device-derived grid). 2CL/2C/4W/4T (4 real cores) PASSED: `data_compared=194`,
+      0 mismatches. Full record in `CLAUDE.md` TIER-2 checklist.
+- [x] **T-exc** — CLOSED 2026-09-09 as N/A / architecturally unimplementable. No RTL
+      exception/interrupt/trap datapath exists to stimulate (OBS-062: trap CSR writes are
+      literal no-ops, misaligned access is a sim-only `` `RUNTIME_ASSERT ``, no `mcause`/
+      trap-vector logic anywhere in `hw/rtl/core/`). See OBS-024 for the termination model.
+      Full record in `CLAUDE.md` TIER-2 checklist.
+- [x] **D-matrix — reconciled 2026-09-11 (write-up only, no new sim runs).** Current, valid,
+      banked config points on the relay-fixed (`Vortex/` post-`af6bd9227`) design:
+      - **1CL/1C/4W/4T (primary):** `bank_1CL_1C_4W_4T_relayfix_20260818/` — 94.72% total,
+        377 cg bins (370 covered, 98.14%).
+      - **1CL/1C/4W/4T, L2=1 (W5 EXT_D-related variant):** `bank_1CL_1C_4W_4T_L2_20260909/`
+        — 94.55% total, 524 cg bins (504 covered, 96.18%) — the larger bin count is the
+        L2-covergroup-instance delta documented in `PAPER_BASE_EVALUATION.md` §W5.
+      - **2CL/2C/4W/4T (primary):** `bank_2CL_2C_4W_4T_relayfix_20260910/` — 94.29% total,
+        1620 cg bins (1513 covered, 93.39%).
+      - **2CL/2C/4W/4T, L2=1 L3=1 (Phase H, third config point):**
+        `bank_2CL_2C_4W_4T_L2L3_20260911_relayfix/` — 85.10% total (see §7b H5).
+      **4C/2W/1T and 8C/8W/2T are NOT part of the current D-matrix.** They were sanity-checked
+      once in session 2 (2026-06-29, pre-`CLAUDE.md` restructure) to prove `cp_num_cores/
+      warps/threads` scale correctly — that check passed, but **no coverage bank was ever
+      produced for either point** (checked: no `bank_4C*`/`bank_8C*` directory exists on
+      disk), and the runs predate both I3's SimX param-match fix (2026-08-12) and the
+      OBS-045 reset-relay fix (2026-08-19). Their old "PASS" evidence is therefore stale and
+      not quotable as current verification — treat 4C/2W and 8C/8W as **untested on the
+      current design**, not as a re-confirmed pass. A fresh re-bank at either point is
+      **optional future work** (~4-6h per the effort estimate), not required by this plan —
+      the plan's own scope is 1CL + 2CL (+ the L2/L3 variants), both of which are current.
+      Per-config banks only; **never blend UCDBs across configs** (vcover-6821 width toggles
+      + per-core instance inflation make a cross-config merge invalid — confirmed original
+      finding, still holds).
+- [x] **Consolidated failure/error list — DONE 2026-09-11.** Grepped all 779 banked/
+      historical `simulation.log` files under `vortex_uvm_env/results/` for non-zero
+      `UVM_ERROR`/`UVM_FATAL`. 20 non-zero runs found; **all 20 already explained** by
+      prior documented work (deliberate fault-injection proofs, fixed-and-superseded
+      generator/kernel bugs, or kernels deliberately kept outside the verified suite) —
+      zero unexplained failures. Full table: `docs/coverage/CONSOLIDATED_FAILURE_LIST_20260911.md`.
 - [ ] **SIGN** — final merged sign-off report.
