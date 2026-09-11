@@ -482,4 +482,7 @@ caches change timing, not architectural outcome. Do not claim otherwise.
       prior documented work (deliberate fault-injection proofs, fixed-and-superseded
       generator/kernel bugs, or kernels deliberately kept outside the verified suite) —
       zero unexplained failures. Full table: `docs/coverage/CONSOLIDATED_FAILURE_LIST_20260911.md`.
-- [ ] **SIGN** — final merged sign-off report.
+- [x] **SIGN — DONE 2026-09-11.** Final merged sign-off report aggregating Gate-0, pass
+      rate, per-config coverage vs goal, D-matrix status, and the directed-test items.
+      No new sim runs — pure aggregation of already-cited evidence.
+      `docs/coverage/SIGN_20260911.md`. **This closes the coverage-run checklist.**
