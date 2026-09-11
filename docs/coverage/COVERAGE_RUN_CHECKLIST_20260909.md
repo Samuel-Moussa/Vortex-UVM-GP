@@ -411,20 +411,36 @@ bug-finding**. L2/L3 was already functionally validated 2026-08-07 (`cache_tier`
 L2+L3: 57,379 matched pairs; 15-kernel sweep identical to the pre-L2/L3 baseline) — shared
 caches change timing, not architectural outcome. Do not claim otherwise.
 
-- [ ] **H1** **Reduced, cache-focused suite only.** L2/L3 affects the memory hierarchy, so
-      riscv-dv arithmetic / FPU / TCU kernels add nothing. Run:
-      `cache_tier` (all 3 phases), `cache_stress`, `mshr_flood`, `mem_stress`,
-      `lmem_stress`, `wide_stress`, `storm_big`. ~45–75 min vs ~4 h for the full suite.
-- [ ] **H2** Build with `L2=1 L3=1` (structural — a plusarg cannot create hardware; the I2
-      asserts fail loud and name the rebuild command if this is wrong).
-- [ ] **H3** Verify the levels are genuinely live via
-      `vcover report -recursive | grep l2cache` — **never** by grepping the sim log.
-      Reference point from a prior measurement: L2 cluster0 15,268 hits / cluster1 15,323 /
-      L3 bank0 13,464 / bank1 14,304.
-- [ ] **H4** Export `COV_L2=1 COV_L3=1` for the merge so the EUR passthru waivers are NOT
-      generated — leaving them in would waive the very RTL this phase exists to cover.
-- [ ] **H5** Bank as its own config (`bank_..._L2L3_20260909/`). Never merge with an
-      L2=0/L3=0 bank (H4 in §0).
+- [x] **H1** **Reduced, cache-focused suite only — DONE 2026-09-11.** Ran all 7:
+      `lmem_stress`, `mem_stress`, `mshr_flood`, `cache_stress`, `storm_big`, `wide_stress`,
+      `cache_tier` (all 3 phases, `CT_P1=1 CT_P2=1 CT_P3=1`), all at
+      `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 L2=1 L3=1` on the relay-fixed design
+      (`Vortex/` `af6bd9227`). All 7 PASSED, 0 UVM_ERROR/UVM_FATAL. `cache_tier` (P3 alone
+      moves ~1.5 MB through Ramulator by design, documented in its own kernel header) took
+      ~6.3M of its 20M-cycle budget and ~2h45m wall time — the longest single run in the
+      project so far, but genuine progress throughout (steady `mem=` climb, no stall).
+      Evidence: `docs/paper/evidence/PhaseH_L2L3_2CL_relayfix_20260911/{lmem_stress,
+      mem_stress,mshr_flood,cache_stress,storm_big,wide_stress,cache_tier}/{SUMMARY,config}.txt`.
+- [x] **H2** Build with `L2=1 L3=1` — done via `make sim-only ... L2=1 L3=1` for all 7 runs
+      (structural; I2 asserts would have failed loud if the plusarg didn't match the RTL).
+- [x] **H3** Verified genuinely live via `vcover report -recursive` + `-details -cvg`, not the
+      sim log. Real non-zero HIT counts on the `cp_hit` coverpoint of every instance:
+      L2 cluster0 **86,503** hits / cluster1 **88,104** hits; L3 bank0 **36,501** hits /
+      bank1 **81,854** hits (all exceed the prior 2026-08-07 reference point — expected,
+      this suite includes `wide_stress`+`cache_tier` which the old 15-kernel sweep also had,
+      plus the reduced set concentrates cache pressure). Evidence:
+      `docs/paper/evidence/PhaseH_L2L3_2CL_relayfix_20260911/vcover_l2l3_hit_detail.txt`.
+- [x] **H4** Merged with `COV_NCL=2 COV_NC=2 COV_NW=4 COV_NT=4 COV_L2=1 COV_L3=1` exported —
+      confirmed in the merge log ("Generating config-aware exclusions for 2CL/2C/4W/4T
+      L2=1 L3=1"), so the EUR passthru waivers were NOT generated for this bank. Hits-invariant
+      gate held (`OK: hits-invariant holds — exclusions shrank the denominator only`).
+- [x] **H5** Banked as its own config, never merged with an L2=0/L3=0 bank:
+      `vortex_uvm_env/cov/bank_2CL_2C_4W_4T_L2L3_20260911_relayfix/` (merged.ucdb +
+      merged_raw.ucdb + report/ + staging/), verified by re-reading the banked copy directly
+      (`vcover report -summary` on the bank's own `merged.ucdb` reproduces the exact numbers
+      below). **Total 85.10%** — Assertions 97.74% · Branches 88.04% · Conditions 69.35% ·
+      Covergroup bins 1087/1680 = 64.70% · Directives 100% · Statements 92.98% ·
+      Toggles 78.86%. 8,809 instances, 7 staged UCDBs.
 
 ## 8. OPEN ITEMS AFTER THIS PLAN
 

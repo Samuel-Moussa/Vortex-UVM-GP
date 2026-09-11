@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 20:04:22 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   2
+  Cores:      2
+  Warps:      4
+  Threads:    4
+  Timeout:    900000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/mem_stress/mem_stress.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/mem_stress/mem_stress.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_195411_kernel_launch_test/programs/mem_stress.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_195411_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 2981205000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 2981205000  cycles=297729  instrs=143536  IPC=0.482
+#   Total Cycles: 297835  Mem Ops: 38793  Instructions: 143536
+#   Cycles: 297836
+#   IPC:    0.4819 (calculated)
+#   Total Cycles: 297830
+#   Final IPC:    0.482
+#   Cycles: 297837
+#   IPC:    0.4819 (calculated)
+#   Cycles: 297838
+#   IPC:    0.4819 (calculated)
+#   Cycles: 297839
+#   IPC:    0.4819 (calculated)
+#   Cycles: 297840
+#   IPC:    0.4819 (calculated)
+#   Cycles: 297841
+#   IPC:    0.4819 (calculated)
+#   Total Cycles:        297830
+#   Total Instructions:  143536
+#   Average IPC:         0.482
+#   Peak IPC:            0.500
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       297842
+#   Instructions: 143536
+#   IPC:          0.482
+#   Total Cycles: 297842  Instructions: 143536
+================================================================================

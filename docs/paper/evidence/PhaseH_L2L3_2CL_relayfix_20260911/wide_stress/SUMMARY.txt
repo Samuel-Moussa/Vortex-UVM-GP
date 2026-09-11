@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 21:32:34 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   2
+  Cores:      2
+  Warps:      4
+  Threads:    4
+  Timeout:    40000000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/wide_stress/wide_stress.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/wide_stress/wide_stress.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_204358_kernel_launch_test/programs/wide_stress.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_204358_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 11805265000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 11805265000  cycles=1180135  instrs=596740  IPC=0.506
+#   Total Cycles: 1180241  Mem Ops: 303031  Instructions: 596740
+#   Cycles: 1180242
+#   IPC:    0.5056 (calculated)
+#   Total Cycles: 1180236
+#   Final IPC:    0.506
+#   Cycles: 1180243
+#   IPC:    0.5056 (calculated)
+#   Cycles: 1180244
+#   IPC:    0.5056 (calculated)
+#   Cycles: 1180245
+#   IPC:    0.5056 (calculated)
+#   Cycles: 1180246
+#   IPC:    0.5056 (calculated)
+#   Cycles: 1180247
+#   IPC:    0.5056 (calculated)
+#   Total Cycles:        1180236
+#   Total Instructions:  596740
+#   Average IPC:         0.506
+#   Peak IPC:            0.509
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       1180248
+#   Instructions: 596740
+#   IPC:          0.506
+#   Total Cycles: 1180248  Instructions: 596740
+================================================================================

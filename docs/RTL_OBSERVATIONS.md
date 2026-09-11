@@ -3661,3 +3661,33 @@ the corresponding author, who owns `sim/simx/decode.cpp` upstream-parity decisio
 **Disposition: OPEN.** Reproduced with a fresh Questa run at our pin; corrects "3 Vortex
 RTL bugs" to "2 RTL + 1 golden-model" for this specific PR when citing FuzzGPU's count;
 not fixed by decision.
+
+## OBS-065 — `cache_tier` P3 (L3-spilling phase) at 2CL/L2/L3: genuine multi-hour runtime,
+not a hang ⟨2026-09-11⟩
+
+**Observation, not a bug.** Running `cache_tier` with all 3 phases (`CT_P1=1 CT_P2=1
+CT_P3=1`) at `CLUSTERS=2 CORES=2 WARPS=4 THREADS=4 L2=1 L3=1` (Phase H) took ~2h45m wall
+time and ~6.3M of its 20M-cycle timeout budget to complete — by far the longest single
+run in this project. During the run, the periodic `TB_PROBE_PIPELINE` status line showed
+core 0's sampled PC frozen at the same address (`0x800034dc`) for well over a million
+simulated cycles, which read superficially like a stuck core.
+
+**Investigated, not assumed.** Two independent signals ruled out a hang: (1) `mem=` (a
+running counter) climbed at a steady, unchanging linear rate every single 10,000-cycle
+sample with no stalls or jumps — the signature of continuous execution, not deadlock;
+(2) reading the kernel source (`Vortex/tests/kernel/cache_tier/main.cpp`) shows its own
+header comment, written when the kernel was authored: *"P3 moves ~1.5 MB through
+Ramulator and needs a multi-million-cycle timeout, which is why it is never on by
+default."* The frozen-PC appearance is sampling aliasing — `cache_tier`'s per-thread
+loop (write-pass then read-back-pass over strided cache lines) has a regular iteration
+period that, at this data volume, coincidentally revisits the same instruction address
+at the fixed 10,000-cycle sampling interval. The kernel has no cross-core polling or
+barrier (deliberately — see the kernel's own scoreboard-safety note: disjoint per-thread
+line sets, no fenceless race), so there was no actual synchronization stall to explain
+either.
+
+**Disposition: informational, not filed as a defect.** The run completed cleanly
+(rc=0, 0 UVM_ERROR/UVM_FATAL, scoreboard PASSED) well inside its 20M-cycle budget.
+Recorded here only so a future session does not re-diagnose the same "frozen PC" symptom
+as a hang on this specific kernel/config combination — check `mem=` trend and the
+kernel's own documented cost note before assuming a stall.

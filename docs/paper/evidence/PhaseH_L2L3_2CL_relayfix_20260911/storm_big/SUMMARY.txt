@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 22:49:01 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   2
+  Cores:      2
+  Warps:      4
+  Threads:    4
+  Timeout:    1600000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/cache_stress/cache_stress.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/cache_stress/cache_stress.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_221215_kernel_launch_test/programs/cache_stress.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_221215_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 5716615000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 5716615000  cycles=571270  instrs=525360  IPC=0.920
+#   Total Cycles: 571376  Mem Ops: 39286  Instructions: 525360
+#   Cycles: 571377
+#   IPC:    0.9195 (calculated)
+#   Total Cycles: 571371
+#   Final IPC:    0.919
+#   Cycles: 571378
+#   IPC:    0.9195 (calculated)
+#   Cycles: 571379
+#   IPC:    0.9195 (calculated)
+#   Cycles: 571380
+#   IPC:    0.9195 (calculated)
+#   Cycles: 571381
+#   IPC:    0.9195 (calculated)
+#   Cycles: 571382
+#   IPC:    0.9195 (calculated)
+#   Total Cycles:        571371
+#   Total Instructions:  525360
+#   Average IPC:         0.919
+#   Peak IPC:            0.937
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       571383
+#   Instructions: 525360
+#   IPC:          0.919
+#   Total Cycles: 571383  Instructions: 525360
+================================================================================

@@ -1,0 +1,59 @@
+================================================================================
+Vortex UVM Test Summary
+================================================================================
+Date:         Thu Sep 10 22:12:14 EEST 2026
+Test:         kernel_launch_test
+Status:       PASSED
+Exit Code:    0
+
+
+Configuration:
+  Interface:  axi
+  Clusters:   2
+  Cores:      2
+  Warps:      4
+  Threads:    4
+  Timeout:    6000000 cycles
+
+
+Program:
+  Name:       /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/storm_big/storm_big.elf
+  Type:       custom-elf
+  Source:     /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/tests/kernel/storm_big/storm_big.elf
+  HEX:        /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_213235_kernel_launch_test/programs/storm_big.hex
+
+
+Files:
+  Log:        logs/simulation.log
+  Waveform:   waves/kernel_launch_test_axi.vcd
+  Config:     reports/config.txt
+  Directory:  /home/samuel_ubuntu22/Vortex_UVM_GP/vortex_uvm_env/results/20260910/run_213235_kernel_launch_test
+
+
+Statistics:
+# UVM_INFO /home/samuel_ubuntu22/Vortex_UVM_GP/Vortex/sim/uvmsim/uvm_env/agents/host_agent/host_monitor.svh(249) @ 10955045000: uvm_test_top.env.m_host_agent.m_monitor [HOST_MON] Kernel execution completed at time 10955045000  cycles=1095113  instrs=595564  IPC=0.544
+#   Total Cycles: 1095219  Mem Ops: 52633  Instructions: 595564
+#   Cycles: 1095220
+#   IPC:    0.5438 (calculated)
+#   Total Cycles: 1095214
+#   Final IPC:    0.544
+#   Cycles: 1095221
+#   IPC:    0.5438 (calculated)
+#   Cycles: 1095222
+#   IPC:    0.5438 (calculated)
+#   Cycles: 1095223
+#   IPC:    0.5438 (calculated)
+#   Cycles: 1095224
+#   IPC:    0.5438 (calculated)
+#   Cycles: 1095225
+#   IPC:    0.5438 (calculated)
+#   Total Cycles:        1095214
+#   Total Instructions:  595564
+#   Average IPC:         0.544
+#   Peak IPC:            1.312
+#   Stall Cycles:        0 (0.00%)
+#   Cycles:       1095226
+#   Instructions: 595564
+#   IPC:          0.544
+#   Total Cycles: 1095226  Instructions: 595564
+================================================================================
