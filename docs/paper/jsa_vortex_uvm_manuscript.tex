@@ -54,39 +54,8 @@
 		country={South Korea}}
 
 	\begin{abstract}
-		% ~250 words; TBD markers pending the machine-work package
-		Open-source RISC-V GPGPUs ship without reference-model verification,
-		functional-coverage models, or sign-off discipline, while concurrent
-		fuzzing work demonstrates that real defects populate exactly this
-		design class. This paper presents a complete UVM~1.2 verification
-		environment and closure methodology for the Vortex RISC-V GPGPU, and
-		the findings it produced on both sides of the comparison. The
-		environment wraps a bus-master SIMT device with role-inverted agents,
-		integrates the project's functional simulator as a per-configuration
-		golden model over DPI-C, and renders verdicts through two checkers
-		that are themselves qualified by permanent fault-injection guards: a
-		bidirectional end-state scoreboard and a per-instruction, per-lane
-		lockstep comparator governed by five alignment rules that we
-		semi-formalize as precondition--soundness properties. A two-pass
-		load-value feed makes fenceless multi-core programs
-		instruction-granularity verifiable---verified modulo the fed race
-		resolutions, with the assumption stated and, in the flagship case,
-		discharged by a trace-level race witness. A three-layer coverage model
-		adds what is, to our knowledge, the first published SIMT
-		functional-coverage layer for RTL GPU verification (IPDOM divergence
-		depth, scratchpad bank conflicts, coalescing classes), closed under
-		machine-generated, RTL-cited exclusions enforced by a blocking
-		waiver-integrity gate. The methodology surfaced externally corroborated
-		RTL defects (a JALR LSB ISA deviation, a reset-relay X window behind a
-		silenced assertion) and reference-model defects found by the lockstep
-		itself. The checking
-		stack is cheap to operate: lockstep adds no measurable wall-clock
-		overhead at either end of the kernel-size spectrum and roughly 30\%
-		peak memory at scale. Stimulus \emph{kind}, not volume, moves the
-		coverage model: ninety additional scalar-generator programs closed
-		zero bins, while fifty-seven axis-directed programs closed the SIMT
-		targets.
-	\end{abstract}
+	Open-source RISC-V GPGPUs ship without reference-model verification, functional-coverage models, or sign-off discipline, even as fuzzing shows real defects populate this class. This paper presents a complete UVM 1.2 environment and closure methodology for the Vortex RISC-V GPGPU. The environment wraps a bus-master SIMT device with role-inverted agents, integrates the project's functional simulator as a per-configuration golden model over DPI-C, and renders verdicts through two injection-qualified checkers: a bidirectional end-state scoreboard and a per-instruction, per-lane lockstep comparator governed by five alignment rules, semi-formalized as precondition-soundness properties. A two-pass load-value feed makes fenceless multi-core programs instruction-granularity verifiable - verified modulo the fed race resolutions, with the assumption discharged by a trace-level race witness in the flagship case. A three-layer coverage model adds, to our knowledge, the first published SIMT functional-coverage layer for RTL GPU verification (divergence depth, bank conflicts, coalescing classes), closed under machine-generated, RTL-cited exclusions enforced by a blocking waiver-integrity gate. The methodology surfaced externally corroborated RTL defects (a JALR LSB ISA deviation; a reset-relay X window behind a silenced assertion) and reference-model defects found by the lockstep itself. Lockstep adds no measurable wall-clock overhead and roughly 30\% peak memory at scale; stimulus kind, not volume, moves this coverage model.
+\end{abstract}
 
 	\begin{keyword}
 		UVM \sep RISC-V \sep GPGPU \sep SIMT \sep functional verification \sep
