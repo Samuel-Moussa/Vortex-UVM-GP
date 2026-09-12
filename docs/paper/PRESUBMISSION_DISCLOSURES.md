@@ -1,7 +1,10 @@
 # Pre-Submission Disclosures Register
 
 **Purpose.** Single source of truth for every honesty constraint that the
-arXiv preprint and the ISQED'27 submission must respect. Every paper claim
+arXiv preprint and the Journal of Systems Architecture (JSA) manuscript
+must respect (the ISQED'27 conference submission was prepared to this
+same register but ultimately not submitted — JSA-only strategy, decided
+2026-09-12). Every paper claim
 is checked against this register before compilation. Written 2026-09-09 as
 part of the pre-submission work plan (P0-2, P0-3, P0-4).
 
