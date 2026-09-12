@@ -41,12 +41,9 @@ Every quantitative claim in the manuscript traces to a banked,
 provenance-cited artifact; the boundaries of the method are stated
 rather than waived, in a dedicated threats-to-validity section. All
 authors have approved the submission. The work has not been published
-elsewhere and is not under consideration by any other journal. A
-conference-length version is being submitted in parallel to ISQED
-2027; the present manuscript is the substantially extended version
-(formalized rules, exclusion-methodology section, cost and
-marginal-coverage results, FuzzGPU reproduction study, threats to
-validity).
+elsewhere and is not under consideration by any other journal or
+conference; an extended abstract version is available as a public
+preprint (arXiv, cs.AR) for timestamping purposes only.
 
 Suggested reviewers (optional, at your discretion): researchers
 working on RISC-V verification methodology, GPU/GPGPU verification,
