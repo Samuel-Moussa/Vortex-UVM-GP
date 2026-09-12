@@ -517,7 +517,9 @@ changes.
 \begin{table}[t]
 	\caption{Lockstep configuration matrix (all lane-exact: 0 mismatches,
 		0 orphans). Tallies are recorded in the verification documentation;
-		per-run raw logs were not retained.}
+		per-run raw logs were not retained. The 8W/4T point predates the
+		reset-relay and parameter-audit fixes and documents the comparator
+		mechanics rather than current-design status.}
 	\label{tab:matrix}
 	\centering
 	\small
@@ -680,7 +682,11 @@ Table~\ref{tab:coverage} summarizes the banked configurations.
 			\item[$\ddagger$] \emph{Simulation runs}, not programs: 49
 			distinct programs, one run twice under two bus modes.
 			\item A third bank with shared L2/L3 enabled totals 93.2\%
-			(51 runs, all passing), also on the pre-fix design.
+			(51 runs, all passing), also on the pre-fix design; a
+			relay-fixed L2/L3 bank (cache-focused suite, 2026-09-11)
+			later replaced its passthrough waivers with genuinely
+			exercised shared-hierarchy coverage (85.1\% total on the
+			enlarged denominator).
 		\end{tablenotes}
 	\end{threeparttable}
 \end{table}

@@ -662,7 +662,9 @@ reconvergence with no comparator changes.
 \begin{table}[t]
 	\caption{Lockstep configuration matrix (all lane-exact: 0 mismatches,
 		0 orphans). Tallies are recorded in the committed verification
-		documents; per-run raw logs were not retained.}
+		documents; per-run raw logs were not retained. The 8W/4T point
+		predates the reset-relay and parameter-audit fixes and documents
+		the comparator mechanics rather than current-design status.}
 	\label{tab:matrix}
 	\centering
 	\small
@@ -913,7 +915,12 @@ totals are stated with their provenance and labels:
 			\item[$\ddagger$] \emph{Simulation runs}, not programs: 49
 			distinct programs, one run twice under two bus modes.
 			\item A third bank with shared L2/L3 enabled totals 93.2\%
-			(51 runs, all passing), also on the pre-fix design.
+			(51 runs, all passing), also on the pre-fix design. A
+			relay-fixed L2/L3 bank (seven-kernel cache-focused suite,
+			2026-09-11) replaces the prior passthrough waivers with
+			genuinely exercised shared-hierarchy coverage: 85.1\% total
+			on the correspondingly enlarged denominator, with live
+			cache-probe hit counts verified recursively.
 		\end{tablenotes}
 	\end{threeparttable}
 \end{table}

@@ -406,7 +406,25 @@ correction to the initial reporting that we state rather than quietly
 keep. A relay-fixed 2CL bank
 (\code{bank_2CL_2C_4W_4T_relayfix_20260910}: 110 runs, 0 failures,
 93.39\% bins / 94.29\% total) restores cross-configuration
-comparability on the fixed design. During this campaign the blocking
+comparability on the fixed design. A third configuration point then
+closes the coverage story's weakest waiver: shared L2/L3 had only
+ever run \emph{passthrough-waived} (the EUR exclusion class)---a
+waiver standing in for untested RTL. A seven-kernel cache-focused
+suite at 2CL with L2/L3 enabled on the relay-fixed design (all runs
+passing; the \code{cache_tier} phase is the project's longest single
+run at ${\sim}$2\,h45\,m) produced a dedicated bank whose liveness
+was verified recursively---real \code{cp_hit} counts on every new
+cache covergroup instance (L2: 86{,}503 and 88{,}104; L3: 36{,}501
+and 81{,}854)---and, with the passthru waivers correctly not
+generated, a correspondingly enlarged denominator: 85.10\% total
+(covergroup bins 1{,}087/1{,}680 = 64.70\%). Expectations are set
+honestly: this is coverage and configurability evidence, not
+bug-finding---shared caches change timing, not architectural
+outcome, and the functional validation of L2/L3 predates it (57{,}379
+matched lockstep pairs, 2026-08-07). With this bank, the
+coverage-run checklist that governed the campaign is fully closed,
+recorded in a final merged sign-off report. During this campaign the
+blocking
 hits-invariant waiver gate caught a real operator error---an exclusion
 set generated with 1CL keys against a 2CL merge---and aborted the
 merge; this is the third class of defect the gate has caught in
@@ -551,7 +569,12 @@ rather than force-green elsewhere. Differential testing is
 structurally blind to stimulus faults (shared-binary blindness);
 one input class is closed by independent assertions, the class is
 reported open. Comparator tolerances are enumerated (load filter,
-volatile CSRs, fsqrt 1-ULP) and logged, never silent.
+volatile CSRs, fsqrt 1-ULP) and logged, never silent. Two
+infrastructure gaps are recorded rather than assumed away: no
+in-sim reset-testing methodology exists (power-on reset only---the
+R10 bug class has never been exercised under randomized reset), and
+the environment has no isolated component-level test layer; both are
+open items, not silently covered claims.
 \subsection{External validity}
 All results are one DUT at one pin with locally modified files
 (disclosed), one simulator, one build; the alignment rules' DUT
