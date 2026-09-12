@@ -1,5 +1,26 @@
 # JSA Submission Package (paste-ready)
 
+## Authors (in order; matching the manuscript byline)
+
+| # | First name | Last name | Affiliation | Country | Email |
+|---|---|---|---|---|---|
+| 1 | Samuel Moussa *(corresponding)* | Moussa | Dept. of Electronics and Communications Engineering, Faculty of Engineering, Minia University | Egypt | samuelmoussa64@gmail.com |
+| 2 | Steven | Ibrahim | same as above | Egypt | — |
+| 3 | Ahmad | Sudky | same as above | Egypt | — |
+| 4 | Ahmad | Fawzy | same as above | Egypt | — |
+| 5 | Abanoub | Nabil | same as above | Egypt | — |
+| 6 | Alhassan | Sayed | same as above | Egypt | — |
+| 7 | Hossam | Hassan | Independent Researcher | South Korea | — |
+| 8 | Hyung-Min | Yoon | Siliconarts, Inc. | South Korea | — |
+
+Full affiliation string for authors 1–6 (if the form asks):
+"Department of Electronics and Communications Engineering, Faculty of
+Engineering, Minia University, Minia, Egypt".
+
+Open items before submitting: (a) collect co-author emails/ORCIDs if
+the form requires them — none are on file; (b) confirm with H. Hassan
+that "Independent Researcher, South Korea" is his preferred listing.
+
 ## Highlights (Elsevier: 3–5 bullets, ≤85 characters each)
 - Complete UVM 1.2 environment and closure methodology for an open RISC-V GPGPU
 - Five SIMT lockstep alignment rules, semi-formalized as soundness properties
