@@ -15,7 +15,7 @@
 [![SIMT Generator](https://img.shields.io/badge/simtgen-SIMT--aware%20random%20stimulus-8957e5?style=flat-square)](#-simtgen--closing-the-simt-stimulus-gap)
 [![Coverage](https://img.shields.io/badge/Covergroup%20Bins-98.14%25-2da44e?style=flat-square)](#-results)
 [![Total](https://img.shields.io/badge/Total%20Coverage-94.6%25-2da44e?style=flat-square)](#-results)
-[![ISA Coverage](https://img.shields.io/badge/riscv--isacov%20(80%20cg)-behavioral%2082.7%25-8957e5?style=flat-square)](#-results)
+[![ISA Coverage](https://img.shields.io/badge/riscv--isacov%20(80%20cg)-behavioral%2099.2%25-8957e5?style=flat-square)](#-results)
 [![RTL/TB findings](https://img.shields.io/badge/Findings%20Logged-60%2B-c9510c?style=flat-square)](#-findings)
 
 [Why this exists](#-why-this-exists--the-gap) ·
