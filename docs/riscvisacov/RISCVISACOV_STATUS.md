@@ -254,6 +254,31 @@ counts, so each figure is double-listed by the report; the ratios are unaffected
 > found on disk (429/516 = 83.14%)** — it is NOT confirmed to be an improvement over
 > the since-lost 2026-09-09 measurement, since that bank's contents are unknown.
 > Do not claim otherwise until/unless that gap is investigated.
+>
+> **⚠ SUPERSEDED AGAIN (same day) 2026-09-20 — round 3 closed all but 4 bins.**
+> Added `blt` sign corners (warp-uniform operands, same discipline as `bge`),
+> `xori`/`lbu` immediate corners, and CSR register-value sign corners via
+> `mscratch` (`VX_csr_data.sv` — the one genuinely full-width read/write CSR;
+> `fflags`/`frm` are sub-32-bit and can never carry a sign). Caught a real
+> hazard before running: `mscratch` is a single scalar register shared by
+> every thread in a core (not per-warp/per-thread), so the CSR sequence is
+> gated to `tid==0` only. Merged into the same bank, banked:
+>
+> | stage | bins | coverage |
+> |---|---|---|
+> | raw (everything) | 1,664/6,469 | 25.72% |
+> | + EUR structural | 1,664/6,432 | 25.87% (hits-invariant, gated) |
+> | **+ EOTH `*_reg_assign` excluded** | **477/481** | **99.17%** (99.57% weighted) |
+>
+> Validated: `TEST PASSED`, 0 UVM/RTL errors, **LOCKSTEP byte-exact**
+> (11,644/11,644 matched, 0 mismatches, 0 orphans). **4 bins remain open:**
+> the 2 deliberately-deferred `jalr` immediate bins, and
+> `rv32zicsr_{csrrci,csrrwi}_cg/cp_rd_sign/neg` — these did NOT close despite
+> `csrrsi` succeeding with the identical `mscratch`-sequencing technique.
+> Root cause not found and not guessed at; LOCKSTEP being clean rules out a
+> DUT correctness bug, so this is most likely a sequencing/scheduling detail
+> in the generated code, not yet isolated. The provenance-gap disclosure above
+> (2026-09-09's 1,812/6,929 figure) still applies unchanged.
 
 ### `cp_asm_count` — important, and a real granularity gain over our model
 

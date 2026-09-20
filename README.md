@@ -261,12 +261,16 @@ Five banks; each is one consistent compile, verified by re-reading the banked co
 > than silently dropped. A smaller, fully reproducible sub-lineage of the same
 > `cov/isacov_gaphunt/` bank — the OBS-056 targeted gap-hunt (481 behavioral
 > bins, a strict subset of the 3,250 above) — WAS re-verified and improved this
-> session: **83.14% → 97.71% (470/481 bins, 98.78% weighted)**, via new
-> `isacov_fill` stimulus, re-banked and confirmed byte-exact under
-> `+LOCKSTEP +LOCKSTEP_LOADFEED` (10,848/10,848 matched, 0 mismatches). See
-> `docs/riscvisacov/RISCVISACOV_STATUS.md` for the full before/after and the two
-> real defects the exclusion pipeline's hits-invariant gate caught along the way
-> (OBS-068, OBS-069). Do not blend these two rows or treat 97.71% as having
+> session: **83.14% → 99.17% (477/481 bins, 99.57% weighted)**, over three rounds
+> of new `isacov_fill` stimulus, re-banked and confirmed byte-exact each round
+> under `+LOCKSTEP +LOCKSTEP_LOADFEED` (final round: 11,644/11,644 matched, 0
+> mismatches). **4 bins remain honestly open**: 2 deliberately-deferred `jalr`
+> immediate bins (not worth a hand-assembled nonzero-offset jump for 2 bins),
+> and 2 CSR register-value bins that didn't close for a reason not yet found
+> (lockstep clean rules out a DUT defect). See
+> `docs/riscvisacov/RISCVISACOV_STATUS.md` for the full before/after and the
+> real defects the exclusion pipeline's hits-invariant gate caught along the
+> way (OBS-068, OBS-069). Do not blend these two rows or treat 99.17% as having
 > superseded 82.71% — they are different bin-count scopes until the 3,250-row's
 > source is found.
 
