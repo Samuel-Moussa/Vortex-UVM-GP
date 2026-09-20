@@ -22,39 +22,76 @@ resolve; it is a layering to make explicit.
 
 **L1 is now real: 80 active covergroups.** RV32I 39 (Imperas) + RV32F 26 + RV32M 8 +
 RV32Zicsr 6 + **RV32Zifencei 1** (all generated from Imperas' own DV plans; the generator
-is proven by regenerating RV32I byte-for-byte). See `riscvisacov/RISCVISACOV_STATUS.md`.
+is proven by regenerating RV32I byte-for-byte). See `riscvisacov/RISCVISACOV_STATUS.md` for
+the coverage-history table and `riscvisacov/RISCVISACOV_INSTRUCTION_REFERENCE.md` for what
+**every one of the 80 covergroups actually checks** — per-instruction semantics, exactly
+which coverpoint families are compiled in under this project's `COVER_LEVEL_BASIC` build
+(most of riscvISACOV's richer coverpoint types are `EXTENDED`/`DV`-level and are never
+built here), and current measured status cross-checked against the banked UCDB.
 
-**L1 gap-hunt CLOSED/FROZEN 2026-09-06 (OBS-056).** A targeted, per-program `+ISACOV`
-campaign (baseline `vecadd_lite` → directed kernels `fpu_test`/`div_edge`/`csr_probe`/
-`sfu_masks`/`isa_probe`/`fpu_mt` → new kernel `isacov_fill`, each individually verified
-0 map misses / 0 word mismatches) drove **78/80 covergroups from zero to real**, ending at
-1,444/6,469 raw bins (22.32%) / 52.43% weighted. **2 covergroups are permanently 0% by
-construction, not stimulus gaps** — `rv32zifencei_fence_i_cg` (`fence.i` decodes
-identically to `fence`, OBS-050) and `rv32i_nop_cg` (its coverpoint checks
-`ins_str=="nop"`, but our disassembly generator runs `objdump -M numeric,no-aliases` —
-required so every *other* instruction gets a register-numbered, non-pseudo mnemonic — and
-`nop` is purely a pseudo-op alias for `addi x0,x0,0`; the literal string "nop" can never
-appear in a map built this way, see OBS-056).
-**Exclusions applied 2026-09-06** via `scripts/isacov_exclude.do` +
-`apply_isacov_exclude.sh`, in two gated classes that are never merged into one number:
+**L1 gap-hunt CLOSED/FROZEN 2026-09-06 (OBS-056), then RE-OPENED and taken to 99.17%
+2026-09-20.** A targeted, per-program `+ISACOV` campaign (baseline `vecadd_lite` →
+directed kernels `fpu_test`/`div_edge`/`csr_probe`/`sfu_masks`/`isa_probe`/`fpu_mt` → new
+kernel `isacov_fill`, each individually verified 0 map misses / 0 word mismatches) drove
+**78/80 covergroups from zero to real**, ending at 1,444/6,469 raw bins (22.32%) / 52.43%
+weighted, banked as **83.14%** (429/516, EOTH-excluded) and frozen that day.
+
+**⚠ SUPERSEDED 2026-09-20 — the 83.14% figure above is HISTORICAL, quote 99.17%.** Three
+more rounds of `isacov_fill` stimulus (register/immediate-value corners the 2026-09-06
+freeze didn't reach: offset loads/stores, ALU-immediate zero/negative literals, `and`/
+`sltu`/`div`/`rem`/`fcvt.*`/`blt` sign corners, `xori`/`lbu` immediate corners, CSR
+register-value corners via `mscratch`) took the same bank from **83.14% → 97.71% → 99.17%
+(477/481 bins, 99.57% weighted)**, each round re-verified byte-exact under
+`+LOCKSTEP +LOCKSTEP_LOADFEED` before banking. Two real defects were found and disclosed
+along the way, not silently fixed: **OBS-068** (riscvISACOV's branch/`jal`
+`cp_imm_value` mis-parses the disassembly text — a toolflow bug, not an RTL one) and
+**OBS-069** (`rv32i_lhu_cg/cp_rd_sign` shows hits that should be architecturally
+impossible for a zero-extending load — open, not yet root-caused, LOCKSTEP being
+byte-exact on the same run rules out a DUT correctness defect). Full round-by-round
+history: `riscvisacov/RISCVISACOV_STATUS.md`; per-instruction detail (what each of the 80
+covergroups checks and its current status): `riscvisacov/RISCVISACOV_INSTRUCTION_REFERENCE.md`.
+**4 bins remain honestly open** — 2 deliberately-deferred `jalr` immediate bins (needs a
+hand-assembled nonzero-offset jump, judged not worth the risk for 2 bins) and 2
+unexplained `csrrci`/`csrrwi` `cp_rd_sign/neg` bins (same open status as OBS-069: not a
+DUT bug, root cause not yet isolated).
+
+**2 covergroups remain permanently 0% by construction, not stimulus gaps, unchanged by
+the above** — `rv32zifencei_fence_i_cg` (`fence.i` decodes identically to `fence`,
+OBS-050) and `rv32i_nop_cg` (its coverpoint checks `ins_str=="nop"`, but our disassembly
+generator runs `objdump -M numeric,no-aliases` — required so every *other* instruction
+gets a register-numbered, non-pseudo mnemonic — and `nop` is purely a pseudo-op alias for
+`addi x0,x0,0`; the literal string "nop" can never appear in a map built this way, see
+OBS-056).
+
+Exclusions applied via `scripts/isacov_exclude.do` + `apply_isacov_exclude.sh`, in two
+gated classes that are never merged into one number (current, 2026-09-20 figures):
 
 | stage | bins | coverage | meaning |
 |---|---|---|---|
-| raw | 1,444/6,469 | 22.32% | everything, including register-index bins |
-| **+ EUR** (structurally unreachable) | 1,444/6,467 | 22.33% | `fence_i_cg` + `nop_cg`; **hits-invariant, gated and proven** — denominator only |
-| **+ EOTH** (not a claimed target) | **429/516** | **83.14%** (89.28% weighted) | register-index (`*_reg_assign`) bins excluded per W-13 |
+| raw | 1,664/6,469 | 25.72% | everything, including register-index bins |
+| **+ EUR** (structurally unreachable) | 1,664/6,432 | 25.87% | `fence_i_cg`/`nop_cg` + 35 new classes added 2026-09-20 (CSR-value field mis-wiring, OBS-068's branch/`jal` parsing bug, unsigned shamt/upper-imm fields, PC-valued registers always negative at this project's fixed link base); **hits-invariant, gated and proven** — denominator only |
+| **+ EOTH** (not a claimed target) | **477/481** | **99.17%** (99.57% weighted) | register-index (`*_reg_assign`) bins excluded per W-13 |
 
-**The 83.14% figure is the defensible headline, and it must always be quoted with the
-statement that register-index bins are excluded and why.** `*_reg_assign` is 92% of the
+**The 99.17% figure is the defensible headline, and it must always be quoted with the
+statement that register-index bins are excluded and why.** `*_reg_assign` is ~92% of the
 raw denominator and is *not* structurally unreachable — it is reachable with different
 stimulus, and is excluded as a scope decision (uniform-indexed banked RAM, no per-index
 logic; register allocation is a compiler property, not a DUT property). Claiming it as
 "unreachable" would be false and is explicitly avoided in the exclusion file.
 
+**⚠ Provenance gap, disclosed not papered over.** `docs/coverage/
+COVERAGE_RUN_CHECKLIST_20260909.md` (2026-09-09) separately cites an even LARGER prior
+measurement of this same bank file — 1,812/6,929 raw bins (26.15%) — implying more
+stimulus was merged in between the 2026-09-06 freeze and 2026-09-09. That larger bank is
+not on disk as of 2026-09-20 (UCDBs are not git-tracked) and its source runs could not be
+located. 99.17% is a verified, reproducible improvement over the 2026-09-06 baseline this
+session actually found on disk (429/516) — it is NOT confirmed to be an improvement over
+the since-lost 2026-09-09 measurement, since that bank's contents are unknown.
+
 **Decision: the gap-hunt bank (`cov/isacov_gaphunt/merged.ucdb`) is retained as a
 standalone, separately-labeled artifact — it is NOT merged into the frozen L1/L2/L3
 suite banks** (different sampling scope: incremental single-program runs, not a config
-sweep). Campaign closed; no further ISACOV stimulus work planned at this build level.
+sweep).
 
 **RV32D (32 covergroups) is generated but NOT sampled by riscvISACOV** — `ISACOV_EXTS`
 lists only `RV32I RV32M RV32Zicsr RV32F`, a deliberate L1 scope decision, and that part is
@@ -108,7 +145,7 @@ self-check (C-SENT) is **IMPLEMENTED-UNVERIFIED** — the DUT graded its own hom
 | **C-LOCK** | Per-instruction lockstep vs SimX | **`+LOCKSTEP_INJECT` — PROVEN: 1 injection → exactly 1 `field_mismatch data`** (v1's D-8 said this was unwired; it is wired at `tb/vx_commit_probe.sv:60,116-118`) |
 | **C-SVA** | 40 concurrent assertions (AXI / mem / DCR / status) | assertion-fire evidence captured |
 | **C-RAL** | DCR register model + backdoor probe | `+DCR_RAL_INJECT` |
-| **C-ISA** | **third-party ISA coverage (riscvISACOV) — CLOSED/FROZEN 2026-09-06** | targeted per-program gap-hunt (`cov/isacov_gaphunt/`, kept separate from the frozen suite banks): **ISA-behaviour coverage 429/516 bins = 83.14%, 89.28% weighted**, register-index bins excluded by documented scope decision (W-13); 78/80 covergroups real; 0 map misses / 0 word mismatches on every run (see OBS-056) |
+| **C-ISA** | **third-party ISA coverage (riscvISACOV) — 99.17%, updated 2026-09-20** | targeted per-program gap-hunt (`cov/isacov_gaphunt/`, kept separate from the frozen suite banks): **ISA-behaviour coverage 477/481 bins = 99.17%, 99.57% weighted** (up from the 2026-09-06 freeze's 83.14%, see §1 for the round-by-round history), register-index bins excluded by documented scope decision (W-13); 78/80 covergroups real, 4 residual bins honestly open; 0 map misses / 0 word mismatches on every run (see OBS-056, OBS-068, OBS-069) |
 | **C-ASSERT-GATE** | RTL runtime assertions counted into the verdict | `misalign_neg` — must report FAILED |
 
 ---
@@ -299,7 +336,7 @@ fail"* — which is a stronger, and true, claim.
 | **W-10** | Unaligned data access | Not implemented: RTL asserts, no trap, access silently torn | `VX_lsu_slice.sv:189`, OBS-013, `misalign_neg` |
 | **W-11** | Trap-cause / interrupt coverage | No trap architecture exists | no trap logic in `VX_decode.sv` / `VX_csr_data.sv`; `mcause` is a bare number at `VX_types.vh:59` |
 | **W-12** | L1 ISA coverage of Vortex custom ops (SFU, VOTE/SHFL, TCU, Zicond) | No third-party model covers them and none can — Zicond has no dvplan in riscvISACOV at all | `riscvisacov/RISCVISACOV_STATUS.md` §2 |
-| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `riscvisacov/RISCVISACOV_STATUS.md` §6c — quote **83.14%** (429/516, EOTH-excluded), never the bare **22.32%** raw figure. *(Corrected 2026-09-07: this row previously said "42.6%/10.3%" — stale numbers from before the L1 gap-hunt campaign updated the headline in §1–§2 of this same document. Two different figures for the same waiver was itself the integrity bug.)* |
+| **W-13** | L1 `*_reg_assign` (92% of the L1 denominator) | Register *allocation* is a compiler property, not a DUT property; Vortex's GPR file is a uniformly-indexed banked RAM with no per-index logic | `riscvisacov/RISCVISACOV_STATUS.md` §6c — quote **99.17%** (477/481, EOTH-excluded), never the bare raw figure. *(Corrected 2026-09-07: this row previously said "42.6%/10.3%" — stale numbers from before the L1 gap-hunt campaign updated the headline in §1–§2 of this same document. Two different figures for the same waiver was itself the integrity bug. Corrected again 2026-09-20: the 2026-09-06-frozen 83.14% figure this row quoted was itself superseded the same day the freeze was lifted — see §1's history table and `riscvisacov/RISCVISACOV_INSTRUCTION_REFERENCE.md` for per-instruction detail.)* |
 
 ---
 
