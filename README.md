@@ -13,7 +13,7 @@
 [![Golden Model](https://img.shields.io/badge/Golden%20Model-SimX%20·%20DPI--C-8957e5?style=flat-square)](https://github.com/vortexgpgpu/vortex)
 [![Config](https://img.shields.io/badge/Config-Clusters·Cores·Warps·Threads-2da44e?style=flat-square)](#-configurability)
 [![SIMT Generator](https://img.shields.io/badge/simtgen-SIMT--aware%20random%20stimulus-8957e5?style=flat-square)](#-simtgen--closing-the-simt-stimulus-gap)
-[![Coverage](https://img.shields.io/badge/Covergroup%20Bins-96.2%25-2da44e?style=flat-square)](#-results)
+[![Coverage](https://img.shields.io/badge/Covergroup%20Bins-98.14%25-2da44e?style=flat-square)](#-results)
 [![Total](https://img.shields.io/badge/Total%20Coverage-94.6%25-2da44e?style=flat-square)](#-results)
 [![ISA Coverage](https://img.shields.io/badge/riscv--isacov%20(80%20cg)-behavioral%2082.7%25-8957e5?style=flat-square)](#-results)
 [![RTL/TB findings](https://img.shields.io/badge/Findings%20Logged-60%2B-c9510c?style=flat-square)](#-findings)
@@ -240,7 +240,7 @@ Five banks; each is one consistent compile, verified by re-reading the banked co
 
 | Configuration | Runs | Total | Covergroup bins | Conditions | Toggle |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| **1CL / 1C / 4W / 4T** (primary, 23 covergroups, `simtgen` closures folded in) | **53+ / 53+** | **94.55%** | 504/524 = 96.2% | 90.4% | 83.3% |
+| **1CL / 1C / 4W / 4T** (primary, 23 covergroups, `simtgen` closures folded in) | **53+ / 53+** | **94.55%** | 514/524 = 98.14% | 90.4% | 83.3% |
 | 2CL / 2C / 4W / 4T | 50 / 50 | 94.55% | 989/1032 = 95.8% | 88.8% | 80.5% |
 | 2CL + **L2 + L3** enabled | 51 / 51 | 93.18% | 1042/1092 = 95.4% | 79.3% | 83.5% |
 | 1CL + **seed farm** (141 UCDBs) | — | 94.72% | 98.1% | 90.4% | 83.4% |
@@ -254,6 +254,21 @@ Five banks; each is one consistent compile, verified by re-reading the banked co
 > | Behavioral (opcode reached, operand signs/values, immediates) | 2,688/3,250 | **82.71%** | genuine ISA exercise |
 > | `*_reg_assign` (which architectural register was used as rd/rs1/rs2) | 4,060/23,804 | 17.06% | compiler/ABI-limited — a fixed toolchain emits a bounded register subset per instruction form, not a stimulus gap |
 > | Blended (both classes together) | 6,748/27,054 | 26.15% | **do not quote this number alone** — it reads as weak ISA exercise when the behavioral axis is actually well-covered |
+>
+> **⚠ The row above (3,250-bin denominator) could not be reproduced or located
+> this session (2026-09-20) — the UCDB it came from is not on disk (riscvISACOV
+> UCDBs are not git-tracked) and its source runs are unknown; disclosed rather
+> than silently dropped. A smaller, fully reproducible sub-lineage of the same
+> `cov/isacov_gaphunt/` bank — the OBS-056 targeted gap-hunt (481 behavioral
+> bins, a strict subset of the 3,250 above) — WAS re-verified and improved this
+> session: **83.14% → 97.71% (470/481 bins, 98.78% weighted)**, via new
+> `isacov_fill` stimulus, re-banked and confirmed byte-exact under
+> `+LOCKSTEP +LOCKSTEP_LOADFEED` (10,848/10,848 matched, 0 mismatches). See
+> `docs/riscvisacov/RISCVISACOV_STATUS.md` for the full before/after and the two
+> real defects the exclusion pipeline's hits-invariant gate caught along the way
+> (OBS-068, OBS-069). Do not blend these two rows or treat 97.71% as having
+> superseded 82.71% — they are different bin-count scopes until the 3,250-row's
+> source is found.
 
 > **Coverage-exclusion integrity is enforced, not asserted.** Every waiver is
 > generated per-configuration from elaborated RTL parameters with a `file:line`

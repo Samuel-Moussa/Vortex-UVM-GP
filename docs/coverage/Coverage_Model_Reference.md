@@ -17,7 +17,8 @@ scoreboard answers *"was the result correct?"*.
 
 ## 1. How the model is organised
 
-- **17 covergroup *types*, 16 constructed per run.** The coverage collector builds
+- **23 covergroup *types* as of 2026-09-09** (grew from 17, see §7) **, one fewer
+  constructed per run.** The coverage collector builds
   **only the active data-interface group** — `axi_transaction_cg` on AXI runs,
   `mem_operation_cg` on MEM runs (`vortex_coverage_collector.sv` constructor) — so the
   idle interface never lands at 0% and drags the number down. A cross-interface UCDB
@@ -272,6 +273,38 @@ barrier, tmc, wspawn), so no bin is ever hit vacuously.
 ---
 
 ## 7. Honest status of the remaining gaps
+
+> **⚠ SUPERSEDED (2026-09-20).** The "93.33% / 350-375-bin" figure and gap list
+> below are **session-7-era (2026-07-08)**, when the model had 17 covergroup types /
+> 375 bins. The model has since grown to **23 covergroups / 524 bins** (2026-09-09),
+> and every gap named below (`cross_sfu_threads` wspawn/csrrw/csrrc/bar,
+> `cp_ipc_bucket.high_ipc`, `cross_dvg_depth <uniform,d3>`) was independently closed
+> in the interim — see `README.md` § Results / § `simtgen` for the current register.
+> Re-verified ground truth (2026-09-20), not assumed:
+> ```
+> vcover report -summary vortex_uvm_env/cov/bank_1CL_1C_4W_4T_L2_20260909/merged.ucdb
+> ```
+> gives **covergroup bins 504/524 = 96.18%**, statements 98.10%, branches 94.53%,
+> conditions 90.41%, toggle 83.36%, assertions 96.85%, directives 100.00%, **total
+> (filtered) 94.55%** — exactly matching `README.md`'s current badges and primary-bank
+> row (`bank_1CL_1C_4W_4T_L2_20260909`, dated 2026-09-09).
+>
+> **Do not confuse this with the "98.1% covergroup-bin / 94.7% total" figure quoted
+> in the arXiv/ISQED27 paper drafts** (`docs/paper/arxiv_vortex_uvm_2026.tex`,
+> `docs/paper/isqed27_vortex_uvm.tex`) — that is the *same metric* (raw covergroup
+> bins / Questa's unweighted-mean total) measured on an *earlier* bank
+> (`bank_1CL_1C_4W_4T_relayfix_20260818`: 370/377 = 98.14% bins, 94.72% total, 19
+> covergroups, dated 2026-08-18), frozen before the 2026-09-09 covergroup-count
+> growth diluted the raw-bin percentage (adding four not-yet-100%-closed
+> covergroups; the JSA manuscript's Results section already cites the current
+> `..._L2_20260909` bank and its 96.18%/94.55% figures). Both numbers are real and
+> traceable to the bank that produced them; neither is "wrong" for its own bank.
+> Whether the paper drafts should be updated to the newer bank is a separate,
+> not-yet-made decision — this edit does not touch them.
+>
+> The rest of this section is kept as historical record — the *reasoning* for each
+> closure (why a waiver is structural, what directed stimulus closed a bin) is still
+> valid and was expensive to derive — but its gap list is not the current one.
 
 Current merged functional coverage: **93.33% (350/375 bins)** at 1CL/1C/4W/4T; the SFU
 cross closure (`bar_masks` + wspawn waiver) is committed and lifts this to an expected

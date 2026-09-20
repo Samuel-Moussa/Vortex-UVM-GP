@@ -212,10 +212,48 @@ counts, so each figure is double-listed by the report; the ratios are unaffected
 > |---|---|---|
 > | raw (everything) | 1,444/6,469 | 22.32% |
 > | + EUR structurally unreachable (`fence_i_cg`, `nop_cg`) | 1,444/6,467 | 22.33% (hits-invariant, gated) |
-> | **+ EOTH `*_reg_assign` excluded — the quotable ISA-behaviour figure** | **429/516** | **83.14%** (89.28% weighted) |
+> | + EOTH `*_reg_assign` excluded | 429/516 | 83.14% (89.28% weighted) |
 >
 > Applied reproducibly by `scripts/isacov_exclude.do` + `apply_isacov_exclude.sh`.
 > The reasoning below is unchanged and is what justifies the EOTH class.
+>
+> **⚠ SUPERSEDED AGAIN 2026-09-20 — round-2 gap-hunt closed most of the residual.**
+> `isacov_fill` extended with forced stimulus for register/immediate-value corners
+> (offset loads/stores, ALU-immediate zero/negative literals, `and`/`sltu`/`div`/
+> `rem`/`fcvt.*` sign corners); re-run with `+LOCKSTEP +LOCKSTEP_LOADFEED +ISACOV`,
+> merged into the SAME `cov/isacov_gaphunt/merged.ucdb`, banked (old file preserved
+> as `merged_pre_round2_20260906.ucdb`):
+>
+> | stage | bins | coverage |
+> |---|---|---|
+> | raw (everything) | 1,579/6,469 | 24.41% |
+> | + EUR structurally unreachable (14 new classes added this session — CSR-value field mis-wiring, branch/`jal` absolute-target parsing (OBS-068), unsigned shamt/upper-imm fields, PC-valued registers) | 1,579/6,432 | 24.55% (hits-invariant, gated) |
+> | **+ EOTH `*_reg_assign` excluded — the quotable ISA-behaviour figure** | **470/481** | **97.71%** (98.78% weighted) |
+>
+> Validated: clean compile, `TEST PASSED` (0 UVM/RTL errors), **LOCKSTEP byte-exact**
+> (10,848/10,848 pairs matched, 0 field mismatches, 0 orphans — the new stimulus
+> executes identically on the DUT and SimX), ISACOV map cross-check clean (0 PC
+> lookup misses, 0 word mismatches). The pipeline's own hits-invariant gate caught
+> one wrong exclusion attempt live (`rv32i_lhu_cg/cp_rd_sign/neg` — 186 real hits,
+> not the claimed structural zero); retracted rather than silenced, see **OBS-069**
+> (open, not yet root-caused — LOCKSTEP being clean rules out a DUT defect).
+> **11 bins remain honestly open**, not pursued this pass: `rv32i_blt_cg`
+> `cp_rs1_sign/neg` + `cp_rs2_sign/{neg,zero}`; `rv32i_jalr_cg/cp_imm_value/{neg,pos}`
+> (deliberately deferred — closing it needs a hand-assembled nonzero-offset `jalr`,
+> judged not worth the risk for 2 bins); `rv32i_lbu_cg/cp_imm_value/pos`;
+> `rv32i_xori_cg/cp_imm_value/zero`; four `rv32zicsr_*` register-value sign corners.
+>
+> **⚠ Provenance gap, disclosed rather than papered over.** `docs/coverage/
+> COVERAGE_RUN_CHECKLIST_20260909.md` (2026-09-09) cites a LARGER prior measurement
+> of this same file — **1,812/6,929 raw bins** (26.15%), "verified by counting
+> covergroup types in `isacov_gaphunt/merged.ucdb`" — implying more stimulus was
+> merged in between the 2026-09-06 freeze (1,444/6,469) and 2026-09-09. That larger
+> bank is not on disk as of 2026-09-20 (UCDBs are not git-tracked) and its source
+> runs could not be located or reproduced. The 97.71% figure above is a verified,
+> reproducible improvement **over the 2026-09-06 baseline this session actually
+> found on disk (429/516 = 83.14%)** — it is NOT confirmed to be an improvement over
+> the since-lost 2026-09-09 measurement, since that bank's contents are unknown.
+> Do not claim otherwise until/unless that gap is investigated.
 
 ### `cp_asm_count` — important, and a real granularity gain over our model
 

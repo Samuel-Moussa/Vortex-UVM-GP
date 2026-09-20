@@ -3798,3 +3798,102 @@ every checklist item closed) has low marginal value for the current deliverable 
 real risk of destabilizing a closed, evidence-backed state for no coverage or
 correctness gain. Recorded here as a disclosed limitation / future-work item, not
 pursued.
+
+## OBS-068 — riscvISACOV `cp_imm_value` mis-parses branch/`jal` targets: bare-hex disassembly text with no `0x` prefix silently decimal-parses, structurally hiding `neg`/`zero` ⟨2026-09-20⟩
+
+**Class:** TESTBENCH/TOOLFLOW DEFECT (in the third-party coverage model's parser as
+driven by this project's disassembly map, not an RTL defect) · **Disposition: OPEN,
+excluded rather than fixed — see rationale below** · **Found:** 2026-09-20, while
+scoping which of the 87 residual riscvISACOV "reachable" gaps (see
+`docs/coverage/COVERAGE_RUN_CHECKLIST_20260909.md` §6c) were genuinely closable by
+new `isacov_fill` stimulus.
+
+**What we saw.** `beq/bge/bgeu/blt/bltu/bne` and `jal` all showed
+`cp_imm_value/{neg,zero}` at 0% while `pos` was always hit — looked at first like a
+stimulus gap (no backward branch in the corpus). It is not.
+
+**Evidence.** `get_imm()` (`RISCV_instruction_base.svh:248-260`) only recognizes hex
+if the text is `0x`-prefixed (`s[1]=="x"`); anything else falls to `s.atoi()`
+(decimal). Regenerated the real disassembly map for `isacov_fill.elf`
+(`isacov/gen_disass_map.sh`) and read the literal operand text:
+`bge x5,x6,8000013c` / `jal x1,800003e0` — the resolved branch/jump TARGET ADDRESS,
+printed as **bare hex digits with no `0x` prefix** (unlike `slli x13,x11,0x1` /
+`auipc x10,0x7`, which do carry it). `get_imm("8000013c")` therefore takes the
+decimal branch, and `.atoi()` reads the leading decimal-looking digits
+("8000013") and stops at the first hex letter ("c") — a meaningless, always-positive
+number, never negative, essentially never exactly zero. Confirmed live: every
+`cp_imm_value` miss on every branch mnemonic and on `jal` is exactly `{neg,zero}`,
+never `pos` — the signature of this exact misparse, not of missing backward-branch
+stimulus.
+
+**Why a real fix wouldn't close more bins.** Even a corrected parse (recognizing the
+bare-hex form, or switching `add_imm_addr()` to compute a true relative
+`target - pc` offset) would not net any bins here: every kernel in this project
+links at a fixed base ≥`0x80000000` (confirmed — every PC observed in every dump
+starts with `8`), so a correctly-parsed absolute target is a 32-bit value with the
+sign bit always set — i.e. it would always read `neg`, permanently closing that bin
+but permanently opening `pos`/`zero` instead (which can never occur at this link
+base). The defect changes WHICH label is unreachable, not whether one is.
+
+**Disposition: excluded (EUR-class, `isacov_exclude.do`), not fixed.** Fixing
+`get_imm()` or `gen_disass_map.sh` to emit `0x`-prefixed targets would be more
+*honest* (the excluded bin would then correctly be `pos`/`zero`, matching the real
+reason, instead of `neg`/`zero` for the wrong reason) but has zero coverage payoff
+and a real regression risk to every other coverpoint that already parses correctly
+through the same map. Recorded here so a future session doesn't re-derive this, and
+so the exclusion's cited reason in `isacov_exclude.do` points back to this entry
+rather than restating the trace inline.
+
+**Same session, adjacent (not a new bug, a structural-field confirmation):**
+`slli`/`srli`/`srai`'s shift-amount operand IS correctly `0x`-hex-parsed
+(`slli x13,x11,0x1`), but is architecturally a 5-bit **unsigned** field — `neg` is
+permanently unreachable there regardless of the parser, unrelated to this defect.
+Same for `lui`/`auipc`'s 20-bit upper-immediate (`auipc x10,0x7`): correctly parsed,
+but an inherently unsigned magnitude in this operand position, so `neg` is
+permanently unreachable there too. Both excluded alongside OBS-068 in the same
+`isacov_exclude.do` pass, cited separately since the mechanism differs (field width,
+not a parser bug).
+
+## OBS-069 — `lhu`'s riscvISACOV `cp_rd_sign` shows "neg" hits, which should be architecturally impossible for a zero-extending load ⟨2026-09-20⟩
+
+**Class:** OPEN, not yet root-caused — likely a coverage-model sampling artifact,
+NOT a DUT correctness defect (evidence below) · **Disposition: OPEN, left as a
+live/counted bin, not excluded** · **Found:** 2026-09-20, while adding new
+`isacov_fill` stimulus and re-running `apply_isacov_exclude.sh`'s hits-invariant
+gate — the gate itself is what caught this (it refused a proposed EUR exclusion
+because removing the bin changed the hit count), exactly the mechanism it exists
+for.
+
+**What we saw.** `lhu` (unsigned halfword load) zero-extends into the 32-bit
+destination register, so `rd_val` can be at most `0xFFFF` — as a signed 32-bit int
+that can never be negative. The `rv32i_lhu_cg/cp_rd_sign` coverpoint reads
+`int32_t'(rd_val)` directly (vendor source, `RV32I_coverage.svh`). Measured:
+**0 hits pre-change, 186 hits after adding new `lhu` offset-load stimulus**
+(`i_lhu_off()` in `Vortex/tests/kernel/isacov_fill/main.cpp`) to the same bank.
+
+**Why this is very unlikely to be a real DUT defect.** The same run's LOCKSTEP
+checker (`+LOCKSTEP +LOCKSTEP_LOADFEED`) reported **10,848/10,848 compared pairs
+matched, 0 field mismatches (PC/rd/data/LOAD all 0), 0 orphans** — the DUT and
+SimX agree on every retired instruction's committed register value, including
+every `lhu`. If the DUT were genuinely failing to zero-extend, the committed
+`rd` value itself would be wrong and lockstep would have caught it (SimX has no
+reason to reproduce the same bug independently). That points at the *coverage
+model's own sampling* of `rd_val` as the more likely culprit, not the executed
+value.
+
+**Not yet determined (genuinely open, not guessed at):** whether this is (a) a
+timing/aliasing issue in how the RVVI shim (`isacov/vortex_rvvi_shim.sv`)
+snapshots `x_wdata` relative to the `lhu` retirement it's labeled against, (b) a
+lane/hart mux issue picking up a different lane's or a stale value, or (c)
+something in the vendor `add_rd()`/`get_gpr_num()` path. None of these were
+investigated beyond ruling out (a) an execution-correctness defect, via the
+lockstep evidence above.
+
+**Disposition and why it's not excluded.** Excluding it would hide a real,
+currently-unexplained discrepancy — exactly the failure mode the project's
+hits-invariant gate exists to prevent (same class as the two waiver defects it
+previously caught, referenced in `docs/coverage/COVERAGE_RUN_CHECKLIST_20260909.md`
+§ hits-invariant gate). Left as a live, counted bin. Follow-up: bind a probe
+directly on the RTL's `lhu` writeback data (not the RVVI/ISACOV trace path) and
+compare against what the shim reports for the same retirement, to localize which
+side is wrong.
